@@ -465,6 +465,24 @@ async function check(name, fn) {
     assert.equal(await focused(), 'prompt');
   });
 
+  await check('layout: output and prompt use the full width beside the panel', async () => {
+    const big = await browser.newContext({ viewport: { width: 2560, height: 1200 } });
+    const p = await big.newPage();
+    await p.goto(base);
+    await p.waitForSelector('#prompt');
+    const m = await p.evaluate(() => {
+      const r = (id) => document.getElementById(id).getBoundingClientRect();
+      return { main: r('main'), panel: r('panel'), prompt: document.querySelector('.prompt-box').getBoundingClientRect(), turns: r('turns') };
+    });
+    assert.ok(Math.abs(m.main.right - m.panel.left) < 2, 'main ends where the panel starts');
+    assert.ok(m.main.right - m.prompt.right < 40, 'prompt box reaches the panel: ' + JSON.stringify(m));
+    assert.ok(m.main.right - m.turns.right < 40, 'output reaches the panel');
+    await p.evaluate(() => { document.documentElement.setAttribute('data-panel', 'hidden'); });
+    const full = await p.evaluate(() => document.querySelector('.prompt-box').getBoundingClientRect().right);
+    assert.ok(2560 - full < 40, 'with the panel hidden the prompt spans the window');
+    await big.close();
+  });
+
   await check('layout: prompt pinned to bottom, output scrolls, no horizontal overflow', async () => {
     for (let i = 0; i < 30; i++) await send('calc ' + i);
     const m = await page.evaluate(() => {

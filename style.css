@@ -69,7 +69,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   padding: 20px var(--gutter) 8px;
 }
 
-#turns { max-width: 120ch; }
 
 /* ---- welcome box ------------------------------------------------------------------ */
 
@@ -346,7 +345,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 #composer {
   position: relative;
   width: 100%;
-  max-width: calc(120ch + 2 * var(--gutter)); /* same measure as #turns, in the body font's ch */
   padding: 6px var(--gutter) 10px;
   padding-bottom: max(10px, env(safe-area-inset-bottom));
 }

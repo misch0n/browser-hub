@@ -51,13 +51,13 @@ export default function register(add, { st, usage }) {
 
   add({
     name: 'b64', group: 'Tools', desc: 'base64 encode or decode (UTF-8)',
-    usage: ['b64 enc <text>', 'b64 dec <text>'],
-    complete: (prev) => (prev.length === 0 ? [{ value: 'enc' }, { value: 'dec' }] : []),
+    usage: ['b64 encode <text>', 'b64 decode <text>'],
+    complete: (prev) => (prev.length === 0 ? [{ value: 'encode' }, { value: 'decode' }] : []),
     async run(ctx, rest) {
-      const m = /^(enc|dec)(?:\s+([\s\S]*))?$/i.exec(rest);
+      const m = /^(enc|encode|dec|decode)(?:\s+([\s\S]*))?$/i.exec(rest);
       if (!m || !m[2]) return usage(ctx, this);
       try {
-        ctx.out.value(m[1].toLowerCase() === 'enc' ? b64encode(m[2]) : b64decode(m[2]));
+        ctx.out.value(m[1].toLowerCase().startsWith('enc') ? b64encode(m[2]) : b64decode(m[2]));
       } catch (e) {
         ctx.out.err(e.message);
       }

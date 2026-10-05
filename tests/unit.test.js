@@ -1229,6 +1229,30 @@ test('ics import through the command: dedupe and warnings', async () => {
   const second = await app.run('ics import');
   assert.equal(second[0], '# Imported 0 events from cal.ics');
   assert.ok(second.includes('dim: 1 event already present, skipped'));
+  // import takes .ics files too, by name or by content.
+  const other = 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:B\nDTSTART:20261013T090000\nEND:VEVENT\nEND:VCALENDAR';
+  app.ctx.nextFile = { name: 'download', size: other.length, text: async () => other };
+  assert.equal((await app.run('import'))[0], '# Imported 1 event from download');
+});
+
+test('vocabulary: the same words everywhere, older forms still understood', async () => {
+  const app = await makeApp(); // Monday 5 October 2026
+  assert.equal((await app.run('cal dec'))[0], '# December 2026');
+  assert.equal((await app.run('cal march 2027'))[0], '# March 2027');
+  assert.equal((await app.run('cal next'))[0], '# November 2026');
+  assert.equal((await app.run('cal last'))[0], '# September 2026');
+  assert.equal((await app.run('cal 2026-12'))[0], '# December 2026');
+  assert.equal((await app.run('cal someday'))[0], '# Usage · cal');
+  assert.deepEqual(await app.run('engine ddg'), ['# Default engine is now ddg']);
+  assert.deepEqual(await app.run('engine default g'), ['# Default engine is now g']);
+  assert.deepEqual(await app.run('b64 encode hi'), ['= aGk=']);
+  assert.deepEqual(await app.run('b64 decode aGk='), ['= hi']);
+  await app.run('t one');
+  assert.match((await app.run('undo list'))[0], /steps to undo/);
+  // Older names still work but aren't listed.
+  const help = await app.run('help');
+  assert.ok(!help.some((l) => l.startsWith('ics ')));
+  assert.equal((await app.run('help ics'))[0], '# ics · import events from a local .ics file (now: import)');
 });
 
 test('alias and engine commands', async () => {

@@ -199,7 +199,7 @@ function run(raw, shown) {
 
 // ---- prompt -------------------------------------------------------------------
 
-const completionEnv = () => ({ defs: commands.defs, entries: state.aliases.entries, history: state.history.items });
+const completionEnv = () => ({ defs: commands.defs.filter((d) => !d.hidden), entries: state.aliases.entries, history: state.history.items });
 
 const hintEl = $('hint');
 
@@ -331,7 +331,7 @@ const palette = createPalette({
   list: $('palette-list'),
   source() {
     // `section` heads the group when nothing is typed; `kind` is the label on each row.
-    const items = commands.defs.map((d) => ({ name: d.name, desc: d.desc, kind: d.group, section: 'Built-in · ' + d.group, insert: d.name + ' ' }));
+    const items = commands.defs.filter((d) => !d.hidden).map((d) => ({ name: d.name, desc: d.desc, kind: d.group, section: 'Built-in · ' + d.group, insert: d.name + ' ' }));
     const mine = state.aliases.entries.filter((e) => !commands.isBuiltin(e.name)).sort((a, b) => (a.name < b.name ? -1 : 1));
     for (const e of mine.filter((x) => x.template)) items.push({ name: e.name, desc: e.template, kind: 'engine', section: 'Your search engines', insert: e.name + ' ' });
     for (const e of mine.filter((x) => !x.template)) items.push({ name: e.name, desc: e.base, kind: 'alias', section: 'Your aliases', insert: e.name + ' ' });

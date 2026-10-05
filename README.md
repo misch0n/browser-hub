@@ -34,12 +34,12 @@ still work.
 | Find | `find` |
 | Notes | `notes` (`n`) |
 | Tasks | `tasks` (`t`) |
-| Calendar | `events` (`ev`), `cal`, `agenda`, `today`, `ics import` |
+| Calendar | `events` (`ev`), `cal`, `agenda`, `today` |
 | Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
 | Sync | `sync` |
-| Meta | `help`, `keys`, `config`, `session`, `undo`, `redo`, `clear`, `history`, `export`, `import` |
+| Meta | `help`, `keys`, `config`, `session`, `undo`, `redo`, `clear`, `history`, `export`, `import` (a backup, an xsearch export or an `.ics` calendar) |
 
 Keys: **Tab** completes (again to list), **→** accepts the grey suggestion,
 **↑/↓** history, **/** command palette, **?** shortcuts, **Esc** clears.

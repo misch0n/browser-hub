@@ -10,7 +10,8 @@ import { relative } from '../lib/misc.js';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 
-export default function register(add, { st, usage, isBuiltin, defs, byName }) {
+export default function register(add, helpers) {
+  const { st, usage, isBuiltin, defs, byName } = helpers;
   add({
     name: 'help', group: 'Meta', desc: 'list commands, or details for one',
     usage: ['help [command]'],
@@ -33,7 +34,7 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
       const mine = doc.entries.filter((e) => !isBuiltin(e.name));
       const engines = mine.filter((e) => e.template).sort((a, b) => (a.name < b.name ? -1 : 1));
       const aliases = mine.filter((e) => !e.template).sort((a, b) => (a.name < b.name ? -1 : 1));
-      out.head([['Help', 'strong'], [' · ' + defs.length + ' built-in commands · ' + plural(engines.length, 'engine') + ' and ' +
+      out.head([['Help', 'strong'], [' · ' + defs.filter((x) => !x.hidden).length + ' built-in commands · ' + plural(engines.length, 'engine') + ' and ' +
         plural(aliases.length, 'alias', 'aliases') + ' of yours', 'dim']]);
       // The one shape every kept thing follows.
       out.section('Notes, tasks, events and aliases all work the same way');
@@ -49,7 +50,7 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
       // One table, so descriptions line up across groups.
       const rows = [];
       let group = null;
-      for (const d of defs) {
+      for (const d of defs.filter((x) => !x.hidden)) {
         if (d.group !== group) { group = d.group; rows.push({ section: [['Built-in · ', 'faint'], [group, '']] }); }
         rows.push([usageSegs(d.usage[0]), [[d.desc, 'dim']]]);
       }
@@ -93,9 +94,9 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
   const stepCommand = (dir) => ({
     name: dir, group: 'Meta', noUndo: true,
     desc: dir === 'undo' ? 'undo the last change (again for the one before)' : 'redo what undo took back',
-    usage: [dir, dir + ' ls', dir + ' force'],
-    examples: dir === 'undo' ? ['undo', 'undo ls'] : ['redo'],
-    complete: (prev) => (prev.length === 0 ? [{ value: 'ls' }, { value: 'force' }] : []),
+    usage: [dir, dir + ' list', dir + ' force'],
+    examples: dir === 'undo' ? ['undo', 'undo list'] : ['redo'],
+    complete: (prev) => (prev.length === 0 ? [{ value: 'list' }, { value: 'force' }] : []),
     async run(ctx, rest) {
       const { out } = ctx;
       const arg = rest.trim().toLowerCase();
@@ -236,15 +237,18 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
   });
 
   add({
-    name: 'import', group: 'Meta', desc: 'load a JSON export (or an xsearch export), skipping conflicts',
+    name: 'import', group: 'Meta', desc: 'load a file: an export, an xsearch export, or calendar events (.ics)',
     usage: ['import'],
     run(ctx) {
-      const picked = ctx.pickFile('.json,application/json');
+      const picked = ctx.pickFile('.json,application/json,.ics,text/calendar');
       return (async () => {
         const { out } = ctx;
         const file = await picked;
         if (!file) return out.head('Import cancelled', 'dim');
         if (file.size > MAX_FILE_BYTES) return out.err('The file is too large (5 MB max)');
+        if (/\.ics$/i.test(file.name || '') || /^\s*BEGIN:VCALENDAR/i.test((await file.text()).slice(0, 200))) {
+          return helpers.importICS(ctx, file);
+        }
         let parsed;
         try {
           parsed = JSON.parse(await file.text());

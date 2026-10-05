@@ -150,9 +150,10 @@ export default function register(add, { st, isBuiltin, records }) {
 
   add({
     name: 'engine', group: 'Aliases & engines', desc: 'show or set the default search engine',
-    usage: ['engine', 'engine default <name>'],
+    usage: ['engine', 'engine <name>'],
+    examples: ['engine', 'engine ddg'],
     complete: (prev) => {
-      if (prev.length === 0) return [{ value: 'default' }];
+      if (prev.length === 0) return engineNames();
       if (prev.length === 1 && prev[0] === 'default') return engineNames();
       return [];
     },
@@ -163,11 +164,12 @@ export default function register(add, { st, isBuiltin, records }) {
         const e = entries().find((x) => x.name === doc.defaultEngine);
         out.head([['Default engine ', ''], [doc.defaultEngine, 'accent', { run: 'aliases ' + doc.defaultEngine }]]);
         if (e) out.line([[e.template, 'url']]);
-        out.dim('Anything that is not a command or alias is searched here · change it with: aliases <name> default');
+        out.dim('Anything that is not a command or alias is searched here · change it with: engine <name>');
         return;
       }
-      const m = /^default\s+(\S+)$/i.exec(rest);
-      if (!m) return out.err('engine default <name>  (or: aliases <name> default)');
+      // engine <name> (engine default <name>, the older form)
+      const m = /^(?:default\s+)?(\S+)$/i.exec(rest.trim());
+      if (!m) return out.err('engine <name>  (or: aliases <name> default)');
       const e = entries().find((x) => x.name === m[1].toLowerCase());
       if (!e) return out.err("No alias '" + m[1] + "'");
       return makeDefault(ctx, e);

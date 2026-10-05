@@ -14,7 +14,9 @@ import { createRecords } from './records.js';
 import { removes } from '../core/undo.js';
 
 // Built-in commands. Each def is
-//   { name, group, desc, usage: [...], examples?: [...], complete?(prevArgs), run(ctx, rest), noUndo? }
+//   { name, group, desc, usage: [...], examples?: [...], complete?(prevArgs), run(ctx, rest),
+//     noUndo? (never an undo step), private? (kept out of the shared history), hidden? (an older
+//     name: still works, not listed) }
 // and talks to the page only through ctx:
 //   ctx.out     structured output for this command (see ui/transcript.js); table rows
 //               are arrays of cells, or { section } for a full-width group heading

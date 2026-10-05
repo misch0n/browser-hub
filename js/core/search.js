@@ -112,7 +112,7 @@ export function documents(state, defs, isBuiltin) {
     docs.push({ category: 'links', key: a.name, title: a.name, run: 'aliases ' + a.name, rank: 1,
       fields: [{ name: 'name', text: a.name, weight: 1.2 }, { name: 'url', text: a.template || a.base, weight: 0.6 }], alias: a });
   }
-  for (const d of defs) {
+  for (const d of defs.filter((x) => !x.hidden)) {
     docs.push({ category: 'commands', key: d.name, title: d.name, run: 'help ' + d.name, rank: 1,
       fields: [{ name: 'name', text: d.name, weight: 1.2 }, { name: 'about', text: d.desc, weight: 0.7 }], def: d });
   }

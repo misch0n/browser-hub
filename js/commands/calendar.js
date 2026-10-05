@@ -1,4 +1,4 @@
-import { parseId, parseDate, leadingDate, parseTime, truncate, byIdNum, plural, pad2, todayISO } from '../core/util.js';
+import { parseId, parseDate, leadingDate, parseTime, truncate, byIdNum, plural, pad2, todayISO, monthIndex } from '../core/util.js';
 import { MONTH_NAMES, DAY_NAMES_LONG, dayLabel, longDate, usageSegs } from '../core/format.js';
 import { daySummary, summaryRows, summaryCounts, tomorrowLine } from '../core/summary.js';
 import { agenda, eventDays, sortEvents } from '../core/agenda.js';
@@ -7,19 +7,32 @@ import { oneValue } from '../core/args.js';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
-export default function register(add, { st, usage, records }) {
+export default function register(add, helpers) {
+  const { st, usage, records } = helpers;
   add({
     name: 'cal', group: 'Calendar', desc: 'month grid with event days marked',
-    usage: ['cal [YYYY-MM]'],
-    examples: ['cal', 'cal 2026-12'],
+    usage: ['cal [month [year]]', 'cal [YYYY-MM]', 'cal next|last'],
+    examples: ['cal', 'cal dec', 'cal march 2027', 'cal 2026-12', 'cal next'],
     async run(ctx, rest) {
       const { out } = ctx;
       const today = todayISO(ctx.now());
       let year = +today.slice(0, 4), month = +today.slice(5, 7);
-      if (rest) {
-        const m = /^(\d{4})-(\d{2})$/.exec(rest);
-        if (!m || +m[2] < 1 || +m[2] > 12) return usage(ctx, this);
-        year = +m[1]; month = +m[2];
+      const arg = rest.trim().toLowerCase();
+      if (arg) {
+        const iso = /^(\d{4})-(\d{2})$/.exec(arg);
+        const named = /^([a-z]+\.?)(?:\s+(\d{4}))?$/.exec(arg);
+        if (iso && +iso[2] >= 1 && +iso[2] <= 12) {
+          year = +iso[1]; month = +iso[2];
+        } else if (arg === 'next' || arg === 'last' || arg === 'prev') {
+          month += arg === 'next' ? 1 : -1;
+          if (month > 12) { month = 1; year++; }
+          if (month < 1) { month = 12; year--; }
+        } else if (named && monthIndex(named[1]) >= 0) {
+          month = monthIndex(named[1]) + 1;
+          if (named[2]) year = +named[2];
+        } else {
+          return usage(ctx, this);
+        }
       }
       const prefix = year + '-' + pad2(month) + '-';
       const events = st().events.items.filter((e) => e.date.startsWith(prefix)).sort(sortEvents);
@@ -178,8 +191,37 @@ export default function register(add, { st, usage, records }) {
     run: (ctx, rest) => records.route(ctx, 'event', records.legacy('event', rest) ?? rest, { ...spec, short: true }),
   });
 
+  // Events from an .ics file: new ones added, ones already here skipped.
+  // Used by import (any .ics file) and the older `ics import`.
+  async function importICS(ctx, file) {
+    const { out } = ctx;
+    const parsed = parseICS(await file.text());
+    await ctx.data.reload('events');
+    const key = (e) => e.date + '|' + (e.time || '') + '|' + e.title;
+    const have = new Set(st().events.items.map(key));
+    const fresh = [];
+    let dupes = 0;
+    for (const e of parsed.events) {
+      if (have.has(key(e))) { dupes++; continue; }
+      have.add(key(e));
+      fresh.push(e);
+    }
+    if (fresh.length) {
+      const ids = await ctx.data.allocIds('e', fresh.length);
+      await ctx.data.mutate('events', (d) => {
+        fresh.forEach((e, i) => d.items.push({ id: ids[i], date: e.date, time: e.time, title: e.title }));
+      });
+    }
+    out.head([['Imported ', ''], [plural(fresh.length, 'event'), 'strong'], [' from ' + file.name, 'dim']], fresh.length ? 'ok' : 'dim');
+    if (dupes) out.dim(plural(dupes, 'event') + ' already present, skipped');
+    if (parsed.recurring) out.warn(plural(parsed.recurring, 'recurring event') + ' skipped: recurrence is not supported');
+    if (parsed.invalid) out.warn(plural(parsed.invalid, 'event') + ' without a readable start date skipped');
+    if (parsed.guessedZones) out.warn(plural(parsed.guessedZones, 'event') + ' used an unknown time zone; their times were read as local');
+  }
+  helpers.importICS = importICS;
+
   add({
-    name: 'ics', group: 'Calendar', desc: 'import events from a local .ics file',
+    name: 'ics', group: 'Calendar', hidden: true, desc: 'import events from a local .ics file (now: import)',
     usage: ['ics import'],
     complete: (prev) => (prev.length === 0 ? [{ value: 'import' }] : []),
     run(ctx, rest) {
@@ -187,32 +229,10 @@ export default function register(add, { st, usage, records }) {
       // Open the picker synchronously so the browser still sees the key press.
       const picked = ctx.pickFile('.ics,text/calendar');
       return (async () => {
-        const { out } = ctx;
         const file = await picked;
-        if (!file) return out.head('Import cancelled', 'dim');
-        if (file.size > MAX_FILE_BYTES) return out.err('The file is too large (5 MB max)');
-        const parsed = parseICS(await file.text());
-        await ctx.data.reload('events');
-        const key = (e) => e.date + '|' + (e.time || '') + '|' + e.title;
-        const have = new Set(st().events.items.map(key));
-        const fresh = [];
-        let dupes = 0;
-        for (const e of parsed.events) {
-          if (have.has(key(e))) { dupes++; continue; }
-          have.add(key(e));
-          fresh.push(e);
-        }
-        if (fresh.length) {
-          const ids = await ctx.data.allocIds('e', fresh.length);
-          await ctx.data.mutate('events', (d) => {
-            fresh.forEach((e, i) => d.items.push({ id: ids[i], date: e.date, time: e.time, title: e.title }));
-          });
-        }
-        out.head([['Imported ', ''], [plural(fresh.length, 'event'), 'strong'], [' from ' + file.name, 'dim']], fresh.length ? 'ok' : 'dim');
-        if (dupes) out.dim(plural(dupes, 'event') + ' already present, skipped');
-        if (parsed.recurring) out.warn(plural(parsed.recurring, 'recurring event') + ' skipped: recurrence is not supported');
-        if (parsed.invalid) out.warn(plural(parsed.invalid, 'event') + ' without a readable start date skipped');
-        if (parsed.guessedZones) out.warn(plural(parsed.guessedZones, 'event') + ' used an unknown time zone; their times were read as local');
+        if (!file) return ctx.out.head('Import cancelled', 'dim');
+        if (file.size > MAX_FILE_BYTES) return ctx.out.err('The file is too large (5 MB max)');
+        return importICS(ctx, file);
       })();
     },
   });

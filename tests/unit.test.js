@@ -100,6 +100,11 @@ test('dispatch: builtin, alias, engine, fallback', () => {
   assert.equal(d('g how to proof sourdough').url, 'https://www.google.com/search?q=how%20to%20proof%20sourdough');
   assert.equal(d('vitosha weather').url, 'https://www.google.com/search?q=vitosha%20weather');
   assert.equal(d('gihtub').kind, 'search');
+  // An engine with a phrase is a search on that engine; unknown input falls back to the default.
+  assert.deepEqual(d('ddg sourdough starter'), { kind: 'search', url: 'https://duckduckgo.com/?q=sourdough%20starter', name: 'ddg', query: 'sourdough starter', fallback: false });
+  assert.deepEqual(d('gtg'), { kind: 'search', url: 'https://www.google.com/search?q=gtg', name: 'g', query: 'gtg', fallback: true });
+  assert.equal(d('gh org/repo').kind, 'search');
+  assert.equal(d('ddg').kind, 'redirect');
   assert.equal(dispatch('x', { isBuiltin, entries: [], defaultEngine: 'g' }).kind, 'error');
   assert.equal(dispatch('help', { isBuiltin, entries: [{ name: 'help', base: 'https://x.com/' }], defaultEngine: 'g' }).kind, 'builtin');
 });
@@ -407,6 +412,15 @@ test('alias and engine commands', async () => {
   assert.match((await app.run('alias rm g'))[0], /default engine/);
   assert.match((await app.run('engine default gh'))[0], /no template/);
   assert.deepEqual(await app.run('engine default ddg'), ['# Default engine is now ddg']);
+  // A lone template defines an engine; its base is the site root. `%s` works like `{}`.
+  assert.equal((await app.run('alias yt https://www.youtube.com/results?search_query={}'))[0], '# Added yt  engine');
+  assert.deepEqual(app.data.state.aliases.entries.find((e) => e.name === 'yt'),
+    { name: 'yt', base: 'https://www.youtube.com/', template: 'https://www.youtube.com/results?search_query={}', escape: 'query' });
+  await app.run('alias w https://en.wikipedia.org/w/index.php?search=%s');
+  assert.equal(app.data.state.aliases.entries.find((e) => e.name === 'w').template, 'https://en.wikipedia.org/w/index.php?search={}');
+  assert.match((await app.run('alias bad https://x.com{}'))[0], /after the host/);
+  await app.run('alias rm yt');
+  await app.run('alias rm w');
   const ls = await app.run('alias ls');
   assert.equal(ls[0], '# 3 aliases · 2 engines');
   assert.ok(ls.some((l) => /^ddg \| engine \| .* \| ★ default$/.test(l)));

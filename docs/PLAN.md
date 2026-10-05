@@ -53,6 +53,7 @@ Every input resolves to exactly one of three outcomes: run a built-in, redirect 
 **Parsing**
 
 - Trim the input. Empty input does nothing.
+- The hint under the prompt states the outcome before Enter: the command, `open <url>`, or `search <site> for "<phrase>"`, with `(default)` when nothing matched and the default engine takes the whole input.
 - Split on the first run of whitespace into `head` and `rest`. `rest` may be empty and is kept whole, including internal spaces.
 - `head` matching is case-insensitive.
 
@@ -108,6 +109,7 @@ Aliases and search engines are one table: an engine is an alias whose template i
 **Commands**
 
 - `alias <name> <base> [template] [--path]`: create.
+- `alias <name> <template>`: create an engine from its template alone; `base` is the template's site root (`https://host/`). `%s` is accepted as a placeholder and stored as `{}`.
 - `alias set <name> … --force`: overwrite an existing alias.
 - `alias rm <name>`, `alias ls [filter]`, `alias show <name>`.
 - `engine default <name>`: set the default engine; `engine` alone prints the current one.

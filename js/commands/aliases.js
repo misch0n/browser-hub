@@ -1,6 +1,12 @@
 import { cmp, plural } from '../core/util.js';
 import { validateEntry } from '../core/aliases.js';
 
+// "https://www.google.com/search?q={}" -> "https://www.google.com/"
+function siteRoot(template) {
+  const m = /^(https?:\/\/[^/?#{}]+)/i.exec(template);
+  return m ? m[1] + '/' : template;
+}
+
 export default function register(add, { st, usage, isBuiltin }) {
   const entries = () => st().aliases.entries;
   const engineNames = () => entries().filter((e) => e.template).map((e) => ({ value: e.name, label: 'engine' }));
@@ -23,12 +29,14 @@ export default function register(add, { st, usage, isBuiltin }) {
     name: 'alias', group: 'Aliases & engines', desc: 'define URL aliases and search engines',
     usage: [
       'alias <name> <base> [template] [--path] [--force]',
+      'alias <name> <template> [--path] [--force]',
       'alias set <name> ... [--force]',
       'alias rm <name>', 'alias ls [filter]', 'alias show <name>',
     ],
     examples: [
       'alias gh https://github.com/ https://github.com/{} --path',
-      'alias yt https://youtube.com/ https://youtube.com/results?search_query={}',
+      'alias yt https://www.youtube.com/results?search_query={}',
+      'alias w https://en.wikipedia.org/w/index.php?search=%s',
       'alias mail https://mail.google.com/',
     ],
     complete: (prev) => {
@@ -88,7 +96,13 @@ export default function register(add, { st, usage, isBuiltin }) {
       }
       if (positional[0] && positional[0].toLowerCase() === 'set') positional.shift();
       if (positional.length < 2 || positional.length > 3) return usage(ctx, this);
-      const [name, base, template] = positional;
+      // `%s` is the placeholder browsers use; accept it as `{}`.
+      let [name, base, template] = positional.map((w, i) => (i ? w.split('%s').join('{}') : w));
+      // `alias <name> <template>`: a lone URL with `{}` is an engine; it opens its own site bare.
+      if (!template && base.includes('{}')) {
+        template = base;
+        base = siteRoot(template);
+      }
       if (path && !template) return out.err('--path only applies to aliases with a template');
       const v = validateEntry({ name, base, template, escape: path ? 'path' : 'query' }, isBuiltin);
       if (v.error) return out.err(v.error);

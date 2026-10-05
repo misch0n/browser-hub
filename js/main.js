@@ -60,6 +60,11 @@ let currentCtx = ctxBase;
 const commands = createCommands(() => currentCtx);
 const ctxFor = (out) => (currentCtx = Object.assign({}, ctxBase, { out }));
 
+// "https://www.google.com/search?q=x" -> "google.com": how an engine is named to the user.
+function siteOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; }
+}
+
 const dispatchEnv = () => ({
   isBuiltin: commands.isBuiltin,
   entries: state.aliases.entries,
@@ -89,7 +94,8 @@ function run(raw) {
     return Promise.resolve();
   }
   if (res.kind === 'search') {
-    out.head([['Searching ', ''], [res.name, 'accent'], [' for ', ''], ['“' + input + '”', 'strong']], 'info');
+    out.head([['Searching ', ''], [siteOf(res.url), 'accent'], [' for ', ''], ['“' + res.query + '”', 'strong']], 'info');
+    if (res.fallback) out.dim('No command or alias named ' + input.split(/\s+/)[0] + '; used the default engine (' + res.name + ')');
   } else {
     out.head([['Opening ', ''], [target.host + target.pathname.replace(/\/$/, '') + target.search, 'url']], 'info');
   }
@@ -115,7 +121,13 @@ function describe(v, ghost, hist) {
     return [[res.name, 'accent'], [' · ' + def.desc, 'faint'], ...tab];
   }
   if (res.kind === 'redirect') return [['↵ open ', 'faint'], [res.url, 'url'], ...tab];
-  if (res.kind === 'search') return [['↵ search ', 'faint'], [res.name, 'accent'], ...tab];
+  if (res.kind === 'search') {
+    return [
+      ['↵ search ', 'faint'], [siteOf(res.url), 'accent'],
+      ...(res.fallback ? [[' (default)', 'faint']] : []),
+      [' for ', 'faint'], ['“' + res.query + '”', 'strong'], ...tab,
+    ];
+  }
   return [[res.message, 'err']];
 }
 

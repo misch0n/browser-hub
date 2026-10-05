@@ -146,9 +146,13 @@ async function check(name, fn) {
     await type('calc 1+1');
     assert.match(await page.locator('#hint').innerText(), /calc · arithmetic/);
     await type('vitosha weather');
-    assert.match(await page.locator('#hint').innerText(), /search g/);
-    await type('g x');
-    assert.match(await page.locator('#hint').innerText(), /open https:\/\/www\.google\.com\/search\?q=x/);
+    assert.match(await page.locator('#hint').innerText(), /search google\.com \(default\) for “vitosha weather”/);
+    await type('gtg');
+    assert.match(await page.locator('#hint').innerText(), /search google\.com \(default\) for “gtg”/);
+    await type('ddg x');
+    assert.match(await page.locator('#hint').innerText(), /search duckduckgo\.com for “x”/);
+    await type('g');
+    assert.match(await page.locator('#hint').innerText(), /open https:\/\/www\.google\.com\//);
     await prompt.fill('');
   });
 

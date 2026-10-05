@@ -2,7 +2,7 @@ import { h, rich } from './dom.js';
 import { monthGrid } from './components.js';
 import { WIDGETS, EXPORT_REMINDER_DAYS } from '../core/catalog.js';
 import { todayISO, toISO, pad2, truncate, firstLine, byIdNum, plural, daysBetween } from '../core/util.js';
-import { MONTH_NAMES, DAY_NAMES_LONG, dayLabel, shortDate, dueSeg, bytes } from '../core/format.js';
+import { MONTH_NAMES, DAY_NAMES_LONG, dayLabel, longDate, dueSeg, bytes } from '../core/format.js';
 import { agenda, eventDays, sortTasks } from '../core/agenda.js';
 import { localZone, zoneRows, workOverlap, zoneLabel } from '../lib/zones.js';
 
@@ -42,7 +42,8 @@ const RENDERERS = {
       if (a.overdue.length) {
         box.appendChild(h('div', { class: 'w-group t-err', text: 'Overdue' }));
         for (const t of a.overdue.slice(0, 4)) {
-          box.appendChild(row([[shortDate(t.due, today), 'err']], [[t.text, '']]));
+          const late = daysBetween(t.due, today); // under the Overdue heading: how late
+          box.appendChild(row([[late === 1 ? '1 day' : late + ' days', 'err']], [[t.text, '']]));
           shown++;
         }
       }
@@ -50,7 +51,7 @@ const RENDERERS = {
         if (shown >= MAX) break;
         const label = dayLabel(d.date, today);
         box.appendChild(h('div', { class: 'w-group' }, rich(label === 'today' || label === 'tomorrow'
-          ? [[label[0].toUpperCase() + label.slice(1), 'accent']] : [[shortDate(d.date, today), 'date']])));
+          ? [[label[0].toUpperCase() + label.slice(1), 'accent']] : [[longDate(d.date, today), 'date']])));
         for (const e of d.events) { box.appendChild(row([[e.time || 'all day', e.time ? 'num' : 'faint']], [[e.title, '']])); shown++; }
         for (const t of d.tasks) { box.appendChild(row([['task due', 'warn']], [[t.text, '']])); shown++; }
       }
@@ -105,8 +106,9 @@ const RENDERERS = {
       rows.forEach((r) => {
         box.appendChild(h('div', { class: 'w-zone', title: r.zone + ' · UTC' + r.offset },
           h('span', { class: 'w-dot ' + (r.working ? 't-ok' : 't-faint'), text: r.working ? '●' : '○' }),
-          h('span', { class: 'w-zone-name ' + (r.ref ? 't-accent' : ''), text: zoneLabel(r.zone, state.settings.zoneNames) }),
-          h('span', { class: 'w-zone-day t-warn', text: r.date }),
+          h('span', { class: 'w-zone-name' },
+            h('span', { class: r.ref ? 't-accent' : '', text: zoneLabel(r.zone, state.settings.zoneNames) }),
+            r.date ? h('span', { class: 'w-zone-day t-warn', text: r.date }) : null),
           h('span', { class: 'w-zone-time t-num', text: r.time })));
       });
       if (zones.length === 1) box.appendChild(empty('Add zones: zones add <zone> [name]'));

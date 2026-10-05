@@ -1,5 +1,5 @@
-import { parseId, parseDate, parseTime, truncate, byIdNum, plural, pad2, todayISO } from '../core/util.js';
-import { MONTH_NAMES, DAY_NAMES_LONG, dayLabel, shortDate, usageSegs } from '../core/format.js';
+import { parseId, parseDate, leadingDate, parseTime, truncate, byIdNum, plural, pad2, todayISO } from '../core/util.js';
+import { MONTH_NAMES, DAY_NAMES_LONG, dayLabel, longDate, usageSegs } from '../core/format.js';
 import { daySummary, summaryRows, summaryCounts, tomorrowLine } from '../core/summary.js';
 import { agenda, eventDays, sortEvents } from '../core/agenda.js';
 import { parseICS } from '../lib/ics.js';
@@ -27,7 +27,7 @@ export default function register(add, { st, usage, records }) {
       out.calendar({ year, month, today, marks: eventDays(st(), year, month) });
       if (events.length) {
         out.table(null, events.map((e) => [
-          [[e.id, 'id', { run: 'events ' + e.id }]], [[shortDate(e.date, today), 'date']], [[e.time || 'all day', e.time ? 'num' : 'faint']], e.title,
+          [[e.id, 'id', { run: 'events ' + e.id }]], [[longDate(e.date, today), 'date']], [[e.time || 'all day', e.time ? 'num' : 'faint']], e.title,
         ]));
       }
     },
@@ -60,8 +60,8 @@ export default function register(add, { st, usage, records }) {
       for (const d of a.days) {
         const label = dayLabel(d.date, today);
         out.section(label === 'today' || label === 'tomorrow'
-          ? [[label[0].toUpperCase() + label.slice(1), 'accent'], [' · ' + shortDate(d.date, today), 'dim']]
-          : [[shortDate(d.date, today), 'date']]);
+          ? [[label[0].toUpperCase() + label.slice(1), 'accent'], [' · ' + longDate(d.date, today), 'dim']]
+          : [[longDate(d.date, today), 'date']]);
         out.table(null, [
           ...d.events.map((e) => [[[e.id, 'id', { run: 'events ' + e.id }]], [[e.time || 'all day', e.time ? 'num' : 'faint']], e.title]),
           ...d.tasks.map((t) => [[[t.id, 'id', { run: 'tasks ' + t.id }]], [['task due', 'warn']], t.text]),
@@ -104,7 +104,11 @@ export default function register(add, { st, usage, records }) {
 
   async function addEvent(ctx, rest) {
     const { out } = ctx;
-    const m = /^(\S+)(?:\s+([\s\S]*))?$/.exec(rest.trim());
+    // The date can take a few words: events add 12 oct 19:00 dinner, events add next friday lunch
+    const words = rest.trim().split(/\s+/).filter(Boolean);
+    const lead = leadingDate(words, ctx.now());
+    const m = lead ? [null, words.slice(0, lead.used).join(' '), rest.trim().replace(new RegExp('^(\\s*\\S+){' + lead.used + '}\\s*'), '')]
+      : /^(\S+)(?:\s+([\s\S]*))?$/.exec(rest.trim());
     if (!m) {
       out.head([['Usage', ''], [' · events add', 'dim']], 'err');
       out.table(null, [[usageSegs('events add <date> [HH:MM] <title>')], [usageSegs('ev <date> [HH:MM] <title>')]]);
@@ -114,7 +118,7 @@ export default function register(add, { st, usage, records }) {
     const date = parseDate(m[1], ctx.now());
     if (!date) {
       out.err("Can't read the date '" + m[1] + "'");
-      out.dim('Try 2026-10-31, today, tomorrow, fri, +3d or +2w');
+      out.dim('Try friday, next friday, 12 oct, tomorrow, in 3 days, +2w or 2026-10-31');
       return;
     }
     let title = m[2] || '';
@@ -151,7 +155,7 @@ export default function register(add, { st, usage, records }) {
     }
     out.head([[plural(list.length, arg === 'all' ? 'event' : 'upcoming event'), 'strong']]);
     out.table(['id', 'date', 'time', 'event'], list.map((e) => [
-      [[e.id, 'id', { run: 'events ' + e.id }]], [[shortDate(e.date, today), e.date < today ? 'faint' : 'date']],
+      [[e.id, 'id', { run: 'events ' + e.id }]], [[longDate(e.date, today), e.date < today ? 'faint' : 'date']],
       [[e.time || 'all day', e.time ? 'num' : 'faint']], [[e.title, e.date < today ? 'dim' : '']],
     ]));
   }

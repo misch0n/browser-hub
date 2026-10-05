@@ -260,7 +260,7 @@ async function check(name, fn) {
     assert.deepEqual(await order(), ['zones', 'clock', 'agenda', 'tasks', 'calendar']);
     await send('zones add Pacific/Kiritimati Kiri');
     await page.waitForFunction(() => /Kiri/.test(document.querySelector('[data-widget=zones]').innerText));
-    const names = await page.locator('[data-widget=zones] .w-zone-name').allInnerTexts();
+    const names = await page.locator('[data-widget=zones] .w-zone-name > span:first-child').allInnerTexts();
     assert.equal(names[names.length - 1], 'Kiri'); // UTC+14 is always the latest clock
     await send('zones kiri rm');
     await send('widgets zones move bottom');
@@ -530,7 +530,7 @@ async function check(name, fn) {
     await chooser.setFiles(f);
     await page.waitForFunction(() => /Imported 1 event/.test(document.getElementById('turns').innerText));
     await send('cal 2027-01');
-    assert.match(await lastText(), /Tue 5 Jan 2027\s+09:00\s+Board meeting/);
+    assert.match(await lastText(), /Tuesday 5 January 2027\s+09:00\s+Board meeting/);
     assert.equal(await lastTurn().locator('.cal td.mark').count(), 1);
     fs.unlinkSync(f);
   });

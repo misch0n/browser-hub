@@ -1,5 +1,5 @@
 import { pad2, isValidZone, canonicalZone } from '../core/util.js';
-import { shortDate } from '../core/format.js';
+import { longDate } from '../core/format.js';
 
 export const WORK_START = 9 * 60;
 export const WORK_END = 17 * 60;
@@ -71,7 +71,7 @@ export function zoneRows(instant, zones) {
       offset: offsetOf(instant, zone),
       offsetMin: offsetMinutes(instant, zone),
       dayDiff,
-      date: dayDiff === 0 ? '' : shortDate(p.date, base.date),
+      date: dayDiff === 0 ? '' : longDate(p.date, base.date),
       working: p.minutes >= WORK_START && p.minutes < WORK_END,
     };
   }).sort((a, b) => a.offsetMin - b.offsetMin); // stable: the local row leads its offset

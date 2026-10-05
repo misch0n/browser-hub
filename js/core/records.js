@@ -42,7 +42,7 @@ export const KINDS = {
         parse(v, env) {
           if (NONE.test(v.trim())) return { value: null };
           const d = parseDate(v.trim(), env.now());
-          return d ? { value: d } : { error: "can't read the date '" + v.trim() + "' (try 2026-10-31, tomorrow, fri, +3d or none)" };
+          return d ? { value: d } : { error: "can't read the date '" + v.trim() + "' (try friday, next friday, 12 oct, in 3 days, 2026-10-31 or none)" };
         },
       },
       tags: {

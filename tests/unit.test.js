@@ -20,6 +20,7 @@ import { createLocalStore } from '../js/core/store.js';
 import { createData, DEFAULTS } from '../js/core/data.js';
 import { merge } from '../js/core/importer.js';
 import { jsonLines, dueSeg, dayLabel } from '../js/core/format.js';
+import * as F from '../js/core/format.js';
 import { evaluate, formatNumber } from '../js/lib/calc.js';
 import { convert } from '../js/lib/units.js';
 import * as M from '../js/lib/misc.js';
@@ -55,6 +56,29 @@ test('dates: iso, keywords, weekdays, offsets', () => {
   assert.equal(U.parseDate('+3d', MON), '2026-10-08');
   assert.equal(U.parseDate('+2w', MON), '2026-10-19');
   assert.equal(U.parseDate('someday', MON), null);
+  // Any start of a day name, two letters on; any start of a month name, three on.
+  for (const w of ['fr', 'fri', 'frid', 'friday', 'FRIDAY', 'Fri.']) assert.equal(U.parseDate(w, MON), '2026-10-09', w);
+  assert.equal(U.parseDate('th', MON), '2026-10-08');
+  assert.equal(U.parseDate('tu', MON), '2026-10-06');
+  assert.equal(U.parseDate('t', MON), null); // tuesday or thursday?
+  assert.equal(U.parseDate('s', MON), null);
+  assert.equal(U.parseDate('next friday', MON), '2026-10-16');
+  assert.equal(U.parseDate('12 oct', MON), '2026-10-12');
+  assert.equal(U.parseDate('Oct 12', MON), '2026-10-12');
+  assert.equal(U.parseDate('october 3', MON), '2027-10-03'); // passed this year: the next one
+  assert.equal(U.parseDate('3 October 2027', MON), '2027-10-03');
+  assert.equal(U.parseDate('31 feb', MON), null);
+  assert.equal(U.parseDate('ju 3', MON), null); // june or july?
+  assert.equal(U.parseDate('in 3 days', MON), '2026-10-08');
+  assert.equal(U.parseDate('in 2 weeks', MON), '2026-10-19');
+  assert.equal(U.parseDate('in 1 month', MON), '2026-11-05');
+  assert.equal(U.parseDate('tmr', MON), '2026-10-06');
+  assert.equal(U.parseDate('yesterday', MON), '2026-10-04');
+  assert.deepEqual(U.leadingDate(['next', 'friday', 'lunch'], MON), { date: '2026-10-16', used: 2 });
+  assert.deepEqual(U.leadingDate(['fri', '3', 'friends'], MON), { date: '2026-10-09', used: 1 });
+  // Shown in full, always.
+  assert.equal(F.longDate('2026-10-09', '2026-10-05'), 'Friday 9 October');
+  assert.equal(F.longDate('2027-01-01', '2026-10-05'), 'Friday 1 January 2027');
   assert.equal(U.parseTime('9:05'), '09:05');
   assert.equal(U.parseTime('24:00'), null);
   assert.equal(U.parseId('t', 'T12'), 't12');
@@ -66,8 +90,8 @@ test('format: due labels and json colouring', () => {
   assert.deepEqual(dueSeg('2026-10-03', '2026-10-05'), ['2 days overdue', 'err']);
   assert.deepEqual(dueSeg('2026-10-05', '2026-10-05'), ['today', 'warn']);
   assert.deepEqual(dueSeg('2026-10-06', '2026-10-05'), ['tomorrow', 'info']);
-  assert.deepEqual(dueSeg('2026-10-08', '2026-10-05'), ['Thu 8 Oct', 'date']);
-  assert.equal(dayLabel('2027-01-02', '2026-10-05'), 'Sat 2 Jan 2027');
+  assert.deepEqual(dueSeg('2026-10-08', '2026-10-05'), ['Thursday 8 October', 'date']);
+  assert.equal(dayLabel('2027-01-02', '2026-10-05'), 'Saturday 2 January 2027');
   const lines = jsonLines('{\n  "a": [1, true, null, "x"]\n}');
   assert.deepEqual(lines[1].map((s) => s[1]), ['dim', 'id', 'dim', 'dim', 'num', 'dim', 'accent', 'dim', 'faint', 'dim', 'ok', 'dim']);
   assert.equal(lines.map((l) => l.map((s) => s[0]).join('')).join('\n'), '{\n  "a": [1, true, null, "x"]\n}');
@@ -292,9 +316,9 @@ test('zones: rows, offsets, overlap, zoned wall time', () => {
   assert.deepEqual(rows.map((r) => r.date), ['', '', '']);
   // A different calendar day shows the date; the same day shows nothing.
   const late = Z.zoneRows(new Date(Date.UTC(2026, 0, 15, 20)), ['UTC', 'Asia/Tokyo', 'Pacific/Honolulu']);
-  assert.deepEqual(late.map((r) => [r.zone, r.date]), [['Pacific/Honolulu', ''], ['UTC', ''], ['Asia/Tokyo', 'Fri 16 Jan']]);
+  assert.deepEqual(late.map((r) => [r.zone, r.date]), [['Pacific/Honolulu', ''], ['UTC', ''], ['Asia/Tokyo', 'Friday 16 January']]);
   const early = Z.zoneRows(new Date(Date.UTC(2026, 0, 15, 3)), ['Asia/Tokyo', 'America/New_York']);
-  assert.deepEqual(early.map((r) => [r.zone, r.date]), [['America/New_York', 'Wed 14 Jan'], ['Asia/Tokyo', '']]);
+  assert.deepEqual(early.map((r) => [r.zone, r.date]), [['America/New_York', 'Wednesday 14 January'], ['Asia/Tokyo', '']]);
   assert.ok(Z.allZones().includes('Europe/Sofia') && Z.allZones().includes('UTC'));
   assert.equal(Z.resolveZone('tokyo'), 'Asia/Tokyo');
   assert.equal(Z.resolveZone('new york'), 'America/New_York');
@@ -633,14 +657,14 @@ test('recurring tasks: rules, next due date, done moves it on', async () => {
   assert.equal(R.nextDue('month', '2026-01-31', '2026-01-31'), '2026-02-28'); // short month
   assert.equal(R.nextDue('2w', '2026-10-05', '2026-10-05'), '2026-10-19');
   assert.equal(R.firstDue('mon', '2026-10-07'), '2026-10-12');
-  assert.equal(R.repeatLabel('mon,thu'), 'every Mon, Thu');
+  assert.equal(R.repeatLabel('mon,thu'), 'every Monday, Thursday');
 
   // Commands (today is Monday 2026-10-05).
   const app = await makeApp();
   const task = (id) => app.data.state.tasks.items.find((t) => t.id === id);
-  assert.deepEqual(await app.run('t water the plants every:mon,thu #home'), ['# Added task t1', 'water the plants  due today  ↻ every Mon, Thu  #home']);
+  assert.deepEqual(await app.run('t water the plants every:mon,thu #home'), ['# Added task t1', 'water the plants  due today  ↻ every Monday, Thursday  #home']);
   assert.equal(task('t1').due, '2026-10-05');
-  assert.deepEqual(await app.run('t done t1'), ['# Completed t1 · next Thu 8 Oct', 'water the plants  ↻ every Mon, Thu']);
+  assert.deepEqual(await app.run('t done t1'), ['# Completed t1 · next Thursday 8 October', 'water the plants  ↻ every Monday, Thursday']);
   assert.deepEqual([task('t1').done, task('t1').due, task('t1').doneCount], [false, '2026-10-08', 1]);
   await app.run('undo');
   assert.equal(task('t1').due, '2026-10-05');
@@ -654,7 +678,7 @@ test('recurring tasks: rules, next due date, done moves it on', async () => {
   assert.equal(task('t2').repeat, undefined);
   await app.run('t done t2');
   assert.equal(task('t2').done, true);
-  assert.ok((await app.run('tasks')).some((l) => l.includes('water the plants  ↻ every Mon, Thu')));
+  assert.ok((await app.run('tasks')).some((l) => l.includes('water the plants  ↻ every Monday, Thursday')));
 });
 
 test('search: matching, ranking, regex, categories, highlighting', async () => {
@@ -725,7 +749,7 @@ test('daily summary: today, dismiss for the day (a synced setting), pin, off', a
   await app.run('ev tomorrow 09:00 dentist');
   const out = await app.run('today');
   assert.deepEqual(out, ['# Today · Monday 5 October · 1 overdue · 1 event · 1 due',
-    'Thu 1 Oct  t1  file the report', '10:30  e1  design review', 'due today  t2  pay rent', 'Tomorrow: 1 event']);
+    'Thursday 1 October  t1  file the report', '10:30  e1  design review', 'due today  t2  pay rent', 'Tomorrow: 1 event']);
   assert.equal(out.tone, 'warn');
   const st = () => app.data.state.settings;
   assert.equal(Sum.summaryVisible(st(), '2026-10-05'), true);
@@ -907,6 +931,23 @@ test('sync command: status, setup asks for the token, cancel, errors, off', asyn
   assert.equal((await app.run('sync now'))[0], 'err: Sync is not set up · sync setup <owner/repo>');
 });
 
+test('dates in commands: words after due: and events add', async () => {
+  const app = await makeApp();
+  const st = () => app.data.state;
+  assert.deepEqual(await app.run('t pay rent due:next friday #home'), ['# Added task t1', 'pay rent  due Friday 16 October  #home']);
+  await app.run('t book flights due:12 oct');
+  assert.equal(st().tasks.items[1].due, '2026-10-12');
+  await app.run('t call mum due:in 3 days please');
+  assert.deepEqual([st().tasks.items[2].due, st().tasks.items[2].text], ['2026-10-08', 'call mum please']);
+  await app.run('tasks t1 edit due thursday');
+  assert.equal(st().tasks.items[0].due, '2026-10-08');
+  await app.run('events add 12 oct 19:00 dinner at Mia\'s');
+  assert.deepEqual([st().events.items[0].date, st().events.items[0].time, st().events.items[0].title], ['2026-10-12', '19:00', "dinner at Mia's"]);
+  await app.run('ev next friday lunch');
+  assert.deepEqual([st().events.items[1].date, st().events.items[1].title], ['2026-10-16', 'lunch']);
+  assert.match((await app.run('t x due:someday'))[0], /Can't read the date 'someday'/);
+});
+
 test('quotes say what you mean: literal text, names with spaces', async () => {
   const app = await makeApp();
   const st = () => app.data.state;
@@ -1021,15 +1062,15 @@ test('calendar: ev, cal, agenda', async () => {
   await app.run('t old thing due:2026-10-01');
   const cal = await app.run('cal');
   assert.deepEqual(cal.slice(0, 2), ['# October 2026 · 2 events', 'CAL 2026-10 marks=5,9']);
-  assert.match(cal[2], /^e1 \| Mon 5 Oct \| 09:30 \| standup$/);
+  assert.match(cal[2], /^e1 \| Monday 5 October \| 09:30 \| standup$/);
   assert.equal((await app.run('cal 2026-13'))[0], '# Usage · cal');
   const ag = await app.run('agenda');
   assert.equal(ag[0], '# Next 7 days · 4 items · 1 overdue');
   assert.equal(ag[1], '## Overdue');
-  assert.match(ag[2], /^t2 \| Thu 1 Oct \| old thing$/);
+  assert.match(ag[2], /^t2 \| Thursday 1 October \| old thing$/);
   assert.ok(ag.includes('t1 | task due | file taxes'));
-  assert.equal(ag[3], '## Today · Mon 5 Oct');
-  assert.ok(ag.includes('## Wed 7 Oct'));
+  assert.equal(ag[3], '## Today · Monday 5 October');
+  assert.ok(ag.includes('## Wednesday 7 October'));
   assert.ok(!ag.some((l) => /dentist/.test(l)));
   assert.ok((await app.run('agenda 60')).some((l) => /dentist/.test(l)));
   assert.deepEqual(await app.run('ev rm e1'), ['# Removed event e1', 'standup', '↶ undo brings it back']);
@@ -1135,12 +1176,12 @@ test('tools commands', async () => {
   const conv = await app.run('tz 09:00 Pacific/Chatham');
   const chathamRow = conv.find((l) => l.startsWith('Chatham | '));
   assert.match(chathamRow, /^Chatham \| 09:00 \| /);
-  assert.match(conv[0], /^# 09:00 Chatham( \w{3} \d+ \w{3})? = \d\d:\d\d local/);
+  assert.match(conv[0], /^# 09:00 Chatham( \w+ \d+ \w+)? = \d\d:\d\d local/);
   // ...and the local time is right: 09:00 on Chatham's own today.
   const [cy, cm, cd] = Z.partsIn(MON, 'Pacific/Chatham').date.split('-').map(Number);
   const inst = Z.zonedToDate(cy, cm, cd, 9, 0, 0, 'Pacific/Chatham');
   assert.ok(conv[0].includes('= ' + U.pad2(inst.getHours()) + ':' + U.pad2(inst.getMinutes()) + ' local'), conv[0]);
-  assert.match((await app.run('tz 23:30 kenji'))[0], /^# 23:30 Kenji( \w{3} \d+ \w{3})? = \d\d:\d\d local/);
+  assert.match((await app.run('tz 23:30 kenji'))[0], /^# 23:30 Kenji( \w+ \d+ \w+)? = \d\d:\d\d local/);
   assert.ok(!app.data.state.settings.zones.includes('Pacific/Chatham')); // shown, not added
   assert.equal((await app.run('tz 09:00 atlantis'))[0], "err: Unknown time zone 'atlantis'");
   assert.equal((await app.run('tz lunch'))[0], "err: tz: 'lunch' is not a time (HH:MM)");

@@ -8,6 +8,7 @@
 import { parseISO, toISO } from './util.js';
 
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const WORDS = { day: 'day', daily: 'day', weekday: 'weekday', weekdays: 'weekday', week: 'week', weekly: 'week',
   month: 'month', monthly: 'month', year: 'year', yearly: 'year', annually: 'year' };
 const UNIT = { d: 'day', w: 'week', m: 'month', y: 'year' };
@@ -95,7 +96,7 @@ export function nextDue(rule, due, today) {
 export function repeatLabel(rule) {
   const set = daySet(rule);
   if (rule === 'weekday') return 'every weekday';
-  if (set) return 'every ' + rule.split(',').map((d) => d[0].toUpperCase() + d.slice(1)).join(', ');
+  if (set) return 'every ' + rule.split(',').map((d) => FULL[DAYS.indexOf(d)]).join(', ');
   const m = /^(\d+)([dwmy])$/.exec(rule);
   if (m) return 'every ' + m[1] + ' ' + UNIT[m[2]] + 's';
   return 'every ' + rule;

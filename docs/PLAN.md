@@ -154,7 +154,7 @@ Built-ins are a fixed list compiled into the page; it is the list conflict detec
 **Shared conventions**
 
 - Ids are short, per collection, never reused after deletion (for example `t3`, `n12`, `e7`).
-- One date parser for every command: ISO dates, `today`, `tomorrow`, weekday names (next occurrence), and offsets such as `+3d`.
+- One date parser for every command: ISO dates, `today`, `tomorrow`, `yesterday`, day names from two letters to full (`fr`, `fri`, `friday`: the coming one; `next friday`: a week later), `12 oct` / `oct 12` / `12 october 2027`, and offsets `+3d`, `in 2 weeks`, `in 1 month`. Dates are always shown with full day and month names.
 - Times are 24-hour `HH:MM` in the browser's local time zone.
 - Every write command prints what it changed, with the new id.
 

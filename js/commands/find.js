@@ -1,6 +1,6 @@
 import { search, documents, highlight, CATEGORIES } from '../core/search.js';
 import { plural, todayISO } from '../core/util.js';
-import { dueSeg, shortDate, kindSeg } from '../core/format.js';
+import { dueSeg, longDate, kindSeg } from '../core/format.js';
 import { repeatLabel } from '../core/repeat.js';
 
 // Long text is cut to a window around the first hit.
@@ -61,7 +61,7 @@ export default function register(add, { st, defs, isBuiltin }) {
               return [[link(doc.key, 'id')], hl(doc.note.text, hits.text), []];
             case 'events': {
               const e = doc.event;
-              return [[link(e.id, 'id')], hl(e.title, hits.title), [[shortDate(e.date, today), 'date'], [e.time ? ' ' + e.time : '', 'num']]];
+              return [[link(e.id, 'id')], hl(e.title, hits.title), [[longDate(e.date, today), 'date'], [e.time ? ' ' + e.time : '', 'num']]];
             }
             case 'links': {
               const a = doc.alias;

@@ -734,13 +734,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .w-zone {
   display: grid;
-  grid-template-columns: 1.5ch minmax(0, 1fr) auto auto;
+  grid-template-columns: 1.5ch minmax(0, 1fr) auto;
   gap: 1ch;
   align-items: baseline;
 }
 
-.w-zone-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.w-zone-day { font-size: 12px; text-align: right; }
+.w-zone-name { min-width: 0; }
+.w-zone-name > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.w-zone-day { font-size: 12px; }
 .w-dot { font-size: 0.75em; }
 
 .w-note {

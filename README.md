@@ -14,7 +14,7 @@ tasks                          list them                 (tasks all, tasks #home
 tasks add <text>               add one
 tasks t3                       show one; ids in any list link here
 tasks t3 edit                  edit it in place
-tasks t3 edit due fri          change one field          (edit due alone: current value in the prompt)
+tasks t3 edit due friday       change one field          (edit due alone: current value in the prompt)
 tasks t3 rm                    remove it                 (undo brings it back)
 tasks t3 done                  actions of its own        (aliases: gh default)
 ```
@@ -86,6 +86,11 @@ at the start of a word, inside one, or loosely (`find pmt` finds "payment").
 `find "oat milk"` matches a phrase, `find /^buy\s/` takes a regular expression
 (`i` unless you give flags), and `find milk in:notes` lists just one group, in full.
 Ids in the results open the entry.
+
+**Dates** are read loosely and written out in full: `friday`, `fri` or `fr`
+(the coming one), `next friday` (a week later), `12 oct`, `oct 12`,
+`12 october 2027`, `tomorrow`, `in 3 days`, `+2w`, `2026-10-31`; they show as
+"Friday 16 October". `t pay rent due:next friday`, `events add 12 oct 19:00 dinner`.
 
 **Recurring tasks**: `t water the plants every:mon,thu`, `t pay rent every:month due:2026-11-01`,
 `t stand-up notes every:weekday`; rules are day, weekday, week, month, year,

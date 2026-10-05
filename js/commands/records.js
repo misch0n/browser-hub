@@ -1,6 +1,6 @@
 import { KINDS, fieldName, parseFieldEdit, findRecord, applyField } from '../core/records.js';
 import { parseId, todayISO } from '../core/util.js';
-import { dueSeg, tagSegs, dayLabel, shortDate } from '../core/format.js';
+import { dueSeg, tagSegs, dayLabel, longDate } from '../core/format.js';
 import { repeatLabel } from '../core/repeat.js';
 import { oneValue } from '../core/args.js';
 
@@ -36,7 +36,7 @@ function display(kind, field, item, today) {
     case 'task.tags': return item.tags.length ? tagSegs(item.tags).flatMap((s, i) => (i ? [[' ', ''], s] : [s])) : none;
     case 'task.done': return item.done ? [['✓ done', 'ok']] : [['○ open', 'dim']];
     case 'task.repeat': return item.repeat ? [['↻ ' + repeatLabel(item.repeat), '']] : none;
-    case 'event.date': return [[shortDate(item.date, today), 'date'], [' · ' + dayLabel(item.date, today), 'faint']];
+    case 'event.date': return [[longDate(item.date, today), 'date'], [' · ' + dayLabel(item.date, today), 'faint']];
     case 'event.time': return item.time ? [[item.time, 'num']] : [['all day', 'faint']];
     case 'alias.base': return [[item.base, 'url']];
     case 'alias.template': return item.template ? [[item.template, 'url']] : none;

@@ -2,15 +2,21 @@ export const SCHEMA = 1;
 
 export const pad2 = (n) => String(n).padStart(2, '0');
 
-const WEEKDAYS = [
-  ['sun', 'sunday'],
-  ['mon', 'monday'],
-  ['tue', 'tues', 'tuesday'],
-  ['wed', 'wednesday'],
-  ['thu', 'thur', 'thurs', 'thursday'],
-  ['fri', 'friday'],
-  ['sat', 'saturday'],
-];
+// Day and month names are matched by any start of the full name, from two
+// letters for days (mo, tu, we, th, fr, sa, su) and three for months (jan … dec),
+// so fri, frid and friday all work. Always shown in full.
+const DAY_FULL = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const MONTH_FULL = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september',
+  'october', 'november', 'december'];
+
+const byPrefix = (names, min) => (s) => {
+  const w = String(s).toLowerCase().replace(/\.$/, '');
+  if (w.length < min) return -1;
+  const hits = names.map((n, i) => (n.startsWith(w) ? i : -1)).filter((i) => i >= 0);
+  return hits.length === 1 ? hits[0] : -1;
+};
+export const weekdayIndex = byPrefix(DAY_FULL, 2);
+export const monthIndex = byPrefix(MONTH_FULL, 3);
 
 export function toISO(d) {
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
@@ -43,25 +49,63 @@ export function todayISO(now) {
   return toISO(now || new Date());
 }
 
-function weekdayIndex(s) {
-  return WEEKDAYS.findIndex((names) => names.includes(s));
-}
-
-// The one date parser: ISO dates, today, tomorrow, weekday names (next
-// occurrence, never today), and +Nd / +Nw offsets. Returns 'YYYY-MM-DD' or null.
+// The one date parser. Returns 'YYYY-MM-DD' or null. Understands:
+//   2026-10-31 · today · tomorrow (tmr) · yesterday
+//   friday (fri, fr …): the coming one, never today · next friday: a week after that
+//   12 oct · oct 12 · 12 october 2027 (without a year: the next one to come)
+//   +3d · +2w · +1m · in 3 days · in 2 weeks · in 1 month
 export function parseDate(str, now) {
-  const s = String(str).trim().toLowerCase();
+  const s = String(str).trim().toLowerCase().replace(/\s+/g, ' ').replace(/,/g, '');
+  if (!s) return null;
   if (parseISO(s)) return s;
   const today = toISO(now || new Date());
-  if (s === 'today') return today;
-  if (s === 'tomorrow') return addDays(today, 1);
-  const off = /^\+(\d{1,4})([dw])$/.exec(s);
-  if (off) return addDays(today, +off[1] * (off[2] === 'w' ? 7 : 1));
-  const wd = weekdayIndex(s);
-  if (wd >= 0) {
-    let diff = (wd - parseISO(today).getDay() + 7) % 7;
-    if (diff === 0) diff = 7;
-    return addDays(today, diff);
+  if (s === 'today' || s === 'now') return today;
+  if (s === 'tomorrow' || s === 'tmr' || s === 'tmrw') return addDays(today, 1);
+  if (s === 'yesterday') return addDays(today, -1);
+  const off = /^(?:\+|in )(\d{1,4}) ?(d|days?|w|weeks?|m|months?)$/.exec(s);
+  if (off) {
+    const n = +off[1];
+    if (off[2][0] === 'm') {
+      const d = parseISO(today);
+      const day = d.getDate();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + n);
+      d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+      return toISO(d);
+    }
+    return addDays(today, n * (off[2][0] === 'w' ? 7 : 1));
+  }
+  const nx = /^(next )?([a-z]+\.?)$/.exec(s);
+  if (nx) {
+    const wd = weekdayIndex(nx[2]);
+    if (wd >= 0) {
+      let diff = (wd - parseISO(today).getDay() + 7) % 7;
+      if (diff === 0) diff = 7;
+      return addDays(today, diff + (nx[1] ? 7 : 0));
+    }
+  }
+  // 12 oct [2027] · oct 12 [2027]
+  const dm = /^(\d{1,2}) ([a-z]+\.?)(?: (\d{4}))?$/.exec(s) || /^([a-z]+\.?) (\d{1,2})(?: (\d{4}))?$/.exec(s);
+  if (dm) {
+    const [day, mon] = /^\d/.test(dm[1]) ? [+dm[1], dm[2]] : [+dm[2], dm[1]];
+    const m = monthIndex(mon);
+    if (m < 0) return null;
+    const ty = +today.slice(0, 4);
+    let y = dm[3] ? +dm[3] : ty;
+    let iso = y + '-' + pad2(m + 1) + '-' + pad2(day);
+    if (!parseISO(iso)) return null;
+    if (!dm[3] && iso < today) { y += 1; iso = y + '-' + pad2(m + 1) + '-' + pad2(day); }
+    return parseISO(iso) ? iso : null;
+  }
+  return null;
+}
+
+// The date at the start of `words` (one to three of them, longest first):
+// { date, used } with `used` the number of words, or null.
+export function leadingDate(words, now) {
+  for (let n = Math.min(3, words.length); n >= 1; n--) {
+    const date = parseDate(words.slice(0, n).join(' '), now);
+    if (date) return { date, used: n };
   }
   return null;
 }

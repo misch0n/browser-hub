@@ -1,4 +1,4 @@
-import { parseDate, plural, todayISO } from '../core/util.js';
+import { leadingDate, plural, todayISO } from '../core/util.js';
 import { dueSeg, tagSegs, usageSegs } from '../core/format.js';
 import { sortTasks } from '../core/agenda.js';
 import { tokenize } from '../core/args.js';
@@ -20,17 +20,23 @@ export default function register(add, { st, records }) {
     const tags = [];
     const text = [];
     // Quoted words are always text: t "due:friday is a word" #home
-    for (const tok of tokenize(rest)) {
+    const toks = tokenize(rest);
+    for (let i = 0; i < toks.length; i++) {
+      const tok = toks[i];
       const w = tok.text;
       if (tok.quoted) {
         text.push(w);
       } else if (/^due:/i.test(w)) {
-        due = parseDate(w.slice(4), ctx.now());
-        if (!due) {
+        // due:friday, or a date in a few words: due:next friday, due:12 oct, due:in 3 days
+        const words = [w.slice(4), ...toks.slice(i + 1, i + 3).filter((t) => !t.quoted).map((t) => t.text)];
+        const found = leadingDate(words.filter(Boolean), ctx.now());
+        if (!found || !w.slice(4)) {
           out.err("Can't read the date '" + w.slice(4) + "'");
-          out.dim('Try 2026-10-31, today, tomorrow, fri, +3d or +2w');
+          out.dim('Try friday, next friday, 12 oct, tomorrow, in 3 days, +2w or 2026-10-31');
           return;
         }
+        due = found.date;
+        i += found.used - 1;
       } else if (/^(every|repeat):/i.test(w)) {
         repeat = parseRepeat(w.slice(w.indexOf(':') + 1));
         if (!repeat) {

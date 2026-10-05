@@ -4,38 +4,37 @@
 
 import { parseISO, daysBetween } from './util.js';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
   'September', 'October', 'November', 'December'];
-export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export const DAY_NAMES_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-// 'Tue 6 Oct', or 'Tue 6 Oct 2027' outside the current year.
-export function shortDate(iso, today) {
+// 'Tuesday 6 October', or 'Tuesday 6 October 2027' outside the current year.
+// Day and month names are always written in full.
+export function longDate(iso, today) {
   const d = parseISO(iso);
-  const s = DAY_NAMES[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+  const s = DAY_NAMES_LONG[d.getDay()] + ' ' + d.getDate() + ' ' + MONTH_NAMES[d.getMonth()];
   return today && iso.slice(0, 4) === today.slice(0, 4) ? s : s + ' ' + d.getFullYear();
 }
 
-// 'today' / 'tomorrow' / 'yesterday' / 'Tue 6 Oct'.
+// 'today' / 'tomorrow' / 'yesterday' / 'Tuesday 6 October'.
 export function dayLabel(iso, today) {
   const n = daysBetween(today, iso);
   if (n === 0) return 'today';
   if (n === 1) return 'tomorrow';
   if (n === -1) return 'yesterday';
-  return shortDate(iso, today);
+  return longDate(iso, today);
 }
 
 // A due date as a coloured segment: overdue red, today amber, soon blue.
 export function dueSeg(due, today, done) {
   if (!due) return ['', 'faint'];
-  if (done) return [shortDate(due, today), 'faint'];
+  if (done) return [longDate(due, today), 'faint'];
   const n = daysBetween(today, due);
   if (n < 0) return [(n === -1 ? '1 day' : -n + ' days') + ' overdue', 'err'];
   if (n === 0) return ['today', 'warn'];
   if (n === 1) return ['tomorrow', 'info'];
-  if (n < 7) return [shortDate(due, today), 'date'];
-  return [shortDate(due, today), 'dim'];
+  if (n < 7) return [longDate(due, today), 'date'];
+  return [longDate(due, today), 'dim'];
 }
 
 export const tagSegs = (tags) => tags.map((t) => ['#' + t, 'tag']);

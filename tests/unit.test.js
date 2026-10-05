@@ -9,6 +9,7 @@ import { dispatch } from '../js/core/dispatch.js';
 import { edit, actionFor, historySearch } from '../js/core/lineedit.js';
 import { tokenize, oneValue, quote } from '../js/core/args.js';
 import * as K from '../js/core/keys.js';
+import * as R from '../js/core/repeat.js';
 import * as C from '../js/core/completion.js';
 import { createLocalStore } from '../js/core/store.js';
 import { createData, DEFAULTS } from '../js/core/data.js';
@@ -497,8 +498,8 @@ test('editing fields: n / t / ev edit <id>.<field> <value>, show views are edita
 
   await app.run('t buy flour due:tomorrow #home');
   const show = await app.run('t show t1');
-  assert.deepEqual(show.slice(0, 5), ['# task t1', 'text: buy flour  [t edit t1.text = buy flour]', 'due: tomorrow  [t edit t1.due = 2026-10-06]',
-    'tags: #home  [t edit t1.tags = #home]', 'done: ○ open  [t edit t1.done = no]']);
+  assert.deepEqual(show.slice(0, 6), ['# task t1', 'text: buy flour  [t edit t1.text = buy flour]', 'due: tomorrow  [t edit t1.due = 2026-10-06]',
+    'tags: #home  [t edit t1.tags = #home]', 'repeat: none  [t edit t1.repeat = none]', 'done: ○ open  [t edit t1.done = no]']);
   assert.deepEqual(await app.run('t edit t1'), show); // edit with no field shows it
   await app.run('t edit t1.due fri');
   assert.equal(st().tasks.items[0].due, '2026-10-09');
@@ -587,6 +588,48 @@ test('undo and redo: per item, across commands, refusing to clobber newer change
   const exported = await app.store.exportAll();
   assert.deepEqual(Object.keys(exported.collections).filter((k) => !['meta', 'aliases', 'notes', 'tasks', 'events', 'settings', 'history'].includes(k)), []);
   assert.ok(app.storage.getItem('cc-device:undo'));
+});
+
+test('recurring tasks: rules, next due date, done moves it on', async () => {
+  // Rules (pure).
+  assert.equal(R.parseRepeat('daily'), 'day');
+  assert.equal(R.parseRepeat('Weekdays'), 'weekday');
+  assert.equal(R.parseRepeat('1w'), 'week');
+  assert.equal(R.parseRepeat('2w'), '2w');
+  assert.equal(R.parseRepeat('Thursday, mon'), 'mon,thu');
+  assert.equal(R.parseRepeat('0d'), null);
+  assert.equal(R.parseRepeat('sometimes'), null);
+  // Wednesday 2026-10-07: late or early, the next date is after both due and today.
+  assert.equal(R.nextDue('week', '2026-10-05', '2026-10-07'), '2026-10-12'); // weekly Monday, done late: next Monday
+  assert.equal(R.nextDue('week', '2026-10-12', '2026-10-07'), '2026-10-19'); // done early: skips the one done
+  assert.equal(R.nextDue('day', '2026-10-05', '2026-10-07'), '2026-10-08');
+  assert.equal(R.nextDue('mon,thu', '2026-10-05', '2026-10-07'), '2026-10-08');
+  assert.equal(R.nextDue('weekday', '2026-10-09', '2026-10-09'), '2026-10-12'); // Friday -> Monday
+  assert.equal(R.nextDue('month', '2026-01-31', '2026-01-31'), '2026-02-28'); // short month
+  assert.equal(R.nextDue('2w', '2026-10-05', '2026-10-05'), '2026-10-19');
+  assert.equal(R.firstDue('mon', '2026-10-07'), '2026-10-12');
+  assert.equal(R.repeatLabel('mon,thu'), 'every Mon, Thu');
+
+  // Commands (today is Monday 2026-10-05).
+  const app = await makeApp();
+  const task = (id) => app.data.state.tasks.items.find((t) => t.id === id);
+  assert.deepEqual(await app.run('t water the plants every:mon,thu #home'), ['# Added task t1', 'water the plants  due today  ↻ every Mon, Thu  #home']);
+  assert.equal(task('t1').due, '2026-10-05');
+  assert.deepEqual(await app.run('t done t1'), ['# Completed t1 · next Thu 8 Oct', 'water the plants  ↻ every Mon, Thu']);
+  assert.deepEqual([task('t1').done, task('t1').due, task('t1').doneCount], [false, '2026-10-08', 1]);
+  await app.run('undo');
+  assert.equal(task('t1').due, '2026-10-05');
+  assert.match((await app.run('t x every:sometimes'))[0], /Can't read the repeat 'sometimes'/);
+  await app.run('t pay rent every:month due:2026-11-01');
+  assert.deepEqual([task('t2').repeat, task('t2').due], ['month', '2026-11-01']);
+  // Editable like any field; none makes it a plain task again.
+  await app.run('t edit t2.repeat 2w');
+  assert.equal(task('t2').repeat, '2w');
+  await app.run('t edit t2.repeat none');
+  assert.equal(task('t2').repeat, undefined);
+  await app.run('t done t2');
+  assert.equal(task('t2').done, true);
+  assert.ok((await app.run('tasks')).some((l) => l.includes('water the plants  ↻ every Mon, Thu')));
 });
 
 test('quotes say what you mean: literal text, names with spaces', async () => {
@@ -877,7 +920,7 @@ test('help, history', async () => {
   assert.ok(win.some((l) => l.startsWith('Ctrl+W Alt+Backspace | cut the word before the cursor (the browser keeps Ctrl+W')));
   assert.ok(win.includes('## Edit the line'));
   const ht = await app.run('help t');
-  assert.deepEqual(ht.slice(0, 3), ['# t · add a task', '## Usage', 't <text> [due:<date>] [#tag]']);
+  assert.deepEqual(ht.slice(0, 3), ['# t · add a task', '## Usage', 't <text> [due:<date>] [every:<rule>] [#tag]']);
   assert.ok(ht.includes('## Examples'));
   await app.data.addHistory('calc 1');
   await app.data.addHistory('vitosha weather');

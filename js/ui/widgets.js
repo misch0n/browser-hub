@@ -74,7 +74,7 @@ const RENDERERS = {
         const due = t.due ? dueSeg(t.due, today) : null;
         box.appendChild(h('li', null,
           h('button', { class: 'w-check', type: 'button', title: 'Complete ' + t.id, 'aria-label': 'Complete ' + t.text, onclick: () => run('t done ' + t.id) }),
-          h('span', { class: 'w-task-text' }, rich([[t.text, '']])),
+          h('span', { class: 'w-task-text' }, rich([[t.text, ''], [t.repeat ? ' ↻' : '', 'faint']])),
           due ? h('span', { class: 'w-task-due' }, rich([due])) : null));
       }
       if (open.length > 10) box.appendChild(h('li', { class: 'w-more' }, h('button', { class: 'w-link', type: 'button', text: '+' + (open.length - 10) + ' more →', onclick: () => run('tasks') })));

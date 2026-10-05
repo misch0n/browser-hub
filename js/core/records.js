@@ -11,8 +11,9 @@
 // unquoted, which is how to keep leading spaces or say "none" literally.
 
 import { oneValue } from './args.js';
-import { parseDate, parseTime, parseISO, parseId } from './util.js';
+import { parseDate, parseTime, parseISO, parseId, todayISO } from './util.js';
 import { validateEntry } from './aliases.js';
+import { parseRepeat, firstDue } from './repeat.js';
 
 const NONE = /^(none|-|clear)$/i;
 const MAX_TEXT = 10000;
@@ -56,6 +57,25 @@ export const KINDS = {
             if (!tags.includes(t)) tags.push(t);
           }
           return { value: tags };
+        },
+      },
+      repeat: {
+        aliases: ['every', 'recur'],
+        raw: (x) => x.repeat || 'none',
+        parse(v) {
+          if (NONE.test(v.trim())) return { value: null };
+          const r = parseRepeat(v.replace(/^every:?\s*/i, ''));
+          return r ? { value: r } : { error: "can't read '" + v.trim() + "' (try day, weekday, week, 2w, month, mon,thu or none)" };
+        },
+        apply(item, value, env) {
+          if (value) {
+            item.repeat = value;
+            if (!item.due) item.due = firstDue(value, todayISO(env.now()));
+            item.done = false;
+            item.doneAt = null;
+          } else {
+            delete item.repeat;
+          }
         },
       },
       done: {

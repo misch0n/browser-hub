@@ -47,6 +47,12 @@ its fields editable in place (ids in lists link to it): tap a value, change it,
 press Enter, and the page runs the matching `edit` command, so the transcript
 and history show exactly what changed.
 
+**Recurring tasks**: `t water the plants every:mon,thu`, `t pay rent every:month due:2026-11-01`,
+`t stand-up notes every:weekday`; rules are day, weekday, week, month, year,
+`2w` / `10d` / `3m`, or weekdays. `t done` moves the due date to the next
+occurrence (finishing late doesn't leave it overdue; finishing early skips the
+one done). `t edit t3.repeat none` makes it a normal task again.
+
 **Undo**: `undo` takes back the last change (any command: an edit, a
 removal, a theme switch, a whole import), again for the one before; `redo`
 puts it back, `undo ls` lists the steps. Removals offer an undo link right in

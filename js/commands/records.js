@@ -1,6 +1,7 @@
 import { KINDS, fieldName, parseFieldEdit, findRecord, applyField } from '../core/records.js';
 import { parseId, todayISO } from '../core/util.js';
 import { dueSeg, tagSegs, dayLabel, shortDate } from '../core/format.js';
+import { repeatLabel } from '../core/repeat.js';
 
 // Printing one record with editable fields, and the `<cmd> edit <key>.<field>
 // <value>` command behind them. Tapping a value in the output fills in and
@@ -15,6 +16,7 @@ function display(kind, field, item, today) {
     case 'task.due': return item.due ? [dueSeg(item.due, today, item.done)] : none;
     case 'task.tags': return item.tags.length ? tagSegs(item.tags).flatMap((s, i) => (i ? [[' ', ''], s] : [s])) : none;
     case 'task.done': return item.done ? [['✓ done', 'ok']] : [['○ open', 'dim']];
+    case 'task.repeat': return item.repeat ? [['↻ ' + repeatLabel(item.repeat), '']] : none;
     case 'event.date': return [[shortDate(item.date, today), 'date'], [' · ' + dayLabel(item.date, today), 'faint']];
     case 'event.time': return item.time ? [[item.time, 'num']] : [['all day', 'faint']];
     case 'alias.base': return [[item.base, 'url']];
@@ -29,7 +31,11 @@ function display(kind, field, item, today) {
 function extras(kind, item, today) {
   const when = (iso) => [[dayLabel(todayISO(new Date(iso)), today), 'dim']];
   if (kind === 'note') return [['created', when(item.created)], ['updated', when(item.updated)]];
-  if (kind === 'task') return [['created', when(item.created)]];
+  if (kind === 'task') {
+    const rows = [['created', when(item.created)]];
+    if (item.repeat && item.lastDone) rows.push(['last done', [...when(item.lastDone), [' · ' + (item.doneCount || 1) + '×', 'faint']]]);
+    return rows;
+  }
   return [];
 }
 
@@ -91,11 +97,12 @@ export function createRecords({ st, isBuiltin }) {
         saved = r.item;
         return;
       }
-      const x = d.items.find((i) => i.id === key);
-      if (!x) return;
-      Object.assign(x, r.item);
-      if (kind === 'note') x.updated = ctx.now().toISOString();
-      saved = x;
+      const i = d.items.findIndex((x) => x.id === key);
+      if (i < 0) return;
+      // Replace, not merge: a cleared field (repeat none) must go.
+      d.items[i] = r.item;
+      if (kind === 'note') d.items[i].updated = ctx.now().toISOString();
+      saved = d.items[i];
     });
     if (!saved) {
       out.err('No ' + k.label + ' ' + key);

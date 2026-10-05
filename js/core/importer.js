@@ -1,5 +1,6 @@
 import { SCHEMA, parseISO, parseTime, isValidZone, canonicalZone, truncate } from './util.js';
 import { validateEntry, siteRoot, SHIPPED_DEFAULT } from './aliases.js';
+import { parseRepeat } from './repeat.js';
 import { migrateCollections, HISTORY_CAP } from './data.js';
 import { isTheme, isWidget, DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js';
 
@@ -65,10 +66,17 @@ export function merge(current, file, isBuiltin, now) {
     const due = t && t.due ? t.due : null;
     if (!t || !isStr(t.text, MAX_TEXT) || (due !== null && !parseISO(due))) { invalid++; continue; }
     const tags = Array.isArray(t.tags) ? t.tags.filter((x) => typeof x === 'string' && /^[\w-]{1,40}$/.test(x)) : [];
-    out.tasks.items.push({
+    const task = {
       id: nextId('t'), text: t.text, due, tags, done: t.done === true,
       created: stamp(t.created), doneAt: t.done === true && isStamp(t.doneAt) ? t.doneAt : null,
-    });
+    };
+    const repeat = typeof t.repeat === 'string' ? parseRepeat(t.repeat) : null;
+    if (repeat) {
+      task.repeat = repeat;
+      if (isStamp(t.lastDone)) task.lastDone = t.lastDone;
+      if (Number.isInteger(t.doneCount) && t.doneCount > 0) task.doneCount = t.doneCount;
+    }
+    out.tasks.items.push(task);
     added.tasks++;
   }
 

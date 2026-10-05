@@ -2,12 +2,15 @@ import { parseId, parseDate, truncate, byIdNum, plural, todayISO } from '../core
 import { dueSeg, tagSegs } from '../core/format.js';
 import { sortTasks } from '../core/agenda.js';
 import { tokenize } from '../core/args.js';
+import { parseRepeat, nextDue, firstDue, repeatLabel } from '../core/repeat.js';
 
 export default function register(add, { st, usage, records }) {
   add({
     name: 't', group: 'Tasks', desc: 'add a task',
-    usage: ['t <text> [due:<date>] [#tag]', 't done <id>', 't rm <id>', 't show <id>', 't edit <id>.<field> <value>'],
-    examples: ['t buy flour due:tomorrow #home', 't file taxes due:2026-04-15', 't "done: write the report"', 't done t3',
+    usage: ['t <text> [due:<date>] [every:<rule>] [#tag]', 't done <id>', 't rm <id>', 't show <id>', 't edit <id>.<field> <value>'],
+    examples: ['t buy flour due:tomorrow #home', 't file taxes due:2026-04-15', 't water the plants every:mon,thu',
+      't pay rent every:month due:2026-11-01', 't stand-up notes every:weekday', 't "done: write the report"', 't done t3',
+      't edit t3.repeat none',
       't edit t3.due fri', 't edit t3.tags #home #errands', 't edit t3.text buy rye flour'],
     complete: (prev) => {
       if (prev.length === 0) return ['done', 'rm', 'show', 'edit'].map((v) => ({ value: v }));
@@ -40,6 +43,17 @@ export default function register(add, { st, usage, records }) {
         }
         if (task.done) return out.head([[id, 'id'], [' is already done', '']], 'dim');
         const stamp = ctx.now().toISOString();
+        if (task.repeat) {
+          // Recurring: never finished, the due date moves on.
+          const next = nextDue(task.repeat, task.due, today);
+          await ctx.data.mutate('tasks', (d) => {
+            const t = d.items.find((x) => x.id === id);
+            if (t) { t.due = next; t.lastDone = stamp; t.doneCount = (t.doneCount || 0) + 1; }
+          });
+          out.head([['Completed ', ''], [id, 'id', { run: 't show ' + id }], [' · next ', 'dim'], dueSeg(next, today)], 'ok');
+          out.line([[task.text, ''], ['  ↻ ' + repeatLabel(task.repeat), 'faint']]);
+          return;
+        }
         await ctx.data.mutate('tasks', (d) => {
           const t = d.items.find((x) => x.id === id);
           if (t) { t.done = true; t.doneAt = stamp; }
@@ -50,6 +64,7 @@ export default function register(add, { st, usage, records }) {
       }
 
       let due = null;
+      let repeat = null;
       const tags = [];
       const text = [];
       // Quoted words are always text: t "due:friday is a word" #home
@@ -64,6 +79,13 @@ export default function register(add, { st, usage, records }) {
             out.dim('Try 2026-10-31, today, tomorrow, fri, +3d or +2w');
             return;
           }
+        } else if (/^(every|repeat):/i.test(w)) {
+          repeat = parseRepeat(w.slice(w.indexOf(':') + 1));
+          if (!repeat) {
+            out.err("Can't read the repeat '" + w.slice(w.indexOf(':') + 1) + "'");
+            out.dim('Try every:day, every:weekday, every:week, every:2w, every:month, every:mon,thu');
+            return;
+          }
         } else if (/^#[\w-]+$/.test(w)) {
           const tag = w.slice(1).toLowerCase();
           if (!tags.includes(tag)) tags.push(tag);
@@ -74,11 +96,14 @@ export default function register(add, { st, usage, records }) {
       if (!text.join('').trim()) return usage(ctx, this);
       const id = await ctx.data.allocId('t');
       const stamp = ctx.now().toISOString();
+      if (repeat && !due) due = firstDue(repeat, today);
       const task = { id, text: text.join(' '), due, tags, done: false, created: stamp, doneAt: null };
+      if (repeat) task.repeat = repeat;
       await ctx.data.mutate('tasks', (d) => { d.items.push(task); });
       out.head([['Added task ', ''], [id, 'id', { run: 't show ' + id }]], 'ok');
       const segs = [[task.text, '']];
       if (due) segs.push(['  ', ''], ['due ', 'faint'], dueSeg(due, today));
+      if (repeat) segs.push(['  ↻ ' + repeatLabel(repeat), 'faint']);
       if (tags.length) segs.push(['  ', ''], ...tagSegs(tags).flatMap((s, i) => (i ? [[' ', ''], s] : [s])));
       out.line(segs);
     },
@@ -116,7 +141,7 @@ export default function register(add, { st, usage, records }) {
         [[t.id, t.done ? 'faint' : 'id', { run: 't show ' + t.id }]],
         [[t.done ? '✓' : '○', t.done ? 'ok' : 'faint']],
         [dueSeg(t.due, today, t.done)],
-        [[t.text, t.done ? 'gone' : '']],
+        [[t.text, t.done ? 'gone' : ''], [t.repeat ? '  ↻ ' + repeatLabel(t.repeat) : '', 'faint']],
         tagSegs(t.tags).flatMap((s, i) => (i ? [[' ', ''], s] : [s])),
       ]));
     },

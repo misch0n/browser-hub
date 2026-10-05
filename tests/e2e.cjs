@@ -374,6 +374,16 @@ async function check(name, fn) {
     await send('n rm ' + id);
   });
 
+  await check('tapping anywhere on a list row opens that item', async () => {
+    await send('n a note to open by its row');
+    await send('notes');
+    const id = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:notes')).items.find((n) => n.text === 'a note to open by its row').id);
+    await lastTurn().locator('tr.tr-run', { hasText: 'a note to open by its row' }).locator('td').last().click(); // the text, not the id
+    await page.waitForFunction((i) => [...document.querySelectorAll('.you-text')].pop().textContent === 'notes ' + i, id);
+    assert.match(await lastText(), /a note to open by its row/);
+    await send('notes ' + id + ' rm');
+  });
+
   await check('find: grouped, ranked, highlighted; results link to their entry', async () => {
     await send('t order oat milk #shop');
     await send('n oat milk is cheaper at the market');

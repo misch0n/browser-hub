@@ -31,7 +31,11 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
 
   listEl.addEventListener('click', (e) => {
     const link = e.target.closest('[data-run]');
-    if (link && opts.run) opts.run(link.getAttribute('data-run'));
+    if (!link || !opts.run) return;
+    // Dragging across a row to copy its text is not a tap.
+    const sel = window.getSelection && window.getSelection();
+    if (sel && !sel.isCollapsed && link.contains(sel.anchorNode)) return;
+    opts.run(link.getAttribute('data-run'));
   });
 
   // A field value that turns into a text box when tapped. Enter (or leaving
@@ -131,8 +135,13 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
       table(columns, rows, opts = {}) {
         const width = Math.max(columns ? columns.length : 0, ...rows.map((r) => (Array.isArray(r) ? r.length : 1)));
         // A row given as { section } is a group heading spanning the table.
+        // A row that links somewhere (an id, a name) runs that link wherever it is tapped.
+        const rowRun = (r) => {
+          for (const c of r) for (const seg of Array.isArray(c) ? c : []) if (seg && seg[2] && seg[2].run) return seg[2].run;
+          return null;
+        };
         const tbody = h('tbody', null, ...rows.map((r) => (Array.isArray(r)
-          ? h('tr', null, ...r.map((c) => h('td', null, rich(c))))
+          ? h('tr', rowRun(r) ? { class: 'tr-run', 'data-run': rowRun(r), title: rowRun(r) } : null, ...r.map((c) => h('td', null, rich(c))))
           : h('tr', { class: 'tr-section' }, h('td', { colspan: String(width) }, rich(r.section))))));
         const thead = columns ? h('thead', null, h('tr', null, ...columns.map((c) => h('th', { text: c })))) : null;
         push(h('div', { class: 'tbl-wrap' }, h('table', { class: opts.stack ? 'tbl tbl-stack' : 'tbl' }, thead, tbody)));

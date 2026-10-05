@@ -215,6 +215,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 @media (hover: hover) {
   .tbl tbody tr:hover td { background: var(--bg-hl); }
 }
+/* Rows that open their item: the whole row is the button. */
+.tbl tr.tr-run { cursor: pointer; }
+.tbl tr.tr-run:active td { background: var(--bg-hl); }
 
 /* key / value */
 .kv {

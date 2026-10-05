@@ -1,0 +1,10 @@
+{
+  "name": "browser-hub",
+  "private": true,
+  "type": "module",
+  "description": "Command-line new-tab page. No build step; this file only configures the tests.",
+  "scripts": {
+    "test": "node --test tests/unit.test.js",
+    "test:e2e": "node tests/e2e.cjs"
+  }
+}

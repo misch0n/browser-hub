@@ -1,0 +1,211 @@
+/* Colour themes. Every colour in style.css comes from these variables, and
+   each theme block is an attribute selector rather than :root, so a theme can
+   also be applied to a single element (the swatches in `theme`).
+
+   Semantic roles:
+     --bg --bg-elev --bg-hl --border     surfaces
+     --fg --strong --dim --faint         text hierarchy
+     --accent                            brand / command names
+     --ok --err --warn --info            outcomes
+     --id --tag --date --num --url       data types */
+
+[data-theme="claude-light"],
+[data-theme="auto"] {
+  color-scheme: light;
+  --bg: #faf9f5;
+  --bg-elev: #f2f0e8;
+  --bg-hl: #ebe8dd;
+  --border: #dcd8cc;
+  --fg: #2f2d29;
+  --strong: #141413;
+  --dim: #6f6b63;
+  --faint: #a29d92;
+  --accent: #c15f3c;
+  --ok: #2c7a4b;
+  --err: #c0392b;
+  --warn: #a2650a;
+  --info: #2f6db0;
+  --id: #8250c4;
+  --tag: #0f7d7a;
+  --date: #2f6db0;
+  --num: #a24f1a;
+  --url: #2f6db0;
+}
+
+[data-theme="claude-dark"] {
+  color-scheme: dark;
+  --bg: #1b1a18;
+  --bg-elev: #23221f;
+  --bg-hl: #2d2b27;
+  --border: #3a3733;
+  --fg: #e6e1d6;
+  --strong: #faf9f5;
+  --dim: #9b968b;
+  --faint: #6b665e;
+  --accent: #d97757;
+  --ok: #6cc28a;
+  --err: #f0787a;
+  --warn: #e7b660;
+  --info: #7fb0e8;
+  --id: #c29cf0;
+  --tag: #5ec7c2;
+  --date: #8ab4f8;
+  --num: #f2c48d;
+  --url: #8ab4f8;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] {
+    color-scheme: dark;
+    --bg: #1b1a18;
+    --bg-elev: #23221f;
+    --bg-hl: #2d2b27;
+    --border: #3a3733;
+    --fg: #e6e1d6;
+    --strong: #faf9f5;
+    --dim: #9b968b;
+    --faint: #6b665e;
+    --accent: #d97757;
+    --ok: #6cc28a;
+    --err: #f0787a;
+    --warn: #e7b660;
+    --info: #7fb0e8;
+    --id: #c29cf0;
+    --tag: #5ec7c2;
+    --date: #8ab4f8;
+    --num: #f2c48d;
+    --url: #8ab4f8;
+  }
+}
+
+[data-theme="nord"] {
+  color-scheme: dark;
+  --bg: #2e3440;
+  --bg-elev: #353c4a;
+  --bg-hl: #3b4252;
+  --border: #4c566a;
+  --fg: #d8dee9;
+  --strong: #eceff4;
+  --dim: #9aa5b8;
+  --faint: #6a7590;
+  --accent: #88c0d0;
+  --ok: #a3be8c;
+  --err: #bf616a;
+  --warn: #ebcb8b;
+  --info: #81a1c1;
+  --id: #b48ead;
+  --tag: #8fbcbb;
+  --date: #81a1c1;
+  --num: #d08770;
+  --url: #88c0d0;
+}
+
+[data-theme="dracula"] {
+  color-scheme: dark;
+  --bg: #282a36;
+  --bg-elev: #2f3241;
+  --bg-hl: #383a4c;
+  --border: #44475a;
+  --fg: #f8f8f2;
+  --strong: #ffffff;
+  --dim: #a4a9c9;
+  --faint: #6272a4;
+  --accent: #ff79c6;
+  --ok: #50fa7b;
+  --err: #ff5555;
+  --warn: #f1fa8c;
+  --info: #8be9fd;
+  --id: #bd93f9;
+  --tag: #8be9fd;
+  --date: #8be9fd;
+  --num: #ffb86c;
+  --url: #8be9fd;
+}
+
+[data-theme="gruvbox"] {
+  color-scheme: dark;
+  --bg: #282828;
+  --bg-elev: #303030;
+  --bg-hl: #3c3836;
+  --border: #504945;
+  --fg: #ebdbb2;
+  --strong: #fbf1c7;
+  --dim: #a89984;
+  --faint: #7c6f64;
+  --accent: #fe8019;
+  --ok: #b8bb26;
+  --err: #fb4934;
+  --warn: #fabd2f;
+  --info: #83a598;
+  --id: #d3869b;
+  --tag: #8ec07c;
+  --date: #83a598;
+  --num: #d79921;
+  --url: #83a598;
+}
+
+[data-theme="solarized-dark"] {
+  color-scheme: dark;
+  --bg: #002b36;
+  --bg-elev: #06323e;
+  --bg-hl: #073642;
+  --border: #1d4a55;
+  --fg: #a3b2b2;
+  --strong: #eee8d5;
+  --dim: #839496;
+  --faint: #586e75;
+  --accent: #cb4b16;
+  --ok: #859900;
+  --err: #dc322f;
+  --warn: #b58900;
+  --info: #268bd2;
+  --id: #6c71c4;
+  --tag: #2aa198;
+  --date: #268bd2;
+  --num: #d33682;
+  --url: #268bd2;
+}
+
+[data-theme="solarized-light"] {
+  color-scheme: light;
+  --bg: #fdf6e3;
+  --bg-elev: #f5eedb;
+  --bg-hl: #eee8d5;
+  --border: #ddd6c1;
+  --fg: #4f6168;
+  --strong: #073642;
+  --dim: #6c7f86;
+  --faint: #93a1a1;
+  --accent: #cb4b16;
+  --ok: #6c7d00;
+  --err: #dc322f;
+  --warn: #a07800;
+  --info: #268bd2;
+  --id: #6c71c4;
+  --tag: #2aa198;
+  --date: #268bd2;
+  --num: #d33682;
+  --url: #268bd2;
+}
+
+[data-theme="contrast"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --bg-elev: #0c0c0c;
+  --bg-hl: #1c1c1c;
+  --border: #6b6b6b;
+  --fg: #ffffff;
+  --strong: #ffffff;
+  --dim: #d0d0d0;
+  --faint: #a0a0a0;
+  --accent: #ffb000;
+  --ok: #3dff7a;
+  --err: #ff6b6b;
+  --warn: #ffd60a;
+  --info: #5cc8ff;
+  --id: #e0b0ff;
+  --tag: #5cffe4;
+  --date: #5cc8ff;
+  --num: #ffb000;
+  --url: #5cc8ff;
+}

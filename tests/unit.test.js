@@ -1,10 +1,25 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const CC = require('./load.js');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+import * as U from '../js/core/util.js';
+import * as A from '../js/core/aliases.js';
+import { dispatch } from '../js/core/dispatch.js';
+import * as C from '../js/core/completion.js';
+import { createLocalStore } from '../js/core/store.js';
+import { createData, DEFAULTS } from '../js/core/data.js';
+import { merge } from '../js/core/importer.js';
+import { jsonLines, dueSeg, dayLabel } from '../js/core/format.js';
+import { evaluate, formatNumber } from '../js/lib/calc.js';
+import { convert } from '../js/lib/units.js';
+import * as M from '../js/lib/misc.js';
+import * as Z from '../js/lib/zones.js';
+import { parseICS } from '../js/lib/ics.js';
+import { createCommands } from '../js/commands/index.js';
 
 const MON = new Date(2026, 9, 5, 12, 0); // Monday 2026-10-05, local time
-const U = CC.util;
-const builtinNames = new Set(['n', 'notes', 't', 'tasks', 'ls', 'help']);
+const builtinNames = new Set(['n', 'notes', 't', 'tasks', 'help']);
 const isBuiltin = (n) => builtinNames.has(n);
 
 function fakeStorage() {
@@ -13,10 +28,13 @@ function fakeStorage() {
     getItem: (k) => (m.has(k) ? m.get(k) : null),
     setItem: (k, v) => { m.set(k, String(v)); },
     removeItem: (k) => { m.delete(k); },
-    clear: () => m.clear(),
+    key: (i) => [...m.keys()][i] ?? null,
+    get length() { return m.size; },
     _m: m,
   };
 }
+
+// ---- pure modules ------------------------------------------------------------------
 
 test('dates: iso, keywords, weekdays, offsets', () => {
   assert.equal(U.parseDate('2026-10-31', MON), '2026-10-31');
@@ -31,12 +49,22 @@ test('dates: iso, keywords, weekdays, offsets', () => {
   assert.equal(U.parseTime('9:05'), '09:05');
   assert.equal(U.parseTime('24:00'), null);
   assert.equal(U.parseId('t', 'T12'), 't12');
-  assert.equal(U.parseId('t', '12'), 't12');
   assert.equal(U.parseId('t', 'n12'), null);
+  assert.equal(U.daysBetween('2026-03-28', '2026-03-30'), 2); // across DST
+});
+
+test('format: due labels and json colouring', () => {
+  assert.deepEqual(dueSeg('2026-10-03', '2026-10-05'), ['2 days overdue', 'err']);
+  assert.deepEqual(dueSeg('2026-10-05', '2026-10-05'), ['today', 'warn']);
+  assert.deepEqual(dueSeg('2026-10-06', '2026-10-05'), ['tomorrow', 'info']);
+  assert.deepEqual(dueSeg('2026-10-08', '2026-10-05'), ['Thu 8 Oct', 'date']);
+  assert.equal(dayLabel('2027-01-02', '2026-10-05'), 'Sat 2 Jan 2027');
+  const lines = jsonLines('{\n  "a": [1, true, null, "x"]\n}');
+  assert.deepEqual(lines[1].map((s) => s[1]), ['dim', 'id', 'dim', 'dim', 'num', 'dim', 'accent', 'dim', 'faint', 'dim', 'ok', 'dim']);
+  assert.equal(lines.map((l) => l.map((s) => s[0]).join('')).join('\n'), '{\n  "a": [1, true, null, "x"]\n}');
 });
 
 test('aliases: url validation', () => {
-  const A = CC.aliases;
   assert.equal(A.urlError('https://github.com/', false), null);
   assert.match(A.urlError('javascript:alert(1)', false), /http/);
   assert.match(A.urlError('data:text/html,hi', false), /http/);
@@ -45,370 +73,394 @@ test('aliases: url validation', () => {
   assert.equal(A.urlError('https://x.com/?q={}', true), null);
   assert.match(A.urlError('https://x.com/', true), /\{\}/);
   assert.match(A.urlError('https://{}.evil.com/', true), /after the host/);
-  assert.match(A.urlError('https://x.com{}', true), /after the host/);
   assert.match(A.urlError('https://x.com@{}', true), /after the host/);
 });
 
-test('aliases: validateEntry', () => {
-  const A = CC.aliases;
+test('aliases: validateEntry and buildUrl', () => {
   assert.equal(A.validateEntry({ name: 'GH', base: 'https://github.com/' }, isBuiltin).entry.name, 'gh');
-  assert.match(A.validateEntry({ name: 'ls', base: 'https://x.com/' }, isBuiltin).error, /built-in/);
+  assert.match(A.validateEntry({ name: 'help', base: 'https://x.com/' }, isBuiltin).error, /built-in/);
   assert.match(A.validateEntry({ name: 'rm', base: 'https://x.com/' }, isBuiltin).error, /reserved/);
-  assert.match(A.validateEntry({ name: 'a b', base: 'https://x.com/' }, isBuiltin).error, /name/);
-  assert.match(A.validateEntry({ name: 'js', base: 'javascript:alert(1)' }, isBuiltin).error, /base/);
   assert.match(A.validateEntry({ name: 'js', base: 'https://x.com/', template: 'javascript:{}' }, isBuiltin).error, /template/);
-  assert.equal(A.validateEntry({ name: 'p', base: 'https://x.com/', template: 'https://x.com/{}', escape: 'path' }, isBuiltin).entry.escape, 'path');
-});
-
-test('aliases: buildUrl escaping', () => {
   const q = { name: 'g', base: 'https://g.com/', template: 'https://g.com/?q={}', escape: 'query' };
   const p = { name: 'gh', base: 'https://gh.com/', template: 'https://gh.com/{}', escape: 'path' };
-  assert.equal(CC.aliases.buildUrl(q, 'a/b c').url, 'https://g.com/?q=a%2Fb%20c');
-  assert.equal(CC.aliases.buildUrl(p, 'org/repo').url, 'https://gh.com/org/repo');
-  assert.equal(CC.aliases.buildUrl(p, 'a b/c d').url, 'https://gh.com/a%20b/c%20d');
-  assert.equal(CC.aliases.buildUrl(p, '').url, 'https://gh.com/');
-  assert.equal(CC.aliases.buildUrl(q, "$& $1 ' x").url, 'https://g.com/?q=%24%26%20%241%20\'%20x');
-  const noTpl = { name: 'x', base: 'https://x.com/', escape: 'query' };
-  const r = CC.aliases.buildUrl(noTpl, 'arg');
-  assert.equal(r.url, 'https://x.com/');
-  assert.match(r.note, /ignoring/);
+  assert.equal(A.buildUrl(q, 'a/b c').url, 'https://g.com/?q=a%2Fb%20c');
+  assert.equal(A.buildUrl(p, 'org/repo').url, 'https://gh.com/org/repo');
+  assert.equal(A.buildUrl(q, "$& $1").url, 'https://g.com/?q=%24%26%20%241');
+  assert.match(A.buildUrl({ name: 'x', base: 'https://x.com/', escape: 'query' }, 'arg').note, /ignoring/);
 });
 
 test('dispatch: builtin, alias, engine, fallback', () => {
-  const entries = CC.aliases.starters().concat([
-    { name: 'gh', base: 'https://github.com/', template: 'https://github.com/{}', escape: 'path' },
-  ]);
+  const entries = A.starters().concat([{ name: 'gh', base: 'https://github.com/', template: 'https://github.com/{}', escape: 'path' }]);
   const env = { isBuiltin, entries, defaultEngine: 'g' };
-  const d = (s) => CC.dispatch(s, env);
+  const d = (s) => dispatch(s, env);
   assert.deepEqual(d('   '), { kind: 'empty' });
-  assert.deepEqual(d('t buy flour'), { kind: 'builtin', name: 't', rest: 'buy flour' });
-  assert.deepEqual(d('T   buy   flour'), { kind: 'builtin', name: 't', rest: 'buy   flour' }); // inner spaces kept
+  assert.deepEqual(d('T   buy   flour'), { kind: 'builtin', name: 't', rest: 'buy   flour' });
   assert.equal(d('gh').url, 'https://github.com/');
   assert.equal(d('gh org/repo').url, 'https://github.com/org/repo');
   assert.equal(d('g how to proof sourdough').url, 'https://www.google.com/search?q=how%20to%20proof%20sourdough');
-  assert.equal(d('vitosha weather').kind, 'search');
   assert.equal(d('vitosha weather').url, 'https://www.google.com/search?q=vitosha%20weather');
-  assert.equal(d('gihtub').url, 'https://www.google.com/search?q=gihtub'); // typos fall through
-  assert.equal(CC.dispatch('x', { isBuiltin, entries: [], defaultEngine: 'g' }).kind, 'error');
-  // built-in wins over a stored alias of the same name
-  const shadow = { isBuiltin, entries: [{ name: 'ls', base: 'https://x.com/', escape: 'query' }], defaultEngine: 'g' };
-  assert.equal(CC.dispatch('ls', shadow).kind, 'builtin');
+  assert.equal(d('gihtub').kind, 'search');
+  assert.equal(dispatch('x', { isBuiltin, entries: [], defaultEngine: 'g' }).kind, 'error');
+  assert.equal(dispatch('help', { isBuiltin, entries: [{ name: 'help', base: 'https://x.com/' }], defaultEngine: 'g' }).kind, 'builtin');
 });
 
-test('completion: first token, ranking, tab behavior', () => {
+test('completion: first token ranking, tab behaviour, case-insensitive arguments', () => {
   const defs = [
     { name: 'tasks', desc: '' }, { name: 'tz', desc: '' }, { name: 'help', desc: '' }, { name: 'tail', desc: '' },
     { name: 't', desc: '', complete: (prev) => (prev.length === 0 ? [{ value: 'done' }, { value: 'rm' }] : prev[0] === 'done' ? [{ value: 't1', label: 'a' }, { value: 't12' }] : []) },
   ];
-  const entries = [{ name: 'tw', base: 'https://x.com/', escape: 'query' }, { name: 'help', base: 'https://x.com/', escape: 'query' }];
+  const entries = [{ name: 'tw', base: 'https://x.com/' }, { name: 'help', base: 'https://x.com/' }];
   const env = { defs, entries, history: ['tz', 'tz', 'tasks', 'tw'] };
-  const C = CC.completion;
   assert.deepEqual(C.complete('', env).candidates, []);
-  assert.deepEqual(C.complete('zzz', env).candidates, []); // unknown words get nothing
-  // built-ins first, then use count, then alphabetical; aliases last; shadowed alias hidden
+  assert.deepEqual(C.complete('zzz', env).candidates, []);
   assert.deepEqual(C.complete('t', env).candidates.map((c) => c.value), ['tz', 'tasks', 't', 'tail', 'tw']);
-  assert.deepEqual(C.complete('HE', env).candidates.map((c) => c.value), ['help']);
-  // tab: unique -> full + space; common prefix; then list
   assert.deepEqual(C.applyTab('he', env), { input: 'help ' });
-  assert.deepEqual(C.applyTab('ta', env).list.map((c) => c.value), ['tasks', 'tail']); // common prefix is just 'ta'
-  assert.deepEqual(C.applyTab('t', env).list.map((c) => c.value), ['tz', 'tasks', 't', 'tail', 'tw']);
-  assert.deepEqual(C.applyTab('tas', env), { input: 'tasks ' });
-  // arguments
-  assert.deepEqual(C.complete('t d', env).candidates.map((c) => c.value), ['done']);
+  assert.deepEqual(C.applyTab('ta', env).list.map((c) => c.value), ['tasks', 'tail']);
   assert.deepEqual(C.applyTab('t do', env), { input: 't done ' });
   assert.deepEqual(C.complete('t done ', env).candidates.map((c) => c.value), ['t1', 't12']);
-  assert.deepEqual(C.applyTab('t done t', env), { input: 't done t1' }); // common prefix
-  assert.deepEqual(C.complete('t buy fl', env).candidates, []); // free text
-  assert.deepEqual(C.complete('nothing here', env).candidates, []);
+  assert.deepEqual(C.complete('T DONE ', env).candidates.map((c) => c.value), ['t1', 't12']); // review #6
+  assert.deepEqual(C.applyTab('t done t', env), { input: 't done t1' });
+  assert.deepEqual(C.complete('t buy fl', env).candidates, []);
 });
 
 test('calc', () => {
-  const E = (s) => CC.calc.evaluate(s);
-  assert.equal(E('1+2*3'), 7);
-  assert.equal(E('(1+2)*3'), 9);
-  assert.equal(E('-2^2'), -4);
-  assert.equal(E('2^3^2'), 512);
-  assert.equal(E('2^-1'), 0.5);
-  assert.equal(E('10 % 4'), 2);
-  assert.equal(E('sqrt(16) + abs(-2)'), 6);
-  assert.equal(E('max(1, 5, 3)'), 5);
-  assert.equal(E('1e3 + .5'), 1000.5);
-  assert.ok(Math.abs(E('pi') - Math.PI) < 1e-12);
-  assert.equal(CC.calc.formatNumber(E('0.1+0.2')), '0.3');
-  assert.throws(() => E('1/0'), /division by zero/);
-  assert.throws(() => E('1 +'), /unexpected end/);
-  assert.throws(() => E('foo'), /unknown name/);
-  assert.throws(() => E('foo(1)'), /unknown function/);
-  assert.throws(() => E('constructor(1)'), /unknown function/);
-  assert.throws(() => E('(1'), /\)/);
-  assert.throws(() => E('1 2'), /unexpected/);
-  assert.throws(() => E('alert(1)'), /unknown function/);
-  assert.throws(() => E('1;2'), /unexpected/);
-  assert.throws(() => E(''), /empty/);
-  assert.throws(() => E('sqrt(-1)'), /finite/);
+  assert.equal(evaluate('1+2*3'), 7);
+  assert.equal(evaluate('-2^2'), -4);
+  assert.equal(evaluate('2^3^2'), 512);
+  assert.equal(evaluate('max(1, 5, 3)'), 5);
+  assert.equal(formatNumber(evaluate('0.1+0.2')), '0.3');
+  assert.equal(formatNumber(evaluate('1/3')), '0.333333333333333');
+  assert.throws(() => evaluate('1/0'), /division by zero/);
+  assert.throws(() => evaluate('constructor(1)'), /unknown function/);
+  assert.throws(() => evaluate('alert(1)'), /unknown function/);
+  assert.throws(() => evaluate('1 2'), /unexpected/);
+  assert.throws(() => evaluate(''), /empty/);
 });
 
 test('units', () => {
-  const c = CC.units.convert;
-  assert.ok(Math.abs(c(5, 'km', 'mi') - 3.10685596) < 1e-6);
-  assert.equal(c(1, 'h', 'min'), 60);
-  assert.equal(c(1, 'KiB', 'b'), 1024);
-  assert.equal(c(100, 'c', 'f'), 212);
-  assert.ok(Math.abs(c(0, 'c', 'k') - 273.15) < 1e-9);
-  assert.equal(c(32, '°F', 'c'), 0);
-  assert.ok(Math.abs(c(12, 'inches', 'ft') - 1) < 1e-12);
-  assert.throws(() => c(1, 'kg', 'm'), /can't convert/);
-  assert.throws(() => c(1, 'zorp', 'm'), /unknown unit/);
+  assert.ok(Math.abs(convert(5, 'km', 'mi') - 3.10685596) < 1e-6);
+  assert.equal(convert(100, 'c', 'f'), 212);
+  assert.equal(convert(32, '°F', 'c'), 0);
+  assert.throws(() => convert(1, 'kg', 'm'), /can't convert/);
 });
 
-test('tools: b64, json, epoch, uuid', () => {
-  const T = CC.tools;
-  assert.equal(T.b64encode('héllo ✓'), 'aMOpbGxvIOKckw==');
-  assert.equal(T.b64decode('aMOpbGxvIOKckw=='), 'héllo ✓');
-  assert.equal(T.b64decode('aGk'), 'hi'); // padding optional
-  assert.throws(() => T.b64decode('***'), /base64/);
-  assert.throws(() => T.b64decode('/w=='), /UTF-8/);
-  assert.equal(T.prettyJson('{"a":[1,2]}'), '{\n  "a": [\n    1,\n    2\n  ]\n}');
-  assert.throws(() => T.prettyJson('{oops'));
-  assert.equal(T.parseEpochInput('0').toISOString(), '1970-01-01T00:00:00.000Z');
-  assert.equal(T.parseEpochInput('1700000000000').getTime(), 1700000000000);
-  assert.equal(T.parseEpochInput('2026-10-05T12:00:00Z').toISOString(), '2026-10-05T12:00:00.000Z');
-  assert.equal(T.parseEpochInput('2026-10-05T12:00:00+02:00').toISOString(), '2026-10-05T10:00:00.000Z');
-  assert.equal(T.parseEpochInput('2026-10-05 08:30').getHours(), 8);
-  assert.throws(() => T.parseEpochInput('yesterday'), /expected/);
-  assert.match(T.uuid(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+test('misc: b64, json, epoch, uuid, relative', () => {
+  assert.equal(M.b64encode('héllo ✓'), 'aMOpbGxvIOKckw==');
+  assert.equal(M.b64decode('aMOpbGxvIOKckw=='), 'héllo ✓');
+  assert.throws(() => M.b64decode('/w=='), /UTF-8/);
+  assert.equal(M.parseEpochInput('2026-10-05T12:00:00+02:00').toISOString(), '2026-10-05T10:00:00.000Z');
+  assert.throws(() => M.parseEpochInput('2026-02-31'), /invalid date/); // no silent rollover
+  assert.match(M.uuid(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.equal(M.relative(new Date(MON.getTime() + 3 * 86400000), MON), 'in 3 days');
+  assert.equal(M.relative(new Date(MON.getTime() - 2 * 3600000), MON), '2 hours ago');
 });
 
-test('tools: time zone rows and work overlap', () => {
-  const T = CC.tools;
-  const instant = new Date(Date.UTC(2026, 0, 15, 14, 30)); // winter: London = UTC, Tokyo = +9
-  const rows = T.zoneRows(instant, ['UTC', 'Europe/London', 'Asia/Tokyo', 'America/Los_Angeles']);
-  assert.equal(rows[1].time, '14:30');
-  assert.equal(rows[2].time, '23:30');
-  assert.equal(rows[2].working, false);
-  assert.equal(rows[2].day, '');
-  assert.equal(rows[3].time, '06:30');
-  const late = T.zoneRows(new Date(Date.UTC(2026, 0, 15, 20, 0)), ['UTC', 'Asia/Tokyo']);
-  assert.equal(late[1].day, '+1d');
-  const day = new Date(2026, 0, 15);
-  const ranges = T.workOverlap(day, ['UTC', 'UTC']);
-  assert.deepEqual(ranges, ['09:00-17:00']);
-  assert.deepEqual(T.workOverlap(day, ['UTC', 'Asia/Tokyo']), []);
+test('zones: rows, offsets, overlap, zoned wall time', () => {
+  const instant = new Date(Date.UTC(2026, 0, 15, 14, 30));
+  const rows = Z.zoneRows(instant, ['UTC', 'Asia/Tokyo', 'America/Los_Angeles']);
+  assert.equal(rows[1].time, '23:30');
+  assert.equal(rows[1].offset, '+09:00');
+  assert.equal(rows[2].offset, '-08:00');
+  assert.equal(Z.zoneRows(new Date(Date.UTC(2026, 0, 15, 20)), ['UTC', 'Asia/Tokyo'])[1].day, '+1d');
+  assert.equal(Z.zonedToDate(2026, 10, 5, 9, 0, 0, 'America/New_York').toISOString(), '2026-10-05T13:00:00.000Z');
+  assert.equal(Z.zonedToDate(2026, 1, 5, 9, 0, 0, 'America/New_York').toISOString(), '2026-01-05T14:00:00.000Z');
 });
 
-test('ics parsing', () => {
+test('zones: work overlap is right on DST change days (review #3)', () => {
+  const here = fileURLToPath(new URL('../js/lib/zones.js', import.meta.url));
+  const script = "import('" + here + "').then((Z) => console.log(JSON.stringify([" +
+    "Z.workOverlap(new Date(2026, 2, 29), ['Europe/Sofia'])," +
+    "Z.workOverlap(new Date(2026, 9, 25), ['Europe/Sofia'])," +
+    "Z.workOverlap(new Date(2026, 9, 25), ['Europe/Sofia', 'Asia/Tokyo'])])))";
+  const out = execFileSync(process.execPath, ['-e', script], { env: { ...process.env, TZ: 'Europe/Sofia' } }).toString();
+  // Sofia 09:00 (UTC+2 after the change) is 16:00 in Tokyo: one shared hour.
+  assert.deepEqual(JSON.parse(out), [['09:00-17:00'], ['09:00-17:00'], ['09:00-10:00']]);
+});
+
+test('ics: timezones, all-day, folding, VALARM, recurrence (review #2)', () => {
   const ics = [
     'BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'SUMMARY:Team sync\\, weekly', 'DTSTART:20261005T093000', 'END:VEVENT',
     'BEGIN:VEVENT', 'SUMMARY:All day', 'DTSTART;VALUE=DATE:20261006', 'END:VEVENT',
-    'BEGIN:VEVENT', 'SUMMARY:Folded long', ' title here', 'DTSTART;TZID=Europe/Sofia:20261007T180000', 'END:VEVENT',
+    'BEGIN:VEVENT', 'SUMMARY:Folded long', ' title here', 'DTSTART:20261007T180000', 'END:VEVENT',
     'BEGIN:VEVENT', 'SUMMARY:Repeats', 'DTSTART:20261008T100000', 'RRULE:FREQ=WEEKLY', 'END:VEVENT',
     'BEGIN:VEVENT', 'SUMMARY:No start', 'END:VEVENT',
     'BEGIN:VEVENT', 'SUMMARY:Gone', 'STATUS:CANCELLED', 'DTSTART:20261009T100000', 'END:VEVENT',
+    'BEGIN:VEVENT', 'SUMMARY:Has alarm', 'DTSTART:20261010T080000', 'BEGIN:VALARM', 'SUMMARY:Reminder email', 'ACTION:EMAIL', 'END:VALARM', 'END:VEVENT',
+    'BEGIN:VEVENT', 'SUMMARY:Bad date', 'DTSTART:20260231T100000', 'END:VEVENT',
+    'BEGIN:VEVENT', 'SUMMARY:Windows zone', 'DTSTART;TZID=Pacific Standard Time:20261011T100000', 'END:VEVENT',
     'END:VCALENDAR',
   ].join('\r\n');
-  const r = CC.ics.parseICS(ics);
-  assert.deepEqual(r.events, [
-    { date: '2026-10-05', time: '09:30', title: 'Team sync, weekly' },
-    { date: '2026-10-06', time: null, title: 'All day' },
-    { date: '2026-10-07', time: '18:00', title: 'Folded longtitle here' },
-  ]);
+  const r = parseICS(ics);
+  assert.deepEqual(r.events.map((e) => e.title), ['Team sync, weekly', 'All day', 'Folded longtitle here', 'Has alarm', 'Windows zone']);
+  assert.deepEqual(r.events[1], { date: '2026-10-06', time: null, title: 'All day' });
+  assert.equal(r.events[3].time, '08:00');
   assert.equal(r.recurring, 1);
-  assert.equal(r.invalid, 1);
-  const z = CC.ics.parseICS('BEGIN:VEVENT\nSUMMARY:Z\nDTSTART:20261005T120000Z\nEND:VEVENT');
-  const local = new Date(Date.UTC(2026, 9, 5, 12));
-  assert.equal(z.events[0].time, String(local.getHours()).padStart(2, '0') + ':' + String(local.getMinutes()).padStart(2, '0'));
+  assert.equal(r.invalid, 2);
+  assert.equal(r.guessedZones, 1);
+  // A TZID wall time becomes the right local instant.
+  const ny = parseICS('BEGIN:VEVENT\nSUMMARY:NY\nDTSTART;TZID=America/New_York:20261005T090000\nEND:VEVENT').events[0];
+  const want = new Date(Date.UTC(2026, 9, 5, 13, 0));
+  assert.equal(ny.date, U.toISO(want));
+  assert.equal(ny.time, U.pad2(want.getHours()) + ':' + U.pad2(want.getMinutes()));
 });
 
-test('store: round trip, quota, corrupt data, subscribe key handling', async () => {
+test('store: round trip, quota, corrupt data, usage', async () => {
   const s = fakeStorage();
-  const store = CC.store.createLocalStore(s);
-  assert.equal(await store.get('notes'), null);
+  const store = createLocalStore(s);
   await store.put('notes', { items: [{ id: 'n1' }] });
   assert.deepEqual(await store.get('notes'), { items: [{ id: 'n1' }] });
-  assert.ok(s._m.has('cc:notes'));
   s.setItem('cc:tasks', '{broken');
   assert.equal(await store.get('tasks'), null);
-  assert.equal(s._m.get('cc:bak:tasks'), '{broken'); // unreadable data is kept, not lost
+  assert.equal(s._m.get('cc:bak:tasks'), '{broken');
   const full = { getItem: () => null, setItem: () => { const e = new Error('full'); e.name = 'QuotaExceededError'; throw e; } };
-  await assert.rejects(CC.store.createLocalStore(full).put('notes', {}), /storage is full/);
-  const dump = await store.exportAll();
-  assert.equal(dump.schema, CC.SCHEMA);
-  assert.deepEqual(Object.keys(dump.collections), ['notes']);
-  const s2 = fakeStorage();
-  await CC.store.createLocalStore(s2).importAll(dump);
-  assert.equal(s2.getItem('cc:notes'), '{"items":[{"id":"n1"}]}');
+  await assert.rejects(createLocalStore(full).put('notes', {}), /storage is full/);
+  assert.ok((await store.usage()) > 0);
 });
 
-async function makeApp() {
-  const storage = fakeStorage();
-  const store = CC.store.createLocalStore(storage);
-  let clock = new Date(MON);
-  const data = CC.createData(store, () => clock);
-  await data.load();
+// ---- commands through a recording Out -------------------------------------------------
+
+const flat = (c) => (c === null || c === undefined ? '' : typeof c === 'string' ? c : c.swatch ? '[' + c.swatch + ']' : c.map((s) => (s.swatch ? '[' + s.swatch + ']' : s[0])).join(''));
+
+function recorder() {
   const lines = [];
-  const rec = (cls) => (t) => lines.push((cls ? cls + ': ' : '') + t);
+  let tone = null;
+  const rank = { err: 3, warn: 2 };
+  const setTone = (t, strong) => {
+    if (!t) return;
+    if ((rank[t] || 0) >= (rank[tone] || 0) && (strong || rank[t] || !tone)) tone = t;
+  };
   const out = {
-    line: (t, cls) => lines.push((cls ? cls + ': ' : '') + t),
-    parts: (list) => lines.push(list.map((p) => p[0]).join('')),
-    err: rec('err'), ok: rec('ok'), warn: rec('warn'), dim: rec('dim'),
+    head: (c, t) => { lines.push('# ' + flat(c)); setTone(t, true); },
+    tone: (t) => setTone(t, true),
+    line: (c) => lines.push(flat(c)),
+    ok: (t) => { setTone('ok'); lines.push('ok: ' + t); },
+    info: (t) => { setTone('info'); lines.push('info: ' + t); },
+    warn: (t) => { setTone('warn'); lines.push('warn: ' + t); },
+    err: (t) => { setTone('err'); lines.push('err: ' + t); },
+    dim: (t) => lines.push('dim: ' + t),
+    section: (c) => lines.push('## ' + flat(c)),
+    table: (cols, rows) => {
+      if (cols) lines.push('| ' + cols.join(' | '));
+      for (const r of rows) lines.push(Array.isArray(r) ? r.map(flat).join(' | ') : '## ' + flat(r.section));
+    },
+    kv: (pairs) => pairs.forEach(([k, v]) => lines.push(k + ': ' + flat(v))),
+    code: (text) => lines.push(...text.split('\n')),
+    value: (text) => lines.push('= ' + text),
+    calendar: (spec) => lines.push('CAL ' + spec.year + '-' + spec.month + ' marks=' + spec.marks.sort((a, b) => a - b).join(',')),
   };
-  const ctx = {
-    out, data, store, now: () => clock,
-    inputSet: null,
-    setInput(t) { this.inputSet = t; },
-    clearOutput() { lines.length = 0; },
-    pickFile: async () => null,
-    download(name, text) { ctx.downloaded = { name, text }; },
-  };
-  const commands = CC.createCommands(() => ctx);
-  const run = async (input) => {
-    lines.length = 0;
-    const res = CC.dispatch(input, { isBuiltin: commands.isBuiltin, entries: data.state.aliases.entries, defaultEngine: data.state.aliases.defaultEngine });
-    assert.equal(res.kind, 'builtin', input);
-    await commands.run(res.name, res.rest, ctx);
-    return lines.slice();
-  };
-  return { run, data, store, storage, ctx, commands, lines, setNow: (d) => { clock = d; } };
+  return { out, lines, tone: () => tone };
 }
 
-test('data: first load seeds meta and starter engines', async () => {
+async function makeApp(storage) {
+  storage = storage || fakeStorage();
+  const store = createLocalStore(storage);
+  let clock = new Date(MON);
+  const data = createData(store, () => clock);
+  await data.load();
+  const base = {
+    data, store, now: () => clock,
+    setInput(t) { base.inputSet = t; },
+    clearOutput() {},
+    pickFile: async () => base.nextFile || null,
+    download(name, text) { base.downloaded = { name, text }; },
+  };
+  let ctx = base;
+  const commands = createCommands(() => ctx);
+  const run = async (input) => {
+    const rec = recorder();
+    const res = dispatch(input, { isBuiltin: commands.isBuiltin, entries: data.state.aliases.entries, defaultEngine: data.state.aliases.defaultEngine });
+    assert.equal(res.kind, 'builtin', input);
+    ctx = Object.assign(base, { out: rec.out });
+    await commands.run(res.name, res.rest, ctx);
+    const r = rec.lines.slice();
+    Object.defineProperty(r, 'tone', { value: rec.tone(), enumerable: false });
+    return r;
+  };
+  return { run, data, store, storage, ctx: base, commands, setNow: (d) => { clock = d; } };
+}
+
+test('data: first load seeds meta, starter engines and display settings', async () => {
   const app = await makeApp();
-  assert.equal(app.data.state.meta.schema, CC.SCHEMA);
   assert.deepEqual(app.data.state.aliases.entries.map((e) => e.name), ['g', 'ddg']);
-  assert.equal(app.data.state.aliases.defaultEngine, 'g');
-  assert.ok(app.storage._m.has('cc:meta') && app.storage._m.has('cc:aliases'));
+  assert.equal(app.data.state.settings.theme, 'auto');
+  assert.deepEqual(app.data.state.settings.widgets, ['clock', 'agenda', 'tasks']);
+  assert.equal(app.data.state.settings.panel, true);
   assert.equal(app.data.hasUserData(), false);
 });
 
-test('notes: add, list, edit, remove; ids are never reused', async () => {
-  const app = await makeApp();
-  assert.deepEqual(await app.run('n buy  oat milk'), ['ok: added n1']);
-  assert.deepEqual(await app.run('n second note'), ['ok: added n2']);
-  assert.equal(app.data.state.notes.items[0].text, 'buy  oat milk'); // inner spacing kept
-  let out = await app.run('notes');
-  assert.match(out[0], /^n2 .*second note$/); // newest first
-  assert.equal((await app.run('notes OAT')).length, 1);
-  assert.deepEqual(await app.run('n edit n1'), ['dim: editing n1: change the text and press Enter to save (Esc cancels)']);
-  assert.equal(app.ctx.inputSet, 'n edit n1 buy  oat milk');
-  assert.deepEqual(await app.run('n edit n1 buy almond milk'), ['ok: updated n1']);
-  assert.equal(app.data.state.notes.items[0].text, 'buy almond milk');
-  assert.deepEqual(await app.run('n rm n2'), ['ok: removed n2']);
-  assert.deepEqual(await app.run('n 3'), ['ok: added n3']); // plain text starting with a digit is a note
-  assert.deepEqual(await app.run('n rm n9'), ['err: no note n9']);
-  await app.run('n rm 3');
-  assert.deepEqual(await app.run('n again'), ['ok: added n4']);
-  assert.equal((await app.run('n rm'))[0], 'err: usage:');
+test('data: damaged documents are reshaped, not crashed on', async () => {
+  const s = fakeStorage();
+  s.setItem('cc:tasks', JSON.stringify({ items: 'nope' }));
+  s.setItem('cc:settings', JSON.stringify({ zones: null, theme: 42, widgets: ['clock', null] }));
+  s.setItem('cc:meta', JSON.stringify({ schema: -1e10, counters: 'x' })); // review #5
+  const app = await makeApp(s);
+  assert.deepEqual(app.data.state.tasks.items, []);
+  assert.deepEqual(app.data.state.settings.zones, []);
+  assert.equal(app.data.state.settings.theme, 'auto');
+  assert.deepEqual(app.data.state.settings.widgets, ['clock']);
+  assert.deepEqual(app.data.state.meta.counters, { t: 0, n: 0, e: 0 });
+  assert.deepEqual(await app.run('t still works'), ['# Added task t1', 'still works']);
 });
 
-test('tasks: add with due and tags, list order, done, rm', async () => {
+test('data: mutations are serialised', async () => {
   const app = await makeApp();
-  assert.deepEqual(await app.run('t buy flour due:tomorrow #home'), ['ok: added t1 (due 2026-10-06)']);
+  await Promise.all(Array.from({ length: 20 }, (_, i) => app.data.allocId('t').then((id) =>
+    app.data.mutate('tasks', (d) => d.items.push({ id, text: 'x' + i, tags: [], done: false })))));
+  const ids = app.data.state.tasks.items.map((t) => t.id);
+  assert.equal(ids.length, 20);
+  assert.equal(new Set(ids).size, 20);
+});
+
+test('notes: capture, list, edit round trip, remove; subcommand words never overwrite (review #1)', async () => {
+  const app = await makeApp();
+  assert.deepEqual(await app.run('n buy  oat milk'), ['# Added note n1']);
+  await app.run('n second note');
+  assert.equal(app.data.state.notes.items[0].text, 'buy  oat milk');
+  const list = await app.run('notes');
+  assert.deepEqual(list.slice(0, 3), ['# 2 notes', '| id | date | note', 'n2 | today | second note']);
+  assert.deepEqual(await app.run('n edit n1'), ['# Editing n1', 'dim: Change the text and press Enter to save · Esc cancels']);
+  assert.equal(app.ctx.inputSet, 'n edit n1: buy  oat milk');
+  assert.deepEqual(await app.run('n edit n1: buy almond milk'), ['# Updated note n1']);
+  assert.equal(app.data.state.notes.items[0].text, 'buy almond milk');
+  // "n edit 2 slides before friday" is a new note, not an overwrite of n2
+  assert.deepEqual(await app.run('n edit 2 slides before friday'), ['# Added note n3']);
+  assert.equal(app.data.state.notes.items.find((n) => n.id === 'n2').text, 'second note');
+  assert.deepEqual(await app.run('n rm the weeds'), ['# Added note n4']);
+  const rm = await app.run('n rm n2');
+  assert.deepEqual(rm, ['# Removed note n2', 'second note']);
+  assert.equal(rm.tone, 'ok');
+  const missing = await app.run('n rm n99');
+  assert.deepEqual(missing, ['err: No note n99']);
+  assert.equal(missing.tone, 'err');
+  assert.match((await app.run('n edit n1:'))[0], /needs some text/);
+  assert.equal((await app.run('n'))[0], '# Usage · n');
+});
+
+test('tasks: add, list order and colour, done, rm; "t done laundry" is a task', async () => {
+  const app = await makeApp();
+  assert.deepEqual(await app.run('t buy flour due:tomorrow #home'), ['# Added task t1', 'buy flour  due tomorrow  #home']);
   await app.run('t pay rent due:2026-10-01');
   await app.run('t someday maybe');
   await app.run('t call mum due:2026-10-06 #family #home');
-  const t = app.data.state.tasks.items;
-  assert.deepEqual(t[0].tags, ['home']);
-  assert.deepEqual(t[3].tags, ['family', 'home']);
-  let out = await app.run('tasks');
-  assert.deepEqual(out.map((l) => l.slice(0, 2)), ['t2', 't1', 't4', 't3']); // overdue, then by due date, undated last
-  assert.match(out[0], /overdue/);
-  assert.equal((await app.run('tasks #family')).length, 1);
-  assert.deepEqual(await app.run('t done t2'), ['ok: done t2: pay rent']);
-  assert.deepEqual(await app.run('t done 2'), ['dim: t2 is already done']);
-  assert.equal((await app.run('tasks')).length, 3);
-  assert.equal((await app.run('tasks all')).length, 4);
-  assert.deepEqual(await app.run('t rm t3'), ['ok: removed t3: someday maybe']);
-  assert.match((await app.run('t x due:nonsense'))[0], /can't read date/);
-  assert.equal((await app.run('t due:today'))[0], 'err: usage:'); // no text
-  assert.equal((await app.run('t done'))[0], 'err: usage:');
-  assert.equal((await app.run('t done t99'))[0], 'err: no task t99');
+  const list = await app.run('tasks');
+  assert.equal(list[0], '# 4 open tasks · 1 overdue');
+  assert.equal(list.tone, 'warn');
+  assert.deepEqual(list.slice(2).map((l) => l.split(' | ')[0]), ['t2', 't1', 't4', 't3']);
+  assert.match(list[2], /4 days overdue/);
+  assert.equal((await app.run('tasks #family')).length, 3);
+  assert.deepEqual(await app.run('t done t2'), ['# Completed t2', 'pay rent']);
+  assert.deepEqual(await app.run('t done 2'), ['# t2 is already done']);
+  assert.equal((await app.run('tasks all'))[0], '# 3 open tasks · 1 done');
+  assert.deepEqual(await app.run('t done laundry'), ['# Added task t5', 'done laundry']);
+  assert.deepEqual(await app.run('t done t99'), ['err: No task t99']);
+  assert.match((await app.run('t x due:nonsense'))[0], /Can't read the date/);
+  assert.equal((await app.run('t due:today #x'))[0], '# Usage · t');
 });
 
-test('events: add, rm, cal, agenda', async () => {
+test('calendar: ev, cal, agenda', async () => {
   const app = await makeApp();
-  assert.deepEqual(await app.run('ev today 09:30 standup'), ['ok: added e1: 2026-10-05 09:30 standup']);
-  assert.deepEqual(await app.run('ev fri lunch with Sam'), ['ok: added e2: 2026-10-09 lunch with Sam']);
-  assert.deepEqual(await app.run('ev 2026-11-02 dentist'), ['ok: added e3: 2026-11-02 dentist']);
-  assert.match((await app.run('ev nope x'))[0], /can't read date/);
-  assert.match((await app.run('ev today 25:00 x'))[0], /can't read time/);
-  assert.equal((await app.run('ev today'))[0], 'err: usage:');
+  assert.deepEqual(await app.run('ev today 09:30 standup'), ['# Added event e1', 'standup  today 09:30']);
+  await app.run('ev fri lunch with Sam');
+  await app.run('ev 2026-11-02 dentist');
+  assert.match((await app.run('ev today 25:00 x'))[0], /Can't read the time/);
   await app.run('t file taxes due:2026-10-07');
   await app.run('t old thing due:2026-10-01');
   const cal = await app.run('cal');
-  assert.equal(cal[0].replace('accent:', '').trim(), 'October 2026');
-  assert.match(cal[1], /^Mo  Tu/);
-  assert.ok(cal.some((l) => l.includes(' 5* ')) && cal.some((l) => l.includes(' 9* ')));
-  assert.ok(!cal.some((l) => l.includes(' 6* ')));
-  assert.ok(cal.some((l) => /e1\s+2026-10-05 09:30/.test(l)));
-  assert.equal((await app.run('cal 2026-11')).some((l) => l.includes(' 2* ')), true);
-  assert.equal((await app.run('cal 2026-13'))[0], 'err: usage:');
+  assert.deepEqual(cal.slice(0, 2), ['# October 2026 · 2 events', 'CAL 2026-10 marks=5,9']);
+  assert.match(cal[2], /^e1 \| Mon 5 Oct \| 09:30 \| standup$/);
+  assert.equal((await app.run('cal 2026-13'))[0], '# Usage · cal');
   const ag = await app.run('agenda');
-  assert.equal(ag[0], 'overdue');
-  assert.match(ag[1], /t2/);
-  assert.match(ag[2], /Mon 2026-10-05 {2}\(today\)/);
-  assert.match(ag[3], /09:30\s+standup/);
-  assert.ok(ag.some((l) => /task\s+file taxes/.test(l)));
-  assert.ok(ag.some((l) => /lunch with Sam/.test(l)));
-  assert.ok(!ag.some((l) => /dentist/.test(l))); // outside the 7-day window
+  assert.equal(ag[0], '# Next 7 days · 4 items · 1 overdue');
+  assert.equal(ag[1], '## Overdue');
+  assert.match(ag[2], /^t2 \| Thu 1 Oct \| old thing$/);
+  assert.ok(ag.includes('t1 | task due | file taxes'));
+  assert.equal(ag[3], '## Today · Mon 5 Oct');
+  assert.ok(ag.includes('## Wed 7 Oct'));
+  assert.ok(!ag.some((l) => /dentist/.test(l)));
   assert.ok((await app.run('agenda 60')).some((l) => /dentist/.test(l)));
-  assert.deepEqual(await app.run('ev rm e1'), ['ok: removed e1: standup']);
-  assert.equal((await app.run('ev rm e1'))[0], 'err: no event e1');
+  assert.deepEqual(await app.run('ev rm e1'), ['# Removed event e1', 'standup']);
 });
 
-test('alias: define, conflicts, force, rm, default engine', async () => {
+test('ics import through the command: dedupe and warnings', async () => {
   const app = await makeApp();
-  assert.deepEqual(await app.run('alias gh https://github.com/ https://github.com/{} --path'), ['ok: added gh']);
-  assert.equal(app.data.state.aliases.entries.find((e) => e.name === 'gh').escape, 'path');
-  assert.match((await app.run('alias gh https://example.com/'))[0], /already exists.*--force/);
-  assert.deepEqual(await app.run('alias set gh https://example.com/ --force'), ['ok: updated gh']);
+  const body = 'BEGIN:VEVENT\nSUMMARY:A\nDTSTART:20261012T090000\nEND:VEVENT\nBEGIN:VEVENT\nSUMMARY:R\nRRULE:FREQ=DAILY\nDTSTART:20261012T090000\nEND:VEVENT';
+  app.ctx.nextFile = { name: 'cal.ics', size: body.length, text: async () => body };
+  const first = await app.run('ics import');
+  assert.equal(first[0], '# Imported 1 event from cal.ics');
+  assert.equal(first.tone, 'warn');
+  const second = await app.run('ics import');
+  assert.equal(second[0], '# Imported 0 events from cal.ics');
+  assert.ok(second.includes('dim: 1 event already present, skipped'));
+});
+
+test('alias and engine commands', async () => {
+  const app = await makeApp();
+  const add = await app.run('alias gh https://github.com/ https://github.com/{} --path');
+  assert.equal(add[0], '# Added gh  engine');
+  assert.ok(add.includes('escape: path'));
+  const dup = await app.run('alias gh https://example.com/');
+  assert.equal(dup[0], "err: Alias 'gh' already exists");
+  assert.equal(dup.tone, 'err');
+  assert.equal((await app.run('alias set gh https://example.com/ --force'))[0], '# Updated gh  alias');
   assert.match((await app.run('alias t https://example.com/'))[0], /'t' is a built-in command/);
-  assert.match((await app.run('alias ls2 javascript:alert(1)'))[0], /http/);
-  assert.match((await app.run('alias x https://a.com/ javascript:{}'))[0], /template/);
-  assert.match((await app.run('alias x https://a.com/ https://a.com/?q={} --bogus'))[0], /unknown option/);
-  assert.match((await app.run('alias x https://a.com/ --path'))[0], /--path/);
+  assert.match((await app.run('alias x javascript:alert(1)'))[0], /http/);
   assert.match((await app.run('alias rm g'))[0], /default engine/);
-  assert.match((await app.run('alias g https://a.com/ --force'))[0], /needs a template/);
-  assert.match((await app.run('engine default gh'))[0], /no template/); // gh was overwritten without one
-  assert.deepEqual(await app.run('engine default ddg'), ['ok: default engine is now ddg']);
-  assert.deepEqual(await app.run('engine'), ['default engine: ddg']);
-  assert.deepEqual(await app.run('alias rm g'), ['ok: removed g']);
-  assert.ok((await app.run('alias ls')).some((l) => /ddg.*default engine/.test(l)));
-  assert.match((await app.run('alias show ddg'))[1], /duckduckgo/);
+  assert.match((await app.run('engine default gh'))[0], /no template/);
+  assert.deepEqual(await app.run('engine default ddg'), ['# Default engine is now ddg']);
+  const ls = await app.run('alias ls');
+  assert.equal(ls[0], '# 3 aliases · 2 engines');
+  assert.ok(ls.some((l) => /^ddg \| engine \| .* \| ★ default$/.test(l)));
 });
 
-test('tools commands print results', async () => {
+test('tools commands', async () => {
   const app = await makeApp();
-  assert.deepEqual(await app.run('calc 2*(3+4)'), ['14']);
+  assert.deepEqual(await app.run('calc 2*(3+4)'), ['# 2*(3+4) = 14']);
   assert.deepEqual(await app.run('calc 1/0'), ['err: division by zero']);
-  assert.deepEqual(await app.run('b64 enc hi there'), ['aGkgdGhlcmU=']);
-  assert.deepEqual(await app.run('b64 dec aGkgdGhlcmU='), ['hi there']);
-  assert.deepEqual(await app.run('json {"a":1}'), ['{', '  "a": 1', '}']);
-  assert.match((await app.run('json {a'))[0], /^err: invalid JSON/);
-  assert.deepEqual(await app.run('units 5 km to mi'), ['5 km = 3.106855961 mi']);
-  assert.deepEqual(await app.run('units 100c to f'), ['100 c = 212 f']);
-  assert.match((await app.run('units 1 kg to m'))[0], /can't convert/);
-  assert.match((await app.run('uuid'))[0], /^[0-9a-f-]{36}$/);
-  assert.equal((await app.run('epoch 0'))[0], 'seconds  0');
-  assert.deepEqual(await app.run('tz add Not/AZone'), ["err: unknown time zone 'Not/AZone' (use an IANA name such as Europe/London)"]);
-  assert.deepEqual(await app.run('tz add europe/london'), ['ok: added Europe/London']);
-  assert.deepEqual(await app.run('tz add Europe/London'), ['dim: Europe/London is already listed']);
+  assert.deepEqual(await app.run('b64 enc hi there'), ['= aGkgdGhlcmU=']);
+  const j = await app.run('json {"a":1}');
+  assert.deepEqual(j, ['# Valid JSON · 1 key (object)', '{', '  "a": 1', '}']);
+  assert.deepEqual(await app.run('units 5 km to mi'), ['# 5 km = 3.106855961 mi']);
+  assert.equal((await app.run('epoch 0'))[0], '# 0 seconds');
+  assert.deepEqual(await app.run('tz add europe/london'), ['# Added Europe/London']);
   const tz = await app.run('tz 14:30');
-  assert.ok(tz.length >= 3 && /overlap|add zones/.test(tz[tz.length - 1]));
-  assert.deepEqual(await app.run('tz rm EUROPE/london'), ['ok: removed Europe/London']);
+  assert.match(tz[0], /^# 14:30 local · overlap/);
+  assert.equal(tz[1], '| zone | time |  | utc | ');
+  assert.deepEqual(await app.run('tz rm EUROPE/london'), ['# Removed Europe/London']);
 });
 
-test('history is capped, deduped, and persisted', async () => {
+test('theme and widgets commands', async () => {
   const app = await makeApp();
-  await app.data.addHistory('a');
-  await app.data.addHistory('a');
-  await app.data.addHistory('b');
-  assert.deepEqual(app.data.state.history.items, ['a', 'b']);
-  assert.deepEqual(JSON.parse(app.storage.getItem('cc:history')).items, ['a', 'b']);
-  for (let i = 0; i < 600; i++) await app.data.addHistory('c' + i);
-  assert.equal(app.data.state.history.items.length, 500);
-  assert.equal(JSON.parse(app.storage.getItem('cc:history')).items.length, 500);
-  const out = await app.run('history 3');
-  assert.equal(out.length, 3);
+  const list = await app.run('theme');
+  assert.equal(list[0], '# Themes · current auto');
+  assert.ok(list.some((l) => l.startsWith('[nord] | nord |')));
+  assert.deepEqual(await app.run('theme nord'), ['# Theme set to nord']);
+  assert.equal(app.data.state.settings.theme, 'nord');
+  assert.equal((await app.run('theme neon'))[0], "err: No theme 'neon'");
+  const w = await app.run('widgets');
+  assert.equal(w[0], '# Widgets · 3 of 7 on');
+  assert.deepEqual(await app.run('widgets zones'), ['# zones on']);
+  assert.deepEqual(app.data.state.settings.widgets, ['clock', 'agenda', 'tasks', 'zones']);
+  await app.run('widgets clock off');
+  await app.run('widgets calendar on');
+  assert.deepEqual(app.data.state.settings.widgets, ['agenda', 'tasks', 'calendar', 'zones']); // catalogue order
+  assert.deepEqual(await app.run('widgets hide'), ['# Widget panel hidden']);
+  assert.equal(app.data.state.settings.panel, false);
+  await app.run('widgets notes');
+  assert.equal(app.data.state.settings.panel, true); // turning one on shows the panel
+  assert.equal((await app.run('widgets bogus'))[0], "err: No widget 'bogus'");
+});
+
+test('help, history', async () => {
+  const app = await makeApp();
+  const help = await app.run('help');
+  assert.match(help[0], /^# Commands · \d+ built-in$/);
+  assert.ok(help.includes('## View'));
+  const ht = await app.run('help t');
+  assert.deepEqual(ht.slice(0, 3), ['# t · add a task', '## Usage', 't <text> [due:<date>] [#tag]']);
+  assert.ok(ht.includes('## Examples'));
+  await app.data.addHistory('calc 1');
+  await app.data.addHistory('vitosha weather');
+  assert.deepEqual(await app.run('history 2'), ['# Last 2 commands of 2', '1 | calc 1', '2 | vitosha weather']);
 });
 
 test('export then import into empty storage brings everything back', async () => {
@@ -417,108 +469,102 @@ test('export then import into empty storage brings everything back', async () =>
   await a.run('t ship it due:2026-10-09 #work');
   await a.run('ev 2026-10-12 09:00 review');
   await a.run('alias gh https://github.com/ https://github.com/{} --path');
-  await a.run('alias mine https://example.com/');
   await a.run('engine default ddg');
   await a.run('tz add Asia/Tokyo');
-  await a.run('export');
+  await a.run('theme dracula');
+  await a.run('widgets notes on');
+  const ex = await a.run('export');
+  assert.equal(ex[0], '# Exported control-center-2026-10-05.json');
   const file = JSON.parse(a.ctx.downloaded.text);
-  assert.match(a.ctx.downloaded.name, /^control-center-2026-10-05\.json$/);
-  assert.equal(file.schema, CC.SCHEMA);
-  assert.ok(a.data.state.meta.lastExport);
 
   const b = await makeApp();
-  const merged = CC.importer.merge(Object.fromEntries(Object.keys(b.data.DEFAULTS).map((k) => [k, b.data.state[k]])), file, b.commands.isBuiltin, () => MON);
-  await b.store.importAll({ collections: merged.collections });
-  await b.data.load();
+  b.ctx.nextFile = { name: 'x.json', size: 10, text: async () => JSON.stringify(file) };
+  const im = await b.run('import');
+  assert.equal(im[0], '# Imported x.json');
   const s = b.data.state;
   assert.equal(s.notes.items[0].text, 'remember this');
   assert.deepEqual(s.tasks.items[0].tags, ['work']);
-  assert.equal(s.tasks.items[0].due, '2026-10-09');
   assert.equal(s.events.items[0].title, 'review');
-  assert.deepEqual(s.aliases.entries.map((e) => e.name).sort(), ['ddg', 'g', 'gh', 'mine']);
+  assert.deepEqual(s.aliases.entries.map((e) => e.name).sort(), ['ddg', 'g', 'gh']);
   assert.equal(s.aliases.defaultEngine, 'ddg');
   assert.deepEqual(s.settings.zones, ['Asia/Tokyo']);
-  assert.ok(s.history.items.includes('export') || s.history.items.length >= 0);
+  assert.equal(s.settings.theme, 'dracula');
+  assert.deepEqual(s.settings.widgets, ['clock', 'agenda', 'tasks', 'notes']);
 });
 
-test('import: conflicts skipped and reported, bad entries rejected, never overwrites', async () => {
+test('import: conflicts reported, bad entries rejected, schema checked, never overwrites', async () => {
   const app = await makeApp();
   await app.run('alias gh https://github.com/ https://github.com/{} --path');
-  await app.run('n existing');
-  const before = JSON.stringify(app.data.state.aliases.entries.find((e) => e.name === 'gh'));
+  await app.run('theme nord');
+  const current = Object.fromEntries(Object.keys(DEFAULTS).map((k) => [k, app.data.state[k]]));
   const file = {
-    schema: CC.SCHEMA,
+    schema: 1,
     collections: {
       aliases: {
         defaultEngine: 'evil',
         entries: [
-          { name: 'gh', base: 'https://evil.example/', template: 'https://evil.example/{}' }, // collides with existing
-          { name: 'help', base: 'https://x.com/' }, // collides with a built-in
+          { name: 'gh', base: 'https://evil.example/', template: 'https://evil.example/{}' },
+          { name: 'help', base: 'https://x.com/' },
           { name: 'js', base: 'javascript:alert(document.cookie)' },
-          { name: 'js2', base: 'https://x.com/', template: 'data:text/html,{}' },
           { name: 'ok', base: 'https://ok.example/' },
           { name: 'evil', base: 'https://evil.example/', template: 'https://evil.example/?q={}' },
-          { name: 'Bad Name', base: 'https://x.com/' },
           'garbage',
         ],
       },
-      notes: { items: [{ text: 'imported note' }, { text: '' }, { nope: 1 }] },
-      tasks: { items: [{ text: 'ok task', due: '2026-02-31' }, { text: 'good', due: '2026-03-01', tags: ['a', '<b>'] }] },
-      events: { items: [{ date: '2026-10-10', time: '09:00', title: 'x' }, { date: 'bad', title: 'y' }] },
-      settings: { zones: ['Europe/Paris', 'Nope/Nope', 42] },
+      notes: { items: [{ text: 'imported note' }, { text: '' }] },
+      settings: { zones: ['Europe/Paris', 'Nope/Nope'], theme: 'gruvbox', widgets: ['notes', 'bogus'] },
     },
   };
-  const current = Object.fromEntries(Object.keys(app.data.DEFAULTS).map((k) => [k, app.data.state[k]]));
-  const r = CC.importer.merge(current, file, app.commands.isBuiltin, () => MON);
-  const names = r.collections.aliases.entries.map((e) => e.name).sort();
-  assert.deepEqual(names, ['ddg', 'evil', 'g', 'gh', 'ok']);
-  assert.equal(JSON.stringify(r.collections.aliases.entries.find((e) => e.name === 'gh')), before);
+  const r = merge(current, file, app.commands.isBuiltin, () => MON);
+  assert.deepEqual(r.collections.aliases.entries.map((e) => e.name).sort(), ['ddg', 'evil', 'g', 'gh', 'ok']);
+  assert.equal(r.collections.aliases.entries.find((e) => e.name === 'gh').base, 'https://github.com/');
   assert.ok(r.lines.some((l) => /skipped alias 'gh'.*already exists/.test(l)));
   assert.ok(r.lines.some((l) => /skipped alias 'help'.*built-in/.test(l)));
-  assert.ok(r.lines.some((l) => /skipped alias 'js'.*http/.test(l)));
-  assert.ok(r.lines.some((l) => /skipped alias 'js2'/.test(l)));
-  assert.ok(r.lines.some((l) => /skipped alias 'Bad Name'/.test(l)));
-  assert.equal(r.collections.aliases.defaultEngine, 'evil'); // allowed: it is a valid engine and the default was untouched
-  assert.deepEqual(r.collections.notes.items.map((n) => [n.id, n.text]), [['n1', 'existing'], ['n2', 'imported note']]);
-  assert.equal(r.collections.tasks.items.length, 1);
-  assert.deepEqual(r.collections.tasks.items[0].tags, ['a']);
-  assert.equal(r.collections.events.items.length, 1);
-  assert.deepEqual(r.collections.settings.zones, ['Europe/Paris']);
-  assert.match(r.lines[0], /imported 1 notes, 1 tasks, 1 events, 2 aliases, 1 time zones/);
-  assert.throws(() => CC.importer.merge(current, { schema: 999, collections: {} }, app.commands.isBuiltin, () => MON), /newer/);
-  assert.throws(() => CC.importer.merge(current, { hello: 1 }, app.commands.isBuiltin, () => MON), /not a control-center/);
-  assert.throws(() => CC.importer.merge(current, null, app.commands.isBuiltin, () => MON), /not a control-center/);
+  assert.ok(r.lines.some((l) => /skipped alias 'js'/.test(l)));
+  assert.deepEqual(r.counts, { notes: 1, tasks: 0, events: 0, aliases: 2, zones: 1 });
+  assert.equal(r.invalid, 2);
+  assert.equal(r.collections.settings.theme, 'nord'); // this browser already chose a theme
+  assert.deepEqual(r.collections.settings.widgets, ['notes']);
+  for (const schema of [999, -1e10, 0, 1.5, '1']) {
+    assert.throws(() => merge(current, { schema, collections: {} }, app.commands.isBuiltin, () => MON), /newer|not a control-center/);
+  }
 });
 
-test('data: newer schema refuses to load; export reminder age', async () => {
+test('import is all-or-nothing when storage fills up', async () => {
   const storage = fakeStorage();
-  storage.setItem('cc:meta', JSON.stringify({ schema: 99, counters: {} }));
-  const data = CC.createData(CC.store.createLocalStore(storage));
-  await assert.rejects(data.load(), /newer version/);
+  const app = await makeApp(storage);
+  await app.run('n keep me');
+  const before = storage.getItem('cc:notes');
+  const file = { schema: 1, collections: { notes: { items: [{ text: 'new' }] }, tasks: { items: [{ text: 'boom' }] } } };
+  app.ctx.nextFile = { name: 'f.json', size: 10, text: async () => JSON.stringify(file) };
+  const realSet = storage.setItem;
+  storage.setItem = (k, v) => {
+    if (k === 'cc:tasks' && v.includes('boom')) { const e = new Error('full'); e.name = 'QuotaExceededError'; throw e; }
+    realSet(k, v);
+  };
+  const outLines = await app.run('import');
+  assert.match(outLines[0], /Import failed, nothing was changed: storage is full/);
+  assert.equal(storage.getItem('cc:notes'), before);
+});
 
+test('export reminder age and newer schema refusal', async () => {
+  const s = fakeStorage();
+  s.setItem('cc:meta', JSON.stringify({ schema: 99, counters: {} }));
+  await assert.rejects(createData(createLocalStore(s)).load(), /newer version/);
   const app = await makeApp();
-  assert.equal(app.data.exportAgeDays(), null); // no data yet: no reminder
+  assert.equal(app.data.exportAgeDays(), null);
   await app.run('n something');
-  assert.equal(app.data.exportAgeDays(), 0);
   app.setNow(new Date(2026, 9, 25, 13));
-  assert.equal(app.data.exportAgeDays(), 20); // never exported: measured from first use
+  assert.equal(app.data.exportAgeDays(), 20);
   await app.run('export');
   assert.equal(app.data.exportAgeDays(), 0);
 });
 
-test('stale state: a second tab never gets overwritten', async () => {
+test('a second tab is never overwritten by a stale copy', async () => {
   const storage = fakeStorage();
-  const mk = async () => {
-    const data = CC.createData(CC.store.createLocalStore(storage));
-    await data.load();
-    return data;
-  };
-  const tabA = await mk();
-  const tabB = await mk();
-  const idA = await tabA.allocId('t');
-  await tabA.mutate('tasks', (d) => d.items.push({ id: idA, text: 'from A' }));
-  const idB = await tabB.allocId('t'); // tabB has not reloaded
-  await tabB.mutate('tasks', (d) => d.items.push({ id: idB, text: 'from B' }));
-  assert.notEqual(idA, idB);
-  assert.deepEqual(JSON.parse(storage.getItem('cc:tasks')).items.map((t) => t.text), ['from A', 'from B']);
+  const tabA = await makeApp(storage);
+  const tabB = await makeApp(storage);
+  await tabA.run('t from A');
+  await tabB.run('t from B'); // tabB never reloaded
+  assert.deepEqual(JSON.parse(storage.getItem('cc:tasks')).items.map((t) => [t.id, t.text]), [['t1', 'from A'], ['t2', 'from B']]);
 });

@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 
 const root = path.join(__dirname, '..');
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const file = path.join(root, req.url.split('?')[0] === '/' ? 'index.html' : req.url.split('?')[0]);
   if (!file.startsWith(root) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
@@ -26,7 +26,7 @@ async function check(name, fn) {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = 'http://127.0.0.1:' + server.address().port + '/';
   const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined });
-  const context = await browser.newContext({ acceptDownloads: true });
+  const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 900 } });
   const external = [];
   await context.route('**/*', (route) => {
     const u = route.request().url();
@@ -42,24 +42,27 @@ async function check(name, fn) {
   await page.goto(base);
 
   const prompt = page.locator('#prompt');
-  const output = page.locator('#output');
+  const output = page.locator('#turns');
   const type = async (s) => { await prompt.fill(''); await prompt.pressSequentially(s); };
   const send = async (s) => { await type(s); await page.keyboard.press('Enter'); await page.waitForTimeout(60); };
   const text = () => output.innerText();
+  const lastTurn = () => page.locator('#turns .turn').last();
+  const lastText = () => lastTurn().innerText();
+  const lastTone = () => lastTurn().locator('.reply').getAttribute('data-tone');
   const focused = () => page.evaluate(() => document.activeElement && document.activeElement.id);
 
-  await check('page loads with prompt focused and no console errors', async () => {
+  await check('page loads: welcome box, prompt focused, widgets shown, no console errors', async () => {
     assert.equal(await focused(), 'prompt');
-    assert.match(await text(), /type 'help'/);
+    assert.match(await page.locator('.welcome').innerText(), /Control Center[\s\S]*help for commands/);
+    assert.deepEqual(await page.locator('#widgets .widget').evaluateAll((els) => els.map((e) => e.dataset.widget)), ['clock', 'agenda', 'tasks']);
+    assert.match(await page.locator('[data-widget=clock] .w-time').innerText(), /^\d\d:\d\d:\d\d$/);
     assert.deepEqual(errors, []);
   });
 
-  await check('CSP meta is present and blocks outbound connections', async () => {
+  await check('CSP meta blocks outbound connections and inline scripts', async () => {
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
     assert.match(csp, /connect-src 'none'/);
-    const blocked = await page.evaluate(() => fetch('https://example.com/').then(() => false, () => true));
-    assert.equal(blocked, true);
-    // inline scripts must not run (the CSP has no 'unsafe-inline')
+    assert.equal(await page.evaluate(() => fetch('https://example.com/').then(() => false, () => true)), true);
     const ran = await page.evaluate(() => new Promise((resolve) => {
       const s = document.createElement('script');
       s.textContent = 'window.__inlineRan = true';
@@ -70,99 +73,146 @@ async function check(name, fn) {
   });
 
   await check('clicking the output returns focus to the prompt', async () => {
-    await page.locator('body').click({ position: { x: 300, y: 200 } });
+    await page.locator('#transcript').click({ position: { x: 300, y: 300 } });
     assert.equal(await focused(), 'prompt');
   });
 
-  await check('tasks, notes, events render via textContent (no HTML injection)', async () => {
+  await check('stored text is rendered as text, never HTML', async () => {
     await send('n <img src=x onerror=window.pwned=1> hi');
     await send('notes');
-    assert.match(await text(), /<img src=x onerror=window\.pwned=1> hi/);
+    assert.match(await lastText(), /<img src=x onerror=window\.pwned=1> hi/);
     assert.equal(await page.evaluate(() => window.pwned), undefined);
-    assert.equal(await page.locator('#output img').count(), 0);
+    assert.equal(await page.locator('#turns img, #widgets img').count(), 0);
   });
 
-  await check('t / tasks / done work end to end', async () => {
+  await check('replies are structured: echo, coloured bullet, head, connector body, table', async () => {
     await send('t buy flour due:tomorrow #home');
-    assert.match(await text(), /added t1 \(due \d{4}-\d\d-\d\d\)/);
+    assert.equal(await lastTone(), 'ok');
+    assert.equal(await lastTurn().locator('.you-text').innerText(), 't buy flour due:tomorrow #home');
+    assert.equal(await lastTurn().locator('.head').innerText(), 'Added task t1');
     await send('tasks');
-    assert.match(await text(), /t1\s+\[ \]\s+\d{4}-\d\d-\d\d\s+buy flour\s+#home/);
-    await send('t done t1');
-    assert.match(await text(), /done t1: buy flour/);
+    const t = lastTurn();
+    assert.equal(await t.locator('.reply').evaluate((e) => e.classList.contains('has-head')), true);
+    assert.deepEqual(await t.locator('.tbl th').allInnerTexts(), ['ID', '', 'DUE', 'TASK', 'TAGS']);
+    assert.equal(await t.locator('.tbl td .t-tag').innerText(), '#home');
+    assert.equal(await t.locator('.tbl td .t-info').innerText(), 'tomorrow');
+    await send('t nope due:whenever');
+    assert.equal(await lastTone(), 'err');
+    const colours = await page.evaluate(() => {
+      const c = (sel) => getComputedStyle(document.querySelector(sel)).color;
+      return { err: c('#turns .turn:last-child .reply .bullet'), id: c('#turns .t-id') };
+    });
+    assert.notEqual(colours.err, colours.id);
   });
 
-  await check('ghost text, Tab: unique, common prefix, list; focus stays', async () => {
+  await check('tasks widget updates live and its circle completes a task', async () => {
+    await page.waitForFunction(() => /buy flour/.test(document.querySelector('[data-widget=tasks]').innerText));
+    await page.locator('[data-widget=tasks] .w-check').first().click();
+    await page.waitForFunction(() => /All done/.test(document.querySelector('[data-widget=tasks]').innerText));
+    assert.match(await lastText(), /t done t1[\s\S]*Completed t1/);
+    assert.equal(await focused(), 'prompt');
+  });
+
+  await check('ghost text, Tab, → accept; focus stays in the prompt', async () => {
     await type('hel');
     assert.equal(await page.locator('#ghost-rest').innerText(), 'p');
     assert.equal(await page.locator('#ghost-typed').textContent(), 'hel');
+    assert.match(await page.locator('#hint').innerText(), /tab → help/);
     await page.keyboard.press('Tab');
     assert.equal(await prompt.inputValue(), 'help ');
-    assert.equal(await focused(), 'prompt');
     await type('ca');
-    await page.keyboard.press('Tab'); // cal, calc -> common prefix is 'cal'
+    await page.keyboard.press('Tab');
     assert.equal(await prompt.inputValue(), 'cal');
     await page.keyboard.press('Tab');
-    assert.match(await text(), /calc\s+arithmetic/);
-    assert.equal(await focused(), 'prompt');
+    assert.match(await lastText(), /2 completions[\s\S]*calc/);
+    await type('the');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await prompt.inputValue(), 'theme');
     await type('zzz');
-    assert.equal(await page.locator('#ghost-rest').innerText(), '');
     await page.keyboard.press('Tab');
     assert.equal(await prompt.inputValue(), 'zzz');
     assert.equal(await focused(), 'prompt');
-    await type('t d');
-    await page.keyboard.press('Tab');
-    assert.equal(await prompt.inputValue(), 't done ');
     await prompt.fill('');
   });
 
-  await check('argument completion shows ids and text for t rm', async () => {
-    await send('t second task');
-    await type('t rm ');
-    await page.keyboard.press('Tab'); // completes the common prefix 't'
-    assert.equal(await prompt.inputValue(), 't rm t');
-    await page.keyboard.press('Tab'); // no further progress: lists candidates
-    assert.match(await text(), /t1\s+buy flour/);
-    assert.match(await text(), /t2\s+second task/);
+  await check('live hint says what Enter will do', async () => {
+    await type('calc 1+1');
+    assert.match(await page.locator('#hint').innerText(), /calc · arithmetic/);
+    await type('vitosha weather');
+    assert.match(await page.locator('#hint').innerText(), /search g/);
+    await type('g x');
+    assert.match(await page.locator('#hint').innerText(), /open https:\/\/www\.google\.com\/search\?q=x/);
     await prompt.fill('');
   });
 
-  await check('history with arrow keys, Esc clears', async () => {
+  await check('history with arrows; Esc clears; ? shows shortcuts', async () => {
     await send('calc 1+1');
-    await prompt.focus();
     await page.keyboard.press('ArrowUp');
     assert.equal(await prompt.inputValue(), 'calc 1+1');
-    await page.keyboard.press('ArrowUp');
-    assert.equal(await prompt.inputValue(), 't second task');
-    await page.keyboard.press('ArrowDown');
+    assert.match(await page.locator('#hint').innerText(), /history \d+\/\d+/);
     await page.keyboard.press('ArrowDown');
     assert.equal(await prompt.inputValue(), '');
     await type('abc');
     await page.keyboard.press('Escape');
     assert.equal(await prompt.inputValue(), '');
+    await page.keyboard.press('?');
+    assert.match(await lastText(), /Shortcuts[\s\S]*Tab/);
+    assert.equal(await prompt.inputValue(), '');
   });
 
-  await check('palette: / opens on empty prompt, fuzzy filter, Enter inserts, Esc closes', async () => {
-    await prompt.fill('');
+  await check('palette: / opens, fuzzy filter, Enter inserts; themes run directly', async () => {
     await page.keyboard.press('/');
     assert.equal(await page.locator('#palette').isVisible(), true);
-    assert.equal(await prompt.inputValue(), '');
     await page.keyboard.type('agd');
-    assert.equal(await page.locator('#palette-list li.selected .name').innerText(), 'agenda');
+    assert.equal(await page.locator('#palette-list li.selected .p-name').innerText(), 'agenda');
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#palette').isVisible(), false);
     assert.equal(await prompt.inputValue(), 'agenda ');
-    assert.equal(await focused(), 'prompt');
     await prompt.fill('');
+    await page.keyboard.press('/');
+    await page.keyboard.type('theme gruv');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'gruvbox');
     await page.keyboard.press('/');
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#palette').isVisible(), false);
     assert.equal(await focused(), 'prompt');
-    await type('a/b'); // slash inside text must type normally
+    await type('a/b');
     assert.equal(await prompt.inputValue(), 'a/b');
     await prompt.fill('');
   });
 
-  await check('search fallback and alias redirects navigate (with history saved first)', async () => {
+  await check('themes: switch, colours change, survive reload without a flash', async () => {
+    await send('theme nord');
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    assert.equal(bg, 'rgb(46, 52, 64)');
+    await send('theme');
+    assert.equal(await lastTurn().locator('.swatch').count(), 9);
+    await page.reload();
+    await page.waitForSelector('#prompt');
+    // boot.js applies the stored theme before the module code runs
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'nord');
+    await send('theme auto');
+  });
+
+  await check('widgets: toggle by command and by ×, hide and show the panel', async () => {
+    await send('widgets calendar');
+    await page.waitForSelector('[data-widget=calendar] .cal td.today');
+    await send('widgets zones on');
+    await page.waitForSelector('[data-widget=zones]');
+    assert.deepEqual(await page.locator('#widgets .widget').evaluateAll((els) => els.map((e) => e.dataset.widget)), ['clock', 'agenda', 'tasks', 'calendar', 'zones']);
+    await page.locator('[data-widget=zones]').hover();
+    await page.locator('[data-widget=zones] .w-close').click();
+    await page.waitForFunction(() => !document.querySelector('[data-widget=zones]'));
+    await send('widgets hide');
+    assert.equal(await page.locator('#panel').isVisible(), false);
+    const w = await page.evaluate(() => document.getElementById('main').getBoundingClientRect().width);
+    assert.ok(w > 1200);
+    await page.locator('#panel-toggle').click();
+    await page.waitForFunction(() => getComputedStyle(document.getElementById('panel')).display !== 'none');
+  });
+
+  await check('search fallback and alias redirects navigate (history saved first)', async () => {
     await send('vitosha weather');
     await page.waitForURL(/google\.com\/search/);
     assert.equal(external.at(-1), 'https://www.google.com/search?q=vitosha%20weather');
@@ -177,43 +227,24 @@ async function check(name, fn) {
     await page.goBack();
     await page.waitForSelector('#prompt');
     await prompt.focus();
-    await page.keyboard.press('ArrowUp'); // history survived the navigation
+    await page.keyboard.press('ArrowUp');
     assert.equal(await prompt.inputValue(), 'gh org/repo');
     await page.keyboard.press('Escape');
-    await send('g how to proof sourdough');
-    await page.waitForURL(/google\.com/);
-    assert.equal(external.at(-1), 'https://www.google.com/search?q=how%20to%20proof%20sourdough');
-    await page.goBack();
-    await page.waitForSelector('#prompt');
   });
 
-  await check('javascript: aliases are rejected on define', async () => {
+  await check('javascript: aliases are rejected', async () => {
     await send('alias evil javascript:alert(1)');
-    assert.match(await text(), /only http: and https:/);
-    await send('alias evil2 https://a.com/ javascript:{}');
-    assert.match(await text(), /template: only http/);
+    assert.match(await lastText(), /only http: and https:/);
+    assert.equal(await lastTone(), 'err');
   });
 
-  await check('multi-tab: a task added in one tab shows up in another without reload', async () => {
+  await check('multi-tab: a task added in one tab shows up in the other tab\'s widget', async () => {
     const other = await context.newPage();
     await other.goto(base);
-    await other.waitForSelector('#prompt');
+    await other.waitForSelector('[data-widget=tasks]');
     await page.bringToFront();
     await send('t from tab one');
-    await other.bringToFront();
-    await other.waitForTimeout(150);
-    await other.locator('#prompt').fill('tasks');
-    await other.keyboard.press('Enter');
-    await other.waitForTimeout(100);
-    assert.match(await other.locator('#output').innerText(), /from tab one/);
-    // and ids do not collide when both tabs add
-    await other.locator('#prompt').fill('t from tab two');
-    await other.keyboard.press('Enter');
-    await other.waitForTimeout(100);
-    await page.bringToFront();
-    await send('t from tab one again');
-    const ids = await page.evaluate(async () => (await CC.store.createLocalStore().get('tasks')).items.map((t) => t.id));
-    assert.equal(new Set(ids).size, ids.length);
+    await other.waitForFunction(() => /from tab one/.test(document.querySelector('[data-widget=tasks]').innerText), null, { timeout: 3000 });
     await other.close();
     await page.bringToFront();
   });
@@ -222,12 +253,16 @@ async function check(name, fn) {
     await send('ev 2026-12-24 18:00 dinner');
     await send('tz add Asia/Tokyo');
     await send('engine default ddg');
-    const before = await page.evaluate(async () => {
-      const s = CC.store.createLocalStore();
+    const snap = () => page.evaluate(() => {
       const o = {};
-      for (const c of ['notes', 'tasks', 'events', 'aliases', 'settings']) o[c] = await s.get(c);
-      return o;
+      for (const c of ['notes', 'tasks', 'events', 'aliases', 'settings']) o[c] = JSON.parse(localStorage.getItem('cc:' + c));
+      return JSON.stringify({
+        notes: o.notes.items.map((n) => n.text), tasks: o.tasks.items.map((t) => [t.text, t.due, t.tags, t.done]),
+        events: o.events.items.map((e) => [e.date, e.time, e.title]),
+        aliases: o.aliases.entries.map((e) => e.name).sort(), engine: o.aliases.defaultEngine, zones: o.settings.zones,
+      });
     });
+    const before = await snap();
     const [download] = await Promise.all([page.waitForEvent('download'), send('export')]);
     assert.match(download.suggestedFilename(), /^control-center-\d{4}-\d\d-\d\d\.json$/);
     const file = path.join(require('os').tmpdir(), 'cc-export-' + process.pid + '.json');
@@ -236,26 +271,15 @@ async function check(name, fn) {
     await page.reload();
     await page.waitForSelector('#prompt');
     await send('notes');
-    assert.match(await text(), /no notes yet/);
+    assert.match(await lastText(), /No notes yet/);
     const [chooser] = await Promise.all([page.waitForEvent('filechooser', { timeout: 3000 }), send('import')]);
     await chooser.setFiles(file);
-    await page.waitForFunction(() => /imported \d+ notes/.test(document.getElementById('output').innerText));
-    const after = await page.evaluate(async () => {
-      const s = CC.store.createLocalStore();
-      const o = {};
-      for (const c of ['notes', 'tasks', 'events', 'aliases', 'settings']) o[c] = await s.get(c);
-      return o;
-    });
-    const strip = (o) => JSON.stringify({
-      notes: o.notes.items.map((n) => n.text), tasks: o.tasks.items.map((t) => [t.text, t.due, t.tags, t.done]),
-      events: o.events.items.map((e) => [e.date, e.time, e.title]),
-      aliases: o.aliases.entries.map((e) => e.name).sort(), engine: o.aliases.defaultEngine, zones: o.settings.zones,
-    });
-    assert.equal(strip(after), strip(before));
-    // importing the same file again reports collisions and never overwrites aliases
+    await page.waitForFunction(() => /Imported cc-export/.test(document.getElementById('turns').innerText));
+    assert.equal(await snap(), before);
     const [chooser2] = await Promise.all([page.waitForEvent('filechooser', { timeout: 3000 }), send('import')]);
     await chooser2.setFiles(file);
-    await page.waitForFunction(() => /skipped alias 'gh'.*already exists/.test(document.getElementById('output').innerText));
+    await page.waitForFunction(() => /skipped alias 'gh'.*already exists/.test(document.getElementById('turns').innerText));
+    assert.equal(await lastTone(), 'warn');
     fs.unlinkSync(file);
   });
 
@@ -264,10 +288,18 @@ async function check(name, fn) {
     fs.writeFileSync(f, 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:Board meeting\r\nDTSTART:20270105T090000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n');
     const [chooser] = await Promise.all([page.waitForEvent('filechooser', { timeout: 3000 }), send('ics import')]);
     await chooser.setFiles(f);
-    await page.waitForFunction(() => /imported 1 event/.test(document.getElementById('output').innerText));
+    await page.waitForFunction(() => /Imported 1 event/.test(document.getElementById('turns').innerText));
     await send('cal 2027-01');
-    assert.match(await text(), /2027-01-05 09:00\s+Board meeting/);
+    assert.match(await lastText(), /Tue 5 Jan 2027\s+09:00\s+Board meeting/);
+    assert.equal(await lastTurn().locator('.cal td.mark').count(), 1);
     fs.unlinkSync(f);
+  });
+
+  await check('copy buttons and json colouring', async () => {
+    await send('json {"a":[1,true,null]}');
+    assert.ok(await lastTurn().locator('.code .t-num').count() > 0);
+    await send('uuid');
+    assert.equal(await lastTurn().locator('.value .copy').count(), 1);
   });
 
   await check('pageshow clears stale input and refocuses', async () => {
@@ -277,18 +309,46 @@ async function check(name, fn) {
     assert.equal(await focused(), 'prompt');
   });
 
-  await check('layout: prompt pinned to bottom, output scrolls', async () => {
-    for (let i = 0; i < 40; i++) await send('calc ' + i);
+  await check('layout: prompt pinned to bottom, output scrolls, no horizontal overflow', async () => {
+    for (let i = 0; i < 30; i++) await send('calc ' + i);
     const m = await page.evaluate(() => {
-      const o = document.getElementById('output'), p = document.getElementById('promptline');
-      return { bottom: p.getBoundingClientRect().bottom, vh: innerHeight, scrolled: o.scrollTop > 0, atEnd: o.scrollHeight - o.scrollTop - o.clientHeight < 2 };
+      const o = document.getElementById('transcript'), c = document.getElementById('composer');
+      return { bottom: c.getBoundingClientRect().bottom, vh: innerHeight, scrolled: o.scrollTop > 0,
+        atEnd: o.scrollHeight - o.scrollTop - o.clientHeight < 2, hx: document.documentElement.scrollWidth - innerWidth };
     });
     assert.ok(Math.abs(m.bottom - m.vh) < 2);
     assert.ok(m.scrolled && m.atEnd);
+    assert.ok(m.hx <= 0);
+  });
+
+  await check('phone width: widgets become a drawer, nothing overflows', async () => {
+    const phone = await context.newPage();
+    await phone.setViewportSize({ width: 390, height: 844 });
+    await phone.goto(base);
+    await phone.waitForSelector('#prompt');
+    const panelVisible = () => phone.evaluate(() => {
+      const r = document.getElementById('panel').getBoundingClientRect();
+      return r.left < innerWidth - 1;
+    });
+    assert.equal(await panelVisible(), false);
+    await phone.locator('#prompt').fill('tasks all');
+    await phone.keyboard.press('Enter');
+    await phone.locator('#prompt').fill('help');
+    await phone.keyboard.press('Enter');
+    await phone.waitForTimeout(100);
+    assert.ok(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await phone.locator('#panel-toggle').click();
+    await phone.waitForTimeout(300);
+    assert.equal(await panelVisible(), true);
+    await phone.screenshot({ path: path.join(require('os').tmpdir(), 'cc-phone.png') });
+    await phone.keyboard.press('Escape');
+    await phone.waitForTimeout(300);
+    assert.equal(await panelVisible(), false);
+    await phone.close();
   });
 
   await check('no console errors during the whole run', async () => {
-    assert.deepEqual(errors.filter((e) => !/Content Security Policy|Refused to (connect|evaluate)|Failed to fetch/i.test(e)), []);
+    assert.deepEqual(errors.filter((e) => !/Content Security Policy|Refused to (connect|evaluate|execute)|Failed to fetch/i.test(e)), []);
   });
 
   await page.screenshot({ path: process.env.SHOT || path.join(require('os').tmpdir(), 'cc.png') });

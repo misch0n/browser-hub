@@ -16,6 +16,8 @@ const MAX_TURNS = 200;
 //
 // opts.run(command) runs a command as if typed: used by links on ids and by
 // values edited in place, so every change shows up as the command it is.
+// opts.onCopyable(text) hears about each result worth copying (the copy
+// button by the prompt copies the latest).
 export function createTranscript(scrollEl, listEl, opts = {}) {
   const atBottom = () => scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 40;
   const scroll = () => { scrollEl.scrollTop = scrollEl.scrollHeight; };
@@ -145,9 +147,15 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
         const lines = lang === 'json' ? jsonLines(text) : text.split('\n').map((l) => [[l, '']]);
         const pre = h('pre', { class: 'code' }, ...lines.map((segs) => h('div', null, rich(segs.length ? segs : [[' ', '']]))));
         push(h('div', { class: 'code-wrap' }, pre, copyButton(() => text)));
+        out.copyable(text);
       },
       value(text) {
         push(h('div', { class: 'value' }, h('span', { class: 'value-text', text }), copyButton(() => text)));
+        out.copyable(text);
+      },
+      // Marks `text` as this command's result for the copy button.
+      copyable(text) {
+        if (opts.onCopyable && text) opts.onCopyable(String(text));
       },
       calendar(spec) {
         push(h('div', { class: 'cal-wrap' }, monthGrid(spec)));

@@ -1,6 +1,7 @@
 import { createLocalStore } from './core/store.js';
 import { createData } from './core/data.js';
 import { dispatch } from './core/dispatch.js';
+import { didYouMean } from './core/completion.js';
 import { todayISO, plural } from './core/util.js';
 import { THEMES, WIDGETS, isTheme, EXPORT_REMINDER_DAYS } from './core/catalog.js';
 import { DAY_NAMES_LONG, MONTH_NAMES } from './core/format.js';
@@ -10,7 +11,7 @@ import { createTranscript } from './ui/transcript.js';
 import { createPrompt } from './ui/prompt.js';
 import { createPalette } from './ui/palette.js';
 import { createWidgets } from './ui/widgets.js';
-import { rich } from './ui/dom.js';
+import { rich, copyText } from './ui/dom.js';
 
 const $ = (id) => document.getElementById(id);
 const root = document.documentElement;
@@ -27,6 +28,24 @@ const now = () => new Date();
 const transcript = createTranscript($('transcript'), $('turns'), {
   run: (cmd) => { run(cmd); autoFocus(); },
   refocus: () => autoFocus(),
+  onCopyable: (text) => setCopyable(text),
+});
+
+// The copy button by the prompt: copies the latest result worth copying
+// (a calc answer, a uuid, pretty JSON, an epoch …).
+const copyEl = $('copy-last');
+let lastCopyable = '';
+function setCopyable(text) {
+  lastCopyable = text;
+  copyEl.hidden = false;
+  copyEl.title = 'Copy: ' + (text.length > 60 ? text.slice(0, 59) + '…' : text);
+  copyEl.textContent = 'copy';
+}
+copyEl.addEventListener('click', async () => {
+  const ok = await copyText(lastCopyable);
+  copyEl.textContent = ok ? 'copied' : 'failed';
+  setTimeout(() => { copyEl.textContent = 'copy'; }, 1200);
+  autoFocus();
 });
 const fileEl = $('file');
 
@@ -111,9 +130,16 @@ function run(raw) {
 
 // ---- prompt -------------------------------------------------------------------
 
+const completionEnv = () => ({ defs: commands.defs, entries: state.aliases.entries, history: state.history.items });
+
 const hintEl = $('hint');
 
-function describe(v, ghost, hist) {
+function describe(v, ghost, hist, search) {
+  if (search) {
+    return [['history search ', 'faint'], ['“' + search.query + '”', 'strong'], [': ', 'faint'],
+      search.match ? [search.match, 'accent'] : ['no match', 'err'],
+      ['   ↵ run · ctrl+r older · tab edit · esc cancel', 'faint']];
+  }
   if (hist) return [['history ', 'faint'], [hist.at + '/' + hist.of, 'num'], [' · ↑↓ to walk · esc clears', 'faint']];
   if (!v.trim()) {
     return [['?', 'accent'], [' shortcuts   ', 'faint'], ['/', 'accent'], [' commands   ', 'faint'], ['tab', 'accent'], [' completes', 'faint']];
@@ -126,10 +152,12 @@ function describe(v, ghost, hist) {
   }
   if (res.kind === 'redirect') return [['↵ open ', 'faint'], [res.url, 'url'], ...tab];
   if (res.kind === 'search') {
+    const fix = res.fallback ? didYouMean(v.trim().split(/\s+/)[0], completionEnv()) : null;
     return [
       ['↵ search ', 'faint'], [siteOf(res.url), 'accent'],
       ...(res.fallback ? [[' (default)', 'faint']] : []),
       [' for ', 'faint'], ['“' + res.query + '”', 'strong'], ...tab,
+      ...(fix ? [['   did you mean ', 'faint'], [fix, 'accent'], ['? tab fixes it', 'faint']] : []),
     ];
   }
   return [[res.message, 'err']];
@@ -139,11 +167,11 @@ const prompt = createPrompt({
   input: $('prompt'),
   ghostTyped: $('ghost-typed'),
   ghostRest: $('ghost-rest'),
-  env: () => ({ defs: commands.defs, entries: state.aliases.entries, history: state.history.items }),
+  env: () => completionEnv(),
   history: () => state.history.items,
-  hint(v, ghost, hist) {
+  hint(v, ghost, hist, search) {
     hintEl.textContent = '';
-    hintEl.appendChild(rich(describe(v, ghost, hist)));
+    hintEl.appendChild(rich(describe(v, ghost, hist, search)));
   },
   onSubmit: run,
   onPalette: () => palette.open(),

@@ -20,8 +20,15 @@ the default search engine.
 Keys: **Tab** completes (again to list), **→** accepts the grey suggestion,
 **↑/↓** history, **/** command palette, **?** shortcuts, **Esc** clears.
 The prompt has readline editing keys: Ctrl+A/E (start/end), Ctrl+W (cut
-word), Ctrl+U/K (cut to start/end), Ctrl+Y (paste), Alt+B/F (word back/forward).
-Press `?` on an empty prompt for the full list.
+word), Ctrl+U/K (cut to start/end), Ctrl+Y (paste), Alt+B/F (word back/forward),
+and **Ctrl+R** searches history (Ctrl+R again for older, Enter runs, Tab edits).
+Press `?` on an empty prompt for the full list. A word one typo away from a
+command or alias gets a "did you mean" in the hint, and Tab fixes it. The
+**copy** button at the right of the prompt copies the latest result (a `calc`
+answer, a `uuid`, pretty JSON …).
+
+`tz 15:00 tokyo` shows 15:00 Tokyo time across your zones (any zone, by city,
+IANA name or your name for it).
 
 **Editing**: every note, task, event and alias can be changed field by field,
 from the command line or by tapping. `n edit n1.text new words`,

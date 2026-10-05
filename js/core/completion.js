@@ -48,6 +48,37 @@ function complete(input, env) {
   return { token, candidates: pool.filter((c) => c.value.toLowerCase().startsWith(t)) };
 }
 
+// Edit distance with adjacent swaps (Damerau, optimal string alignment).
+function distance(a, b) {
+  const d = [];
+  for (let i = 0; i <= a.length; i++) d[i] = [i];
+  for (let j = 0; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+
+// A command or alias one typo away from `head` ('tsks' -> 'tasks'), or null.
+// Short words are left alone: 'ns' is as likely a search as a typo of 'n'.
+function didYouMean(head, env) {
+  const h = String(head).toLowerCase();
+  if (h.length < 3) return null;
+  const builtinNames = new Set(env.defs.map((d) => d.name));
+  if (builtinNames.has(h) || env.entries.some((e) => e.name === h)) return null;
+  const names = [...builtinNames, ...env.entries.map((e) => e.name).filter((n) => !builtinNames.has(n))];
+  let best = null;
+  for (const n of names) {
+    if (n.length < 2 || Math.abs(n.length - h.length) > 1) continue;
+    if (distance(h, n) === 1 && (!best || n.length > best.length)) best = n;
+  }
+  return best;
+}
+
 function longestCommonPrefix(values) {
   if (!values.length) return '';
   let p = values[0];
@@ -64,9 +95,10 @@ function longestCommonPrefix(values) {
 function applyTab(input, env) {
   const { token, candidates } = complete(input, env);
   if (candidates.length === 0) {
-    // Empty token at an argument position may still have candidates; complete()
-    // handles that, so nothing to do here.
-    return {};
+    // Nothing starts with the first word: fix a typo instead ('tsks' -> 'tasks').
+    const m = /^(\s*)(\S+)([\s\S]*)$/.exec(input);
+    const fix = m && didYouMean(m[2], env);
+    return fix ? { input: m[1] + fix + (m[3] || ' ') } : {};
   }
   const base = input.slice(0, input.length - token.length);
   if (candidates.length === 1) return { input: base + candidates[0].value + ' ' };
@@ -75,4 +107,4 @@ function applyTab(input, env) {
   return { list: candidates };
 }
 
-export { complete, applyTab, longestCommonPrefix, useCounts };
+export { complete, applyTab, longestCommonPrefix, useCounts, didYouMean, distance };

@@ -178,6 +178,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 
 .tbl td:first-child { white-space: nowrap; }
+/* Short values (times, dates, ids, offsets) never break mid-value on narrow screens. */
+.tbl .t-num, .tbl .t-date, .tbl .t-id, .tbl .t-faint, .tbl .t-warn { white-space: nowrap; }
 .tbl .tr-section td { padding-top: 8px; color: var(--strong); font-weight: 600; white-space: normal; }
 .tbl tbody .tr-section:first-child td { padding-top: 0; }
 .tbl tbody tr.tr-section:hover td { background: none; }
@@ -362,6 +364,22 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 
 .prompt-box:focus-within { border-color: var(--dim); }
+
+/* copies the latest result; appears once there is one */
+#copy-last {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+#copy-last:hover { color: var(--accent); border-color: var(--accent); }
+#copy-last[hidden] { display: none; }
 .prompt-glyph { color: var(--accent); font-weight: 700; }
 
 #field { position: relative; flex: 1; min-width: 0; }

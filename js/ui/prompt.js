@@ -1,5 +1,5 @@
 import { complete, applyTab } from '../core/completion.js';
-import { edit, actionFor } from '../core/lineedit.js';
+import { edit, actionFor, historySearch } from '../core/lineedit.js';
 
 // The input line: ghost-text completion, Tab, history, and a live hint that
 // says what Enter would do.
@@ -13,6 +13,9 @@ export function createPrompt(opts) {
   let draft = '';
   let composing = false;
   let killed = ''; // what Ctrl+Y pastes: the last text cut by Ctrl+W/U/K or Alt+D/Backspace
+  // Ctrl+R history search, as in bash: the prompt holds the query, the hint
+  // shows the match. { query, idx, saved } while searching, else null.
+  let search = null;
 
   function set(text) {
     input.value = text;
@@ -32,10 +35,36 @@ export function createPrompt(opts) {
 
   function update() {
     const v = input.value;
-    const rest = ghostFor(v);
+    if (search && v !== search.query) {
+      // The query changed: look again from the newest entry.
+      search.query = v;
+      search.idx = historySearch(opts.history(), v, Infinity, null);
+    }
+    const rest = search ? '' : ghostFor(v);
     ghostTyped.textContent = rest ? v : '';
     ghostRest.textContent = rest;
-    opts.hint(v, rest, histIdx === -1 ? null : { at: histIdx + 1, of: opts.history().length });
+    const match = search && search.idx >= 0 ? opts.history()[search.idx] : null;
+    opts.hint(v, rest, histIdx === -1 ? null : { at: histIdx + 1, of: opts.history().length },
+      search ? { query: v, match } : null);
+  }
+
+  function startOrOlder() {
+    const items = opts.history();
+    if (!search) {
+      search = { query: input.value, idx: historySearch(items, input.value, Infinity, null), saved: input.value };
+    } else if (search.idx >= 0) {
+      const older = historySearch(items, search.query, search.idx, items[search.idx]);
+      if (older >= 0) search.idx = older;
+    }
+    histIdx = -1;
+    update();
+  }
+
+  // Leaves search mode. `text` goes into the prompt (the match, or what was
+  // there before on cancel).
+  function endSearch(text) {
+    search = null;
+    set(text);
   }
 
   function walk(dir) {
@@ -60,6 +89,26 @@ export function createPrompt(opts) {
     // confirms an IME conversion; keyCode 229 marks that keydown.
     if (e.isComposing || composing || e.keyCode === 229) return;
     const action = actionFor(e);
+    if (action === 'history-search') { e.preventDefault(); startOrOlder(); return; }
+    if (search) {
+      const match = search.idx >= 0 ? opts.history()[search.idx] : null;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const v = match || input.value;
+        search = null;
+        set('');
+        opts.onSubmit(v);
+        return;
+      }
+      if (e.key === 'Escape' || action === 'cancel') { e.preventDefault(); endSearch(search.saved); return; }
+      // Keys that move or complete take the match into the prompt to edit.
+      if (['Tab', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key) || action === 'start' || action === 'end') {
+        e.preventDefault();
+        endSearch(match || input.value);
+        return;
+      }
+    }
+    if (action === 'cancel') return;
     if (action) {
       // Handled even when nothing changes, so Ctrl+A never selects the page
       // and Ctrl+E / Ctrl+K never jump to the browser's search box.
@@ -120,7 +169,7 @@ export function createPrompt(opts) {
   return {
     set,
     update,
-    reset() { histIdx = -1; set(''); },
+    reset() { histIdx = -1; search = null; set(''); },
     focus() { input.focus({ preventScroll: true }); },
     blur() { input.blur(); },
     get value() { return input.value; },

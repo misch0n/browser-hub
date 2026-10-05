@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import * as U from '../js/core/util.js';
 import * as A from '../js/core/aliases.js';
 import { dispatch } from '../js/core/dispatch.js';
-import { edit, actionFor } from '../js/core/lineedit.js';
+import { edit, actionFor, historySearch } from '../js/core/lineedit.js';
 import { tokenize, oneValue, quote } from '../js/core/args.js';
 import * as C from '../js/core/completion.js';
 import { createLocalStore } from '../js/core/store.js';
@@ -179,6 +179,36 @@ test('line editing: readline keys', () => {
   assert.equal(key({ key: 'b', ctrlKey: true, altKey: true }), null); // AltGr
 });
 
+test('did you mean: one typo away, Tab fixes it', () => {
+  const defs = [{ name: 'tasks', desc: '' }, { name: 'alias', desc: '' }, { name: 'n', desc: '' }, { name: 't', desc: '' }];
+  const env = { defs, entries: [{ name: 'gh', base: 'https://github.com/' }, { name: 'mobile', base: 'https://m.com/' }], history: [] };
+  assert.equal(C.didYouMean('tsks', env), 'tasks'); // missing letter
+  assert.equal(C.didYouMean('taks', env), 'tasks');
+  assert.equal(C.didYouMean('atsks', env), 'tasks'); // swapped letters
+  assert.equal(C.didYouMean('tssk', env), null); // two edits
+  assert.equal(C.didYouMean('tasks', env), null); // already right
+  assert.equal(C.didYouMean('aliss', env), 'alias');
+  assert.equal(C.didYouMean('moblie', env), 'mobile'); // swapped letters
+  assert.equal(C.didYouMean('ghh', env), 'gh');
+  assert.equal(C.didYouMean('ns', env), null); // too short to guess
+  assert.equal(C.didYouMean('gtg', env), null);
+  assert.deepEqual(C.applyTab('tsks', env), { input: 'tasks ' });
+  assert.deepEqual(C.applyTab('moblie 123', env), { input: 'mobile 123' });
+  assert.deepEqual(C.applyTab('vitosha weather', env), {});
+});
+
+test('history search (Ctrl+R)', () => {
+  const items = ['calc 1+1', 'gh org/repo', 'tasks', 'gh other/thing', 'gh other/thing', 'calc 2*3'];
+  assert.equal(historySearch(items, 'gh', Infinity, null), 4); // newest first
+  assert.equal(historySearch(items, 'gh', 4, items[4]), 1); // older, skipping the same text
+  assert.equal(historySearch(items, 'CALC', Infinity, null), 5); // any case
+  assert.equal(historySearch(items, 'zzz', Infinity, null), -1);
+  assert.equal(historySearch(items, '', Infinity, null), 5);
+  const key = (o) => actionFor(Object.assign({ key: '', code: '', ctrlKey: false, altKey: false, metaKey: false, shiftKey: false }, o));
+  assert.equal(key({ key: 'r', ctrlKey: true }), 'history-search');
+  assert.equal(key({ key: 'g', ctrlKey: true }), 'cancel');
+});
+
 test('completion: first token ranking, tab behaviour, case-insensitive arguments', () => {
   const defs = [
     { name: 'tasks', desc: '' }, { name: 'tz', desc: '' }, { name: 'help', desc: '' }, { name: 'tail', desc: '' },
@@ -334,7 +364,8 @@ function recorder() {
     // Editable rows show the command a tap would run: `field: value  [n edit n1.text]`.
     fields: (rows) => rows.forEach(([k, v, e]) => lines.push(k + ': ' + flat(v) + (e ? '  [' + e.command + ' = ' + e.current + ']' : ''))),
     code: (text) => lines.push(...text.split('\n')),
-    value: (text) => lines.push('= ' + text),
+    value: (text) => { lines.push('= ' + text); lines.copied = text; }, // the page's value() also marks it copyable
+    copyable: (text) => { lines.copied = text; },
     calendar: (spec) => lines.push('CAL ' + spec.year + '-' + spec.month + ' marks=' + spec.marks.sort((a, b) => a - b).join(',')),
   };
   return { out, lines, tone: () => tone };
@@ -363,6 +394,7 @@ async function makeApp(storage) {
     await commands.run(res.name, res.rest, ctx);
     const r = rec.lines.slice();
     Object.defineProperty(r, 'tone', { value: rec.tone(), enumerable: false });
+    Object.defineProperty(r, 'copied', { value: rec.lines.copied, enumerable: false });
     return r;
   };
   return { run, data, store, storage, ctx: base, commands, setNow: (d) => { clock = d; } };
@@ -650,6 +682,10 @@ test('alias and engine commands', async () => {
 test('tools commands', async () => {
   const app = await makeApp();
   assert.deepEqual(await app.run('calc 2*(3+4)'), ['# 2*(3+4) = 14']);
+  assert.equal((await app.run('calc 2*(3+4)')).copied, '14'); // for the copy button
+  assert.equal((await app.run('units 5 km to mi')).copied, '3.106855961');
+  assert.equal((await app.run('b64 enc hi')).copied, 'aGk=');
+  assert.equal((await app.run('epoch 0')).copied, '0');
   assert.deepEqual(await app.run('calc 1/0'), ['err: division by zero']);
   assert.deepEqual(await app.run('b64 enc hi there'), ['= aGkgdGhlcmU=']);
   const j = await app.run('json {"a":1}');
@@ -677,6 +713,20 @@ test('tools commands', async () => {
   assert.equal((await app.run('tz name paris Bob'))[0], "err: 'paris' is not in your list");
   assert.equal((await app.run('tz add Atlantis'))[0], "err: Unknown time zone 'Atlantis'");
   assert.match((await app.run('tz add nairobi ' + 'x'.repeat(33)))[0], /too long/);
+  // tz HH:MM <zone>: a time in another zone, listed or not, by city or name.
+  await app.run('tz add Pacific/Marquesas Kenji');
+  const conv = await app.run('tz 09:00 Pacific/Chatham');
+  const chathamRow = conv.find((l) => l.startsWith('Chatham | '));
+  assert.match(chathamRow, /^Chatham \| 09:00 \| /);
+  assert.match(conv[0], /^# 09:00 Chatham( \w{3} \d+ \w{3})? = \d\d:\d\d local/);
+  // ...and the local time is right: 09:00 on Chatham's own today.
+  const [cy, cm, cd] = Z.partsIn(MON, 'Pacific/Chatham').date.split('-').map(Number);
+  const inst = Z.zonedToDate(cy, cm, cd, 9, 0, 0, 'Pacific/Chatham');
+  assert.ok(conv[0].includes('= ' + U.pad2(inst.getHours()) + ':' + U.pad2(inst.getMinutes()) + ' local'), conv[0]);
+  assert.match((await app.run('tz 23:30 kenji'))[0], /^# 23:30 Kenji( \w{3} \d+ \w{3})? = \d\d:\d\d local/);
+  assert.ok(!app.data.state.settings.zones.includes('Pacific/Chatham')); // shown, not added
+  assert.equal((await app.run('tz 09:00 atlantis'))[0], "err: Unknown time zone 'atlantis'");
+  await app.run('tz rm kenji');
   // tz ls lists every zone the browser knows, filterable; listed ones are marked.
   const all = await app.run('tz ls');
   assert.match(all[0], /^# \d{3} time zones · earliest first$/);

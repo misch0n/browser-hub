@@ -67,7 +67,7 @@ export function edit(action, value, cursor, killed) {
 // Meta words use Alt (Option on a Mac, where e.key is a symbol, so match
 // e.code). Cmd and AltGr-style Ctrl+Alt chords are left to the system.
 const CTRL = { a: 'start', e: 'end', b: 'back-char', f: 'forward-char', u: 'kill-start', k: 'kill-end',
-  w: 'kill-big-word-back', d: 'delete-char', y: 'yank' };
+  w: 'kill-big-word-back', d: 'delete-char', y: 'yank', r: 'history-search', g: 'cancel' };
 const ALT = { KeyB: 'back-word', KeyF: 'forward-word', KeyD: 'kill-word-forward', Backspace: 'kill-word-back' };
 
 export function actionFor(e) {
@@ -75,4 +75,15 @@ export function actionFor(e) {
   if (e.ctrlKey && !e.altKey) return CTRL[(e.key || '').toLowerCase()] || null;
   if (e.altKey && !e.ctrlKey) return ALT[e.code] || null;
   return null;
+}
+
+// Ctrl+R: the newest history entry before index `before` that contains
+// `query` (any case) and isn't `skip` (the match on screen, so repeated
+// entries are stepped over). -1 when there is none.
+export function historySearch(items, query, before, skip) {
+  const q = query.toLowerCase();
+  for (let i = Math.min(before, items.length) - 1; i >= 0; i--) {
+    if (items[i] !== skip && items[i].toLowerCase().includes(q)) return i;
+  }
+  return -1;
 }

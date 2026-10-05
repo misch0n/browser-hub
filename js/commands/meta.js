@@ -19,6 +19,7 @@ export const SHORTCUTS = [
   ['Ctrl+U / Ctrl+K', 'cut to the start / end of the line'],
   ['Alt+D / Ctrl+D', 'cut the next word / delete the next character'],
   ['Ctrl+Y', 'paste the last cut text'],
+  ['Ctrl+R', 'search history: type to filter, Ctrl+R again for older, Enter runs, Tab edits, Esc cancels'],
 ];
 
 export default function register(add, { st, usage, isBuiltin, defs, byName }) {

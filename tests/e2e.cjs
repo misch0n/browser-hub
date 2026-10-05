@@ -29,6 +29,7 @@ async function check(name, fn) {
   const base = 'http://127.0.0.1:' + server.address().port + '/';
   const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined });
   const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 900 } });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const external = [];
   await context.route('**/*', (route) => {
     const u = route.request().url();
@@ -403,6 +404,58 @@ async function check(name, fn) {
     assert.ok(await lastTurn().locator('.code .t-num').count() > 0);
     await send('uuid');
     assert.equal(await lastTurn().locator('.value .copy').count(), 1);
+  });
+
+  await check('copy button by the prompt copies the latest result', async () => {
+    await send('calc 6*7');
+    const btn = page.locator('#copy-last');
+    assert.equal(await btn.isVisible(), true);
+    assert.match(await btn.getAttribute('title'), /Copy: 42/);
+    await btn.click();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '42');
+    assert.equal(await btn.textContent(), 'copied');
+    assert.equal(await focused(), 'prompt');
+    await send('uuid');
+    await btn.click();
+    assert.match(await page.evaluate(() => navigator.clipboard.readText()), /^[0-9a-f-]{36}$/);
+  });
+
+  await check('Ctrl+R searches history; Enter runs the match, Tab takes it to edit, Esc restores', async () => {
+    await send('calc 1+2');
+    await send('calc 10*10');
+    await type('draft');
+    await page.keyboard.press('Control+r');
+    await prompt.fill('');
+    await prompt.pressSequentially('calc');
+    assert.match(await page.locator('#hint').innerText(), /history search “calc”: calc 10\*10/);
+    await page.keyboard.press('Control+r');
+    assert.match(await page.locator('#hint').innerText(), /: calc 1\+2/);
+    await page.keyboard.press('Escape');
+    assert.equal(await prompt.inputValue(), 'draft');
+    await page.keyboard.press('Control+r');
+    await prompt.fill('');
+    await prompt.pressSequentially('1+');
+    await page.keyboard.press('Tab');
+    assert.equal(await prompt.inputValue(), 'calc 1+2');
+    await prompt.fill('');
+    await page.keyboard.press('Control+r');
+    await prompt.pressSequentially('10*');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /= 100/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.equal(await page.locator('.you-text').last().textContent(), 'calc 10*10');
+    await prompt.pressSequentially('zzzq');
+    await page.keyboard.press('Control+r');
+    assert.match(await page.locator('#hint').innerText(), /no match/);
+    await page.keyboard.press('Escape');
+    await prompt.fill('');
+  });
+
+  await check('did you mean: the hint offers the fix and Tab applies it', async () => {
+    await type('tsks');
+    assert.match(await page.locator('#hint').innerText(), /did you mean tasks\? tab fixes it/);
+    await page.keyboard.press('Tab');
+    assert.equal(await prompt.inputValue(), 'tasks ');
+    await prompt.fill('');
   });
 
   await check('pageshow clears stale input and refocuses', async () => {

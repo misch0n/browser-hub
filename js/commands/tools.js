@@ -3,7 +3,7 @@ import { oneValue } from '../core/args.js';
 import { evaluate, formatNumber } from '../lib/calc.js';
 import { convert, listUnits } from '../lib/units.js';
 import { uuid, b64encode, b64decode, prettyJson, parseEpochInput, fmtUTC, fmtLocal, relative } from '../lib/misc.js';
-import { localZone, zoneRows, workOverlap, allZones, resolveZone, zoneLabel } from '../lib/zones.js';
+import { localZone, zoneRows, workOverlap, allZones, resolveZone, zoneLabel, partsIn, zonedToDate } from '../lib/zones.js';
 
 export default function register(add, { st, usage }) {
   add({
@@ -16,6 +16,7 @@ export default function register(add, { st, usage }) {
       try {
         const v = formatNumber(evaluate(rest));
         out.head([[rest.trim(), 'dim'], [' = ', 'faint'], [v, 'num strong']]);
+        out.copyable(v);
       } catch (e) {
         out.err(e.message);
       }
@@ -24,8 +25,8 @@ export default function register(add, { st, usage }) {
 
   add({
     name: 'tz', group: 'Tools', desc: 'time across your zones, with working-hours overlap',
-    usage: ['tz [HH:MM]', 'tz ls [filter]', 'tz add <zone> [name]', 'tz name <zone> [name]', 'tz rm <zone>'],
-    examples: ['tz', 'tz 15:00', 'tz ls europe', 'tz add America/New_York NYC office', 'tz add tokyo', 'tz name tokyo "Kenji\'s team"'],
+    usage: ['tz [HH:MM [zone]]', 'tz ls [filter]', 'tz add <zone> [name]', 'tz name <zone> [name]', 'tz rm <zone>'],
+    examples: ['tz', 'tz 15:00', 'tz 15:00 tokyo', 'tz 9:30 NYC office', 'tz ls europe', 'tz add America/New_York NYC office', 'tz add tokyo', 'tz name tokyo "Kenji\'s team"'],
     complete: (prev) => {
       if (prev.length === 0) return ['ls', 'add', 'name', 'rm'].map((v) => ({ value: v }));
       if (prev.length === 1 && prev[0] === 'add') return allZones().map((z) => ({ value: z }));
@@ -121,20 +122,42 @@ export default function register(add, { st, usage }) {
         return out.head([['Removed ', ''], [zone, 'strong']], 'ok');
       }
 
+      // tz [HH:MM [zone]]: now, a local time, or a time in another zone
+      // (any zone, listed or not, by IANA name, city or your name for it).
       const now = ctx.now();
       let instant = now;
+      let from = null;
       if (rest) {
-        const time = parseTime(rest);
+        const [, hhmm, where] = /^(\S+)(?:\s+([\s\S]+))?$/.exec(rest.trim());
+        const time = parseTime(hhmm);
         if (!time) return usage(ctx, this);
-        instant = new Date(now.getFullYear(), now.getMonth(), now.getDate(), +time.slice(0, 2), +time.slice(3));
+        const h = +time.slice(0, 2), mi = +time.slice(3);
+        if (where) {
+          const w = oneValue(where).trim();
+          from = findListed(w) || resolveZone(w);
+          if (!from) return unknown(w);
+        }
+        if (from && from !== local) {
+          // That wall time on the zone's own today.
+          const [y, mo, d] = partsIn(now, from).date.split('-').map(Number);
+          instant = zonedToDate(y, mo, d, h, mi, 0, from);
+        } else {
+          instant = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, mi);
+        }
       }
-      const zones = listed();
+      const zones = listed().concat(from && !listed().includes(from) ? [from] : []);
       const rows = zoneRows(instant, zones);
       const overlap = zones.length > 1 ? workOverlap(instant, zones) : null;
-      out.head([[rest ? rows.find((r) => r.ref).time + ' local' : 'Time zones', 'strong'],
+      const localRow = rows.find((r) => r.ref);
+      const fromRow = from && from !== local ? rows.find((r) => r.zone === from) : null;
+      const title = !rest ? [['Time zones', 'strong']]
+        : fromRow ? [[fromRow.time + ' ' + zoneLabel(from, names), 'strong'], [fromRow.date ? ' ' + fromRow.date : '', 'warn'],
+          [' = ', 'faint'], [localRow.time + ' local', 'strong']]
+          : [[localRow.time + ' local', 'strong']];
+      out.head([...title,
         [overlap ? ' · overlap ' + (overlap.length ? overlap.join(', ') : 'none') : '', overlap && overlap.length ? 'ok' : 'dim']]);
       out.table(['name', 'time', '', 'utc', 'zone', ''], rows.map((r) => [
-        [[zoneLabel(r.zone, names), r.ref ? 'accent' : 'strong']],
+        [[zoneLabel(r.zone, names), r.ref ? 'accent' : r === fromRow ? 'info' : 'strong']],
         [[r.time, 'num']],
         [[r.date, 'warn']],
         [[r.offset, 'faint']],
@@ -154,6 +177,7 @@ export default function register(add, { st, usage }) {
       try {
         const d = rest ? parseEpochInput(rest) : ctx.now();
         out.head([[String(Math.floor(d.getTime() / 1000)), 'num strong'], [' seconds', 'dim']]);
+        out.copyable(String(Math.floor(d.getTime() / 1000)));
         out.kv([
           ['millis', [[String(d.getTime()), 'num']]],
           ['utc', [[fmtUTC(d), 'date']]],
@@ -226,6 +250,7 @@ export default function register(add, { st, usage }) {
       try {
         const r = formatNumber(convert(parseFloat(m[1]), m[2].trim(), m[3].trim()), 10);
         out.head([[m[1], 'num'], [' ' + m[2].trim(), 'dim'], [' = ', 'faint'], [r, 'num strong'], [' ' + m[3].trim(), 'accent']]);
+        out.copyable(r);
       } catch (e) {
         out.err(e.message);
       }

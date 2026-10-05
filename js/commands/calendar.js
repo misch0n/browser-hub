@@ -1,5 +1,6 @@
 import { parseId, parseDate, parseTime, truncate, byIdNum, plural, pad2, todayISO } from '../core/util.js';
-import { MONTH_NAMES, dayLabel, shortDate } from '../core/format.js';
+import { MONTH_NAMES, DAY_NAMES_LONG, dayLabel, shortDate } from '../core/format.js';
+import { daySummary, summaryRows, summaryCounts, tomorrowLine } from '../core/summary.js';
 import { agenda, eventDays, sortEvents } from '../core/agenda.js';
 import { parseICS } from '../lib/ics.js';
 import { oneValue } from '../core/args.js';
@@ -66,6 +67,38 @@ export default function register(add, { st, usage, records }) {
           ...d.tasks.map((t) => [[[t.id, 'id', { run: 't show ' + t.id }]], [['task due', 'warn']], t.text]),
         ]);
       }
+    },
+  });
+
+  add({
+    name: 'today', group: 'Calendar', desc: 'the daily summary; pinned at the top until dismissed for the day',
+    usage: ['today', 'today dismiss', 'today pin', 'today off', 'today on'],
+    examples: ['today', 'today dismiss', 'today off'],
+    complete: (prev) => (prev.length === 0 ? ['dismiss', 'pin', 'off', 'on'].map((v) => ({ value: v })) : []),
+    async run(ctx, rest) {
+      const { out } = ctx;
+      const today = todayISO(ctx.now());
+      const arg = rest.trim().toLowerCase();
+      if (arg) {
+        const change = { dismiss: { summaryDismissed: today }, pin: { summaryDismissed: null, summary: 'on' },
+          off: { summary: 'off' }, on: { summary: 'on', summaryDismissed: null } }[arg];
+        if (!change) return usage(ctx, this);
+        await ctx.data.mutate('settings', (d) => { Object.assign(d, change); });
+        const said = {
+          dismiss: 'Summary dismissed for today, on every device · today pin brings it back',
+          pin: 'Summary pinned', off: 'The summary is no longer pinned · today still prints it', on: 'Summary pinned again, every day',
+        };
+        return out.head(said[arg], 'ok');
+      }
+      const sum = daySummary(st(), today);
+      const d = ctx.now();
+      const counts = summaryCounts(sum);
+      out.head([['Today', 'strong'], [' · ' + DAY_NAMES_LONG[d.getDay()] + ' ' + d.getDate() + ' ' + MONTH_NAMES[d.getMonth()], 'dim'],
+        ...(counts.length ? [[' · ', 'faint'], ...counts] : [])], sum.overdue.length ? 'warn' : undefined);
+      const rows = summaryRows(sum);
+      if (rows.length) out.table(null, rows.map((r) => [r]));
+      else out.line([['Nothing overdue, due or scheduled today', 'dim']]);
+      out.line(tomorrowLine(sum));
     },
   });
 

@@ -11,6 +11,7 @@ import { tokenize, oneValue, quote } from '../js/core/args.js';
 import * as K from '../js/core/keys.js';
 import * as R from '../js/core/repeat.js';
 import * as S from '../js/core/search.js';
+import * as Sum from '../js/core/summary.js';
 import * as C from '../js/core/completion.js';
 import { createLocalStore } from '../js/core/store.js';
 import { createData, DEFAULTS } from '../js/core/data.js';
@@ -691,6 +692,32 @@ test('search: matching, ranking, regex, categories, highlighting', async () => {
   assert.equal((await app.run('find nothing-here'))[0], '# Nothing matches “nothing-here”');
   assert.equal((await app.run('find /(/'))[0].startsWith('err: not a valid regular expression'), true);
   assert.match((await app.run('find /oat/'))[0], /regular expression/);
+});
+
+test('daily summary: today, dismiss for the day (a synced setting), pin, off', async () => {
+  const app = await makeApp(); // Monday 2026-10-05
+  await app.run('t file the report due:2026-10-01');
+  await app.run('t pay rent due:today');
+  await app.run('ev today 10:30 design review');
+  await app.run('ev tomorrow 09:00 dentist');
+  const out = await app.run('today');
+  assert.deepEqual(out, ['# Today · Monday 5 October · 1 overdue · 1 event · 1 due',
+    'Thu 1 Oct  t1  file the report', '10:30  e1  design review', 'due today  t2  pay rent', 'Tomorrow: 1 event']);
+  assert.equal(out.tone, 'warn');
+  const st = () => app.data.state.settings;
+  assert.equal(Sum.summaryVisible(st(), '2026-10-05'), true);
+  assert.match((await app.run('today dismiss'))[0], /dismissed for today, on every device/);
+  assert.equal(st().summaryDismissed, '2026-10-05');
+  assert.equal(Sum.summaryVisible(st(), '2026-10-05'), false);
+  assert.equal(Sum.summaryVisible(st(), '2026-10-06'), true); // back the next day
+  await app.run('undo');
+  assert.equal(Sum.summaryVisible(st(), '2026-10-05'), true);
+  await app.run('today off');
+  assert.equal(Sum.summaryVisible(st(), '2026-10-06'), false);
+  await app.run('today on');
+  assert.equal(Sum.summaryVisible(st(), '2026-10-06'), true);
+  const empty = await makeApp();
+  assert.deepEqual(await empty.run('today'), ['# Today · Monday 5 October', 'Nothing overdue, due or scheduled today', 'Tomorrow is clear']);
 });
 
 test('quotes say what you mean: literal text, names with spaces', async () => {

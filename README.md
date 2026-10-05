@@ -47,6 +47,12 @@ its fields editable in place (ids in lists link to it): tap a value, change it,
 press Enter, and the page runs the matching `edit` command, so the transcript
 and history show exactly what changed.
 
+**Daily summary**: a card pinned at the top shows today's overdue tasks,
+events and due tasks (ids link to them) and a line about tomorrow. It stays
+until you dismiss it with × (or `today dismiss`) and comes back the next day.
+The dismissal is a setting, so with sync it applies on every device. `today`
+prints it, `today pin` brings it back, `today off` stops pinning it.
+
 **Find**: `find <words>` searches everything (tasks, notes, events, your
 aliases and engines, built-in commands, your command history) and shows the
 results grouped by kind, best group first, best match first, with the matches

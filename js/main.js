@@ -5,6 +5,7 @@ import { didYouMean } from './core/completion.js';
 import { todayISO, plural } from './core/util.js';
 import { THEMES, WIDGETS, isTheme, EXPORT_REMINDER_DAYS } from './core/catalog.js';
 import { DAY_NAMES_LONG, MONTH_NAMES, kindSeg } from './core/format.js';
+import { daySummary, summaryVisible, summaryRows, summaryCounts, tomorrowLine } from './core/summary.js';
 import { createCommands } from './commands/index.js';
 import { detectOS, keyLabel } from './core/keys.js';
 import { createTranscript } from './ui/transcript.js';
@@ -189,6 +190,43 @@ const prompt = createPrompt({
   },
 });
 
+// ---- pinned daily summary --------------------------------------------------------
+// At the top of the output on every device, each day, until dismissed (the
+// dismissal is a setting, so it reaches other devices with the rest).
+
+const pinnedEl = $('pinned');
+let pinnedKey = '';
+function renderPinned() {
+  const today = todayISO(now());
+  const show = summaryVisible(state.settings, today);
+  const sum = show ? daySummary(state, today) : null;
+  const key = show ? JSON.stringify([today, sum.overdue, sum.events, sum.due, sum.tomorrow]) : '';
+  if (key === pinnedKey) return;
+  pinnedKey = key;
+  pinnedEl.hidden = !show;
+  pinnedEl.textContent = '';
+  if (!show) return;
+  const d = now();
+  const counts = summaryCounts(sum);
+  const rows = summaryRows(sum);
+  const MAX = 5;
+  pinnedEl.append(
+    h('div', { class: 'pin-head' },
+      h('span', { class: 'pin-title' }, rich([['Today', 'strong'], [' · ' + DAY_NAMES_LONG[d.getDay()] + ' ' + d.getDate() + ' ' + MONTH_NAMES[d.getMonth()], 'dim'],
+        ...(counts.length ? [[' · ', 'faint'], ...counts] : [])])),
+      h('button', { type: 'button', class: 'pin-close', title: 'Dismiss for today (on every device)', 'aria-label': 'Dismiss for today', 'data-run': 'today dismiss', text: '×' })),
+    ...rows.slice(0, MAX).map((r) => h('div', { class: 'pin-row' }, rich(r))),
+    h('div', { class: 'pin-row pin-foot' }, rich([
+      ...(rows.length ? [] : [['Nothing overdue, due or scheduled today · ', 'dim']]),
+      ...(rows.length > MAX ? [['+' + (rows.length - MAX) + ' more · ', 'faint'], ['today', 'accent', { run: 'today' }], [' · ', 'faint']] : []),
+      ...tomorrowLine(sum)])),
+  );
+}
+pinnedEl.addEventListener('click', (e) => {
+  const link = e.target.closest('[data-run]');
+  if (link) { run(link.getAttribute('data-run')); autoFocus(); }
+});
+
 // ---- phone key bar ----------------------------------------------------------------
 // Touch keyboards have no Esc, Tab, arrows or Ctrl. The keys button under the
 // prompt (touch screens only) shows a row of them; the choice is kept on this
@@ -277,6 +315,7 @@ const widgets = createWidgets({
 
 data.onChange((col) => {
   if (col === null || col === 'settings' || col === 'aliases') applySettings();
+  renderPinned();
   widgets.render();
   prompt.update();
 });
@@ -355,20 +394,12 @@ async function start() {
   widgets.render();
   widgets.start();
 
-  const d = now();
-  const today = todayISO(d);
-  const events = state.events.items.filter((e) => e.date === today).length;
-  const open = state.tasks.items.filter((t) => !t.done);
-  const due = open.filter((t) => t.due === today).length;
-  const overdue = open.filter((t) => t.due && t.due < today).length;
-  const summary = [[DAY_NAMES_LONG[d.getDay()] + ' ' + d.getDate() + ' ' + MONTH_NAMES[d.getMonth()], 'dim']];
-  if (events) summary.push([' · ', 'faint'], [plural(events, 'event') + ' today', 'date']);
-  if (due) summary.push([' · ', 'faint'], [due + ' due today', 'warn']);
-  if (overdue) summary.push([' · ', 'faint'], [overdue + ' overdue', 'err']);
   transcript.welcome([
-    [['help', 'accent'], [' for commands · ', 'dim'], ['/', 'accent'], [' palette · ', 'dim'], ['?', 'accent'], [' shortcuts · anything else searches ', 'dim'], [state.aliases.defaultEngine, 'accent']],
-    summary,
+    [['help', 'accent'], [' for commands · ', 'dim'], ['find', 'accent'], [' searches everything · ', 'dim'], ['/', 'accent'], [' palette · ', 'dim'],
+      ['?', 'accent'], [' keys · anything else searches ', 'dim'], [state.aliases.defaultEngine, 'accent']],
   ]);
+  renderPinned();
+  setInterval(renderPinned, 60000); // a new day brings a new summary
 
   const notices = [];
   if (!store.persistent) notices.push(['warn', 'Storage is unavailable (private browsing?); nothing will be saved']);

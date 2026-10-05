@@ -367,6 +367,26 @@ async function check(name, fn) {
     assert.match(await lastText(), /Nothing matches/);
   });
 
+  await check('pinned summary: on top, links work, dismissed for the day across reloads, pin brings it back', async () => {
+    await send('today pin');
+    await send('t pinned summary task due:today');
+    assert.equal(await page.locator('#pinned').isVisible(), true);
+    assert.match(await page.locator('#pinned').innerText(), /Today[\s\S]*pinned summary task/);
+    await page.locator('#pinned .seg-run.t-id').last().click();
+    await page.waitForFunction(() => /^t show /.test([...document.querySelectorAll('.you-text')].pop().textContent));
+    await page.locator('#pinned .pin-close').click();
+    await page.waitForFunction(() => document.getElementById('pinned').hidden);
+    assert.equal(await page.locator('.you-text').last().textContent(), 'today dismiss');
+    await page.reload();
+    await page.waitForSelector('#prompt');
+    assert.equal(await page.locator('#pinned').isVisible(), false);
+    await send('today pin');
+    assert.equal(await page.locator('#pinned').isVisible(), true);
+    const id = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.find((t) => t.text === 'pinned summary task').id);
+    await send('t rm ' + id);
+    assert.doesNotMatch(await page.locator('#pinned').innerText(), /pinned summary task/); // follows the data
+  });
+
   await check('javascript: aliases are rejected', async () => {
     await send('alias evil javascript:alert(1)');
     assert.match(await lastText(), /only http: and https:/);

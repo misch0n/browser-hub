@@ -15,6 +15,7 @@ import * as S from '../js/core/search.js';
 import * as Sum from '../js/core/summary.js';
 import * as Merge from '../js/core/merge.js';
 import * as Log from '../js/core/log.js';
+import * as P from '../js/core/paste.js';
 import { createSync } from '../js/sync.js';
 import { fakeGitHub } from './fake-github.mjs';
 import * as C from '../js/core/completion.js';
@@ -1066,6 +1067,28 @@ test('clear and session: per device, undoable, synced across devices', async () 
   await pc.sync.syncNow();
   assert.deepEqual(inputs(pc), []);
   assert.equal((await pc.app.run('clear sometimes'))[0], '# Usage · clear');
+});
+
+test('paste placeholders: collapse, expand where the cursor goes, remove whole, run in full', () => {
+  const text = 'line one\nline two\nline three';
+  assert.equal(P.shouldCollapse(text), true);
+  assert.equal(P.shouldCollapse('short'), false);
+  assert.equal(P.shouldCollapse('x'.repeat(201)), true);
+  assert.equal(P.labelFor(text, 1), '[Pasted text #1 +3 lines]');
+  assert.equal(P.labelFor('x'.repeat(1234), 2), '[Pasted text #2, 1,234 characters]');
+  const pastes = new Map([['[Pasted text #1 +3 lines]', text]]);
+  const v = 'n [Pasted text #1 +3 lines] done';
+  assert.deepEqual(P.placeholders(v, pastes), [{ label: '[Pasted text #1 +3 lines]', start: 2, end: 27 }]);
+  assert.equal(P.expandAll(v, pastes), 'n line one\nline two\nline three done'); // what runs
+  assert.equal(P.expandAt(v, 2, pastes), null); // at the edge: still a placeholder
+  assert.equal(P.expandAt(v, 27, pastes), null);
+  const x = P.expandAt(v, 10, pastes); // inside: the text itself, line breaks as ⏎
+  assert.equal(x.value, 'n line one⏎line two⏎line three done');
+  assert.equal(x.caret, 2 + 'line one⏎line two⏎line three'.length);
+  assert.equal(P.expandAll(x.value, pastes), 'n line one\nline two\nline three done'); // and back
+  assert.deepEqual(P.removeAt(v, 27, 'Backspace', pastes), { value: 'n  done', caret: 2, label: '[Pasted text #1 +3 lines]' });
+  assert.deepEqual(P.removeAt(v, 2, 'Delete', pastes), { value: 'n  done', caret: 2, label: '[Pasted text #1 +3 lines]' });
+  assert.equal(P.removeAt(v, 10, 'Backspace', pastes), null);
 });
 
 test('quotes say what you mean: literal text, names with spaces', async () => {

@@ -198,6 +198,54 @@ async function check(name, fn) {
     assert.equal(await focused(), 'prompt');
   });
 
+  await check('pasting many lines: a placeholder; the cursor going in shows it; Enter runs the full text', async () => {
+    // -> true when the page left the paste to the browser (a short one)
+    const paste = (text) => prompt.evaluate((el, t) => {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', t);
+      return el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, text);
+    await type('n ');
+    await paste('first line\nsecond line\nthird line');
+    assert.equal(await prompt.inputValue(), 'n [Pasted text #1 +3 lines]');
+    // Backspace right after it removes the whole paste.
+    await page.keyboard.press('Backspace');
+    assert.equal(await prompt.inputValue(), 'n ');
+    await paste('first line\nsecond line\nthird line');
+    const label = await prompt.inputValue();
+    // Arrow into it: the text itself, line breaks as ⏎.
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForFunction(() => document.getElementById('prompt').value !== '' && !/Pasted/.test(document.getElementById('prompt').value), null, { timeout: 2000 });
+    assert.equal(await prompt.inputValue(), 'n first line⏎second line⏎third line');
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Added note/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    const note = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:notes')).items.pop());
+    assert.equal(note.text, 'first line\nsecond line\nthird line'); // real line breaks
+    // Unexpanded: the transcript echoes the placeholder, the note gets the text.
+    await type('n ');
+    await paste('alpha\nbeta');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Added note/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await page.locator('.you-text').last().textContent(), /^n \[Pasted text #\d+ \+2 lines\]$/);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('cc:notes')).items.pop().text), 'alpha\nbeta');
+    // Editing it in place keeps its line breaks (shown as ⏎).
+    const nid = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:notes')).items.pop().id);
+    await send('notes ' + nid + ' edit');
+    await page.waitForSelector('.turn:last-child .edit-input');
+    assert.equal(await lastTurn().locator('.edit-input').inputValue(), 'alpha⏎beta');
+    await lastTurn().locator('.edit-input').press('End');
+    await lastTurn().locator('.edit-input').pressSequentially('⏎gamma');
+    await lastTurn().locator('.edit-input').press('Enter');
+    await page.waitForFunction(() => /Updated/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.equal(await page.evaluate((i) => JSON.parse(localStorage.getItem('cc:notes')).items.find((n) => n.id === i).text, nid), 'alpha\nbeta\ngamma');
+    // Short pastes go in as they are: the page leaves them to the browser.
+    await type('');
+    assert.equal(await paste('hello'), true);
+    assert.equal(await prompt.inputValue(), '');
+    assert.ok(label);
+  });
+
   await check('history with arrows; Esc clears; ? shows shortcuts', async () => {
     await send('calc 1+1');
     await page.keyboard.press('ArrowUp');

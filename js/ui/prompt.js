@@ -1,5 +1,6 @@
 import { complete, applyTab } from '../core/completion.js';
 import { edit, actionFor, historySearch } from '../core/lineedit.js';
+import { shouldCollapse, labelFor, expandAll, expandAt, removeAt, toField } from '../core/paste.js';
 
 // The input line: ghost-text completion, Tab, history, and a live hint that
 // says what Enter would do.
@@ -19,10 +20,30 @@ export function createPrompt(opts) {
   // askSecret(): the next Enter hands over the text instead of running it,
   // with the field masked; it is never echoed or kept in history.
   let secret = null; // { resolve, placeholder }
+  // Long pastes, shown as placeholders until the cursor goes into one (core/paste.js).
+  const pastes = new Map();
+  let pasteN = 0;
 
+  // Puts `text` in the field; a recalled multi-line command shows as a placeholder again.
   function set(text) {
-    input.value = text;
-    input.setSelectionRange(text.length, text.length);
+    let v = String(text);
+    if (/[\r\n]/.test(v)) {
+      const m = /^(\S+\s+)([\s\S]*)$/.exec(v);
+      const body = m ? m[2] : v;
+      const label = labelFor(body, ++pasteN);
+      pastes.set(label, body);
+      v = (m ? m[1] : '') + label;
+    }
+    input.value = toField(v);
+    input.setSelectionRange(input.value.length, input.value.length);
+    update();
+  }
+
+  function insertAtCursor(text) {
+    const a = input.selectionStart, b = input.selectionEnd;
+    input.value = input.value.slice(0, a) + text + input.value.slice(b);
+    input.setSelectionRange(a + text.length, a + text.length);
+    histIdx = -1;
     update();
   }
 
@@ -47,6 +68,14 @@ export function createPrompt(opts) {
   }
 
   function update() {
+    // The cursor went into a paste placeholder: show the text itself.
+    if (!secret && pastes.size && input.selectionStart === input.selectionEnd) {
+      const r = expandAt(input.value, input.selectionStart, pastes);
+      if (r) {
+        input.value = r.value;
+        input.setSelectionRange(r.caret, r.caret);
+      }
+    }
     if (secret) {
       ghostTyped.textContent = '';
       ghostRest.textContent = '';
@@ -133,6 +162,17 @@ export function createPrompt(opts) {
       }
     }
     if (action === 'cancel') return;
+    if ((e.key === 'Backspace' || e.key === 'Delete') && pastes.size && input.selectionStart === input.selectionEnd) {
+      const r = removeAt(input.value, input.selectionStart, e.key, pastes);
+      if (r) {
+        e.preventDefault();
+        input.value = r.value;
+        input.setSelectionRange(r.caret, r.caret);
+        histIdx = -1;
+        update();
+        return;
+      }
+    }
     if (action) {
       // Handled even when nothing changes, so Ctrl+A never selects the page
       // and Ctrl+E / Ctrl+K never jump to the browser's search box.
@@ -148,10 +188,13 @@ export function createPrompt(opts) {
     switch (e.key) {
       case 'Enter': {
         e.preventDefault();
-        const v = input.value;
+        // The command gets the pasted text; the transcript shows what was in the field.
+        const shown = input.value;
+        const v = expandAll(shown, pastes);
         histIdx = -1;
+        pastes.clear();
         set('');
-        opts.onSubmit(v);
+        opts.onSubmit(v, shown);
         break;
       }
       case 'Tab': {
@@ -188,6 +231,15 @@ export function createPrompt(opts) {
   });
 
   input.addEventListener('input', () => { histIdx = -1; update(); });
+  input.addEventListener('paste', (e) => {
+    if (secret) return; // a token goes in as it is
+    const text = e.clipboardData && e.clipboardData.getData('text/plain');
+    if (!text || !shouldCollapse(text)) return;
+    e.preventDefault();
+    const label = labelFor(text, ++pasteN);
+    pastes.set(label, text);
+    insertAtCursor(label);
+  });
   document.addEventListener('selectionchange', () => { if (document.activeElement === input) update(); });
 
   return {
@@ -218,7 +270,7 @@ export function createPrompt(opts) {
     },
     set,
     update,
-    reset() { if (secret) endSecret(null); histIdx = -1; search = null; set(''); },
+    reset() { if (secret) endSecret(null); histIdx = -1; search = null; pastes.clear(); set(''); },
     focus() { input.focus({ preventScroll: true }); },
     blur() { input.blur(); },
     get value() { return input.value; },

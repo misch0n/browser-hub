@@ -156,8 +156,11 @@ const dispatchEnv = () => ({
 
 // Called straight from the Enter key handler: nothing before a built-in's
 // run() may await, so file pickers still count as user-initiated.
-function run(raw) {
+// `shown`: what the transcript echoes when it differs from what runs (a paste
+// placeholder instead of the pasted text).
+function run(raw, shown) {
   const input = raw.trim();
+  const echoed = (shown || raw).trim();
   if (!input) return Promise.resolve();
   // On a phone the drawer covers the output; get it out of the way of the result.
   if (root.classList.contains('drawer-open')) setDrawer(false);
@@ -167,9 +170,9 @@ function run(raw) {
   const keep = !(res.kind === 'builtin' && commands.byName.get(res.name).private);
   const at = now().toISOString();
   const id = newEntryId(device.id, at);
-  const out = transcript.turn(input, { at, pending: keep ? id : null });
+  const out = transcript.turn(echoed, { at, pending: keep ? id : null });
   const saved = data.addHistory(input);
-  const record = () => (keep ? data.appendLog(makeEntry({ id, at, device: device.id, deviceName: device.name, input, ops: out.ops })) : Promise.resolve());
+  const record = () => (keep ? data.appendLog(makeEntry({ id, at, device: device.id, deviceName: device.name, input: echoed, ops: out.ops })) : Promise.resolve());
 
   if (res.kind === 'builtin') return commands.run(res.name, res.rest, ctxFor(out)).then(record);
   if (res.kind === 'error') { out.err(res.message); return record(); }

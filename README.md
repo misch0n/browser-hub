@@ -131,6 +131,13 @@ are: `alias bug https://jira.example.com/issues/?jql=project="APP" AND text ~ "%
 `alias edit <name>` puts the whole definition in the prompt. `import` also
 reads an xsearch export (a JSON object of name to URL).
 
+**Pasting**: a paste of several lines (or a very long one) shows as a
+placeholder, `[Pasted text #1 +12 lines]`, as in Claude's CLI. Move the cursor
+into it (click it, or arrow into it) to see and edit the text, where line
+breaks show as ⏎; Backspace right after it removes the whole paste. Enter runs
+the command with the full text (`n` keeps the line breaks), and the history
+shows the placeholder.
+
 On touch screens, tap outside the prompt box to put the keyboard away and tap
 the box to bring it back.
 

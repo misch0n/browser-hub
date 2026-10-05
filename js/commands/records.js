@@ -42,7 +42,7 @@ function display(kind, field, item, today) {
     case 'alias.template': return item.template ? [[item.template, 'url']] : none;
     case 'alias.escape': return [[item.escape, 'dim']];
     case 'alias.name': return [[item.name, 'accent']];
-    default: return [[String(item[field]), '']];
+    default: return [[String(item[field]), 'pre']]; // line breaks kept
   }
 }
 

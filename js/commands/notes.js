@@ -4,6 +4,12 @@ import { oneValue } from '../core/args.js';
 
 // notes, and n: the same with plain text adding a note (n call the plumber).
 
+// In lists, a note of several lines shows its first, and how many more.
+const noteLine = (text) => {
+  const lines = text.split('\n');
+  return lines.length > 1 ? [[lines[0], ''], ['  +' + (lines.length - 1) + (lines.length === 2 ? ' line' : ' lines'), 'faint']] : [[text, '']];
+};
+
 async function addNote(ctx, rest) {
   const text = oneValue(rest); // n "rm the weeds" is a note, quotes and all taken off
   if (!text.trim()) return ctx.out.err('A note needs some text');
@@ -28,7 +34,7 @@ export default function register(add, { st, records }) {
     out.table(['id', 'date', 'note'], list.map((n) => [
       [[n.id, 'id', { run: 'notes ' + n.id }]],
       [[dayLabel(todayISO(new Date(n.created)), today), 'dim']], // local day, not the UTC one
-      n.text,
+      noteLine(n.text),
     ]));
   }
 

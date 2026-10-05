@@ -41,6 +41,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .t-num { color: var(--num); font-variant-numeric: tabular-nums; }
 .t-url { color: var(--url); overflow-wrap: anywhere; }
 .t-gone { color: var(--faint); text-decoration: line-through; }
+.t-pre { white-space: pre-wrap; }
 
 /* ---- page layout ------------------------------------------------------------------- */
 

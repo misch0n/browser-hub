@@ -2,6 +2,7 @@ import { h, rich, copyButton } from './dom.js';
 import { monthGrid } from './components.js';
 import { jsonLines } from '../core/format.js';
 import { oneValue, quote } from '../core/args.js';
+import { toField, fromField } from '../core/paste.js';
 
 const MAX_TURNS = 400;
 
@@ -59,7 +60,7 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
         type: 'text', class: 'edit-input', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off',
         spellcheck: 'false', enterkeyhint: 'done', 'aria-label': edit.command,
       });
-      input.value = edit.current;
+      input.value = toField(edit.current); // a line break shows as ⏎, as in the prompt
       btn.replaceWith(input);
       input.focus();
       input.select();
@@ -67,7 +68,7 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
       const finish = (save) => {
         if (done) return;
         done = true;
-        const v = input.value;
+        const v = fromField(input.value);
         input.replaceWith(btn);
         if (save && v !== edit.current && opts.run) {
           // Quote only when the value wouldn't read back as typed.

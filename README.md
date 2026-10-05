@@ -19,11 +19,15 @@ tasks t3 rm                    remove it                 (undo brings it back)
 tasks t3 done                  actions of its own        (aliases: gh default)
 ```
 
-Swap `tasks` for `notes`, `events` or `aliases` (where the id is the name:
-`aliases gh edit template …`). Each has a short name that does exactly the
-same, and also adds from plain text: `t buy milk`, `n call mum`,
-`ev fri 19:00 dinner`, `alias gh https://github.com/`. The older orders
-(`t done t3`, `n rm n2`, `t edit t3.due fri`) still work.
+Swap `tasks` for `notes`, `events`, `aliases`, `zones` or `widgets`; the item
+is named by its id (`t3`), or for the others by name: `aliases gh edit template …`,
+`zones tokyo edit name Kenji`, `widgets zones move top`. Their own actions:
+`tasks t3 done`, `aliases ddg default`, `widgets zones on|off|move <where>`;
+`zones all` and `tasks all` list everything. Notes, tasks, events and aliases
+have a short name that does exactly the same and also adds from plain text:
+`t buy milk`, `n call mum`, `ev fri 19:00 dinner`, `alias gh https://github.com/`.
+The older orders (`t done t3`, `n rm n2`, `tz add tokyo`, `widgets move zones top`)
+still work.
 
 | Area | Commands |
 | --- | --- |
@@ -31,7 +35,7 @@ same, and also adds from plain text: `t buy milk`, `n call mum`,
 | Notes | `notes` (`n`) |
 | Tasks | `tasks` (`t`) |
 | Calendar | `events` (`ev`), `cal`, `agenda`, `today`, `ics import` |
-| Tools | `calc`, `tz`, `epoch`, `uuid`, `b64`, `json`, `units` |
+| Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
 | Sync | `sync` |
@@ -56,8 +60,9 @@ command or alias gets a "did you mean" in the hint, and Tab fixes it. The
 **copy** button at the right of the prompt copies the latest result (a `calc`
 answer, a `uuid`, pretty JSON …).
 
-`tz 15:00 tokyo` shows 15:00 Tokyo time across your zones (any zone, by city,
-IANA name or your name for it).
+`tz` shows the time across your zones; `tz 15:00 tokyo` shows 15:00 Tokyo
+time across them (any zone, by city, IANA name or your name for it). Manage the
+zones themselves with `zones`.
 
 **Editing**: every field of a note, task, event or alias can be changed from
 the command line (`tasks t3 edit due fri`, `aliases gh edit template https://github.com/{}`)
@@ -97,7 +102,7 @@ says so and `undo force` overrides. Steps are kept per device (the last 30).
 
 **Quotes** are optional. Plain words work; quotes say what you mean when it
 matters: `n "rm the weeds"` is a note, not a removal, `t "due:friday"` is task
-text, `tz add tokyo "Kenji's team"` names a clock. A quote only counts at the
+text, `zones add tokyo "Kenji's team"` names a clock. A quote only counts at the
 start of a word, so text like `project="APP"` needs no escaping.
 
 **Aliases** take `{}` (or `%s`) for everything typed after the name, and
@@ -115,8 +120,9 @@ the box to bring it back.
 
 **Widgets**: the right-hand panel shows live widgets (clock, agenda, tasks,
 calendar, time zones, notes, backup). `widgets` lists them, `widgets zones`
-toggles one, `widgets move zones top` (or `up|down|bottom|<n>`) and
-`widgets order zones clock` reorder them, `widgets hide|show` toggles the panel. On narrow screens the
+shows one, `widgets zones on|off` turns it on or off, `widgets zones move top`
+(or `up|down|bottom|<n>`) and `widgets order zones clock` reorder them,
+`widgets hide|show` toggles the panel. On narrow screens the
 panel becomes a drawer opened from the `widgets` button under the prompt.
 
 **From the address bar**: `https://misch0n.github.io/browser-hub/?q=<input>`

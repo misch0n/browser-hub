@@ -3,7 +3,7 @@
 //
 //   t "done laundry"           a task called "done laundry", not `t done <id>`
 //   t "due:friday is a word"   text, not a due date
-//   tz add tokyo "Kenji's team"
+//   zones add tokyo "Kenji's team"
 //
 // A quote only opens a quoted argument at the start of a word, and only
 // closes at a matching quote followed by whitespace or the end. Anything else

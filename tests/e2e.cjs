@@ -249,21 +249,21 @@ async function check(name, fn) {
   });
 
   await check('widgets: toggle by command and by ×, hide and show the panel', async () => {
-    await send('widgets calendar');
+    await send('widgets add calendar');
     await page.waitForSelector('[data-widget=calendar] .cal td.today');
     await send('widgets zones on');
     await page.waitForSelector('[data-widget=zones]');
     const order = () => page.locator('#widgets .widget').evaluateAll((els) => els.map((e) => e.dataset.widget));
     assert.deepEqual(await order(), ['clock', 'agenda', 'tasks', 'calendar', 'zones']);
-    await send('widgets move zones top');
+    await send('widgets zones move top');
     await page.waitForFunction(() => document.querySelector('#widgets .widget').dataset.widget === 'zones');
     assert.deepEqual(await order(), ['zones', 'clock', 'agenda', 'tasks', 'calendar']);
-    await send('tz add Pacific/Kiritimati Kiri');
+    await send('zones add Pacific/Kiritimati Kiri');
     await page.waitForFunction(() => /Kiri/.test(document.querySelector('[data-widget=zones]').innerText));
     const names = await page.locator('[data-widget=zones] .w-zone-name').allInnerTexts();
     assert.equal(names[names.length - 1], 'Kiri'); // UTC+14 is always the latest clock
-    await send('tz rm kiri');
-    await send('widgets move zones bottom');
+    await send('zones kiri rm');
+    await send('widgets zones move bottom');
     await page.locator('[data-widget=zones]').hover();
     await page.locator('[data-widget=zones] .w-close').click();
     await page.waitForFunction(() => !document.querySelector('[data-widget=zones]'));
@@ -491,7 +491,7 @@ async function check(name, fn) {
 
   await check('export, clear storage, import: all data comes back', async () => {
     await send('ev 2026-12-24 18:00 dinner');
-    await send('tz add Asia/Tokyo');
+    await send('zones add Asia/Tokyo');
     await send('engine default ddg');
     const snap = () => page.evaluate(() => {
       const o = {};

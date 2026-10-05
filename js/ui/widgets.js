@@ -109,7 +109,7 @@ const RENDERERS = {
           h('span', { class: 'w-zone-day t-warn', text: r.date }),
           h('span', { class: 'w-zone-time t-num', text: r.time })));
       });
-      if (zones.length === 1) box.appendChild(empty('Add zones: tz add <zone> [name]'));
+      if (zones.length === 1) box.appendChild(empty('Add zones: zones add <zone> [name]'));
       else {
         const o = workOverlap(now, zones);
         box.appendChild(h('div', { class: 'w-sub' }, rich([['overlap ', 'faint'], [o.length ? o.join(', ') : 'none', o.length ? 'ok' : 'dim']])));

@@ -1094,28 +1094,44 @@ test('tools commands', async () => {
   assert.deepEqual(await app.run('units 5 km to mi'), ['# 5 km = 3.106855961 mi']);
   assert.equal((await app.run('epoch 0'))[0], '# 0 seconds');
   const z = () => app.data.state.settings;
-  assert.deepEqual(await app.run('tz add europe/london'), ['# Added Europe/London']);
+  // zones: the shared grammar.
+  assert.deepEqual(await app.run('zones add europe/london'), ['# Added Europe/London']);
   const tz = await app.run('tz 14:30');
   assert.match(tz[0], /^# 14:30 local · overlap/);
   assert.equal(tz[1], '| name | time |  | utc | zone | ');
-  assert.deepEqual(await app.run('tz rm EUROPE/london'), ['# Removed Europe/London']);
-  // Custom names: on add, later with `tz name`, cleared with no name, dropped on rm.
-  assert.deepEqual(await app.run('tz add nairobi Kenji in Nairobi'), ['# Added Africa/Nairobi as Kenji in Nairobi']);
+  assert.deepEqual(await app.run('zones'), await app.run('tz')); // your zones, with the time in each
+  assert.deepEqual(await app.run('zones EUROPE/london rm'), ['# Removed Europe/London']);
+  assert.deepEqual(await app.run('zones add nairobi Kenji in Nairobi'), ['# Added Africa/Nairobi as Kenji in Nairobi']);
   assert.deepEqual(z().zoneNames, { 'Africa/Nairobi': 'Kenji in Nairobi' });
-  assert.ok((await app.run('tz')).some((l) => /^Kenji in Nairobi \| \d\d:\d\d \| .* \| Africa\/Nairobi \|/.test(l)));
-  assert.deepEqual(await app.run('tz name Africa/Nairobi Kenji'), ['# Named Africa/Nairobi as Kenji']);
-  assert.deepEqual(await app.run('tz add nairobi Nairobi team'), ['# Named Africa/Nairobi as Nairobi team']);
-  assert.deepEqual(await app.run('tz name nairobi "Kenji\'s team"'), ['# Named Africa/Nairobi as Kenji\'s team']);
-  assert.deepEqual(await app.run('tz name nairobi'), ['# Cleared the name of Africa/Nairobi']);
+  assert.ok((await app.run('zones')).some((l) => /^Kenji in Nairobi \| \d\d:\d\d \| .* \| Africa\/Nairobi \|/.test(l)));
+  // A zone by IANA name, city or your name for it; shown with its name editable.
+  const shown = await app.run('zones nairobi');
+  assert.deepEqual(shown.slice(0, 2), ['# zone Africa/Nairobi', 'name: Kenji in Nairobi  [zones Africa/Nairobi edit name = Kenji in Nairobi]']);
+  assert.deepEqual(await app.run('zones Africa/Nairobi'), shown);
+  assert.equal((await app.run('zones nairobi edit'))[0], '# Editing zones Africa/Nairobi · tap any value, Enter saves, Esc leaves it');
+  assert.equal((await app.run('zones nairobi edit name Kenji'))[0], '# Named Africa/Nairobi Kenji');
+  assert.equal(z().zoneNames['Africa/Nairobi'], 'Kenji');
+  await app.run('zones kenji edit name "Kenji\'s team"');
+  assert.equal(z().zoneNames['Africa/Nairobi'], "Kenji's team");
+  await app.run('zones nairobi edit name');
+  assert.equal(app.ctx.inputSet, "zones Africa/Nairobi edit name Kenji's team");
+  assert.equal((await app.run('zones nairobi edit name none'))[0], '# Cleared the name of Africa/Nairobi');
   assert.deepEqual(z().zoneNames, {});
+  assert.equal((await app.run('zones nairobi edit colour red'))[0], 'err: Zones have no field colour');
+  assert.equal((await app.run('zones paris'))[0], "err: 'paris' is not one of your zones");
+  assert.equal((await app.run('zones add Atlantis'))[0], "err: Unknown time zone 'Atlantis'");
+  assert.match((await app.run('zones add nairobi ' + 'x'.repeat(33)))[0], /too long/);
+  assert.match((await app.run('zones ' + Z.localZone() + ' rm'))[0], /your local zone; it can't be removed/);
+  // The older tz forms keep working.
   await app.run('tz add America/New_York NYC');
   assert.deepEqual(await app.run('tz rm nyc'), ['# Removed America/New_York']);
-  assert.deepEqual(z().zoneNames, {});
   assert.equal((await app.run('tz name paris Bob'))[0], "err: 'paris' is not in your list");
-  assert.equal((await app.run('tz add Atlantis'))[0], "err: Unknown time zone 'Atlantis'");
-  assert.match((await app.run('tz add nairobi ' + 'x'.repeat(33)))[0], /too long/);
+  await app.run('tz name nairobi Bob');
+  assert.equal(z().zoneNames['Africa/Nairobi'], 'Bob');
+  await app.run('tz name nairobi');
+  assert.deepEqual(z().zoneNames, {});
   // tz HH:MM <zone>: a time in another zone, listed or not, by city or name.
-  await app.run('tz add Pacific/Marquesas Kenji');
+  await app.run('zones add Pacific/Marquesas Kenji');
   const conv = await app.run('tz 09:00 Pacific/Chatham');
   const chathamRow = conv.find((l) => l.startsWith('Chatham | '));
   assert.match(chathamRow, /^Chatham \| 09:00 \| /);
@@ -1127,14 +1143,16 @@ test('tools commands', async () => {
   assert.match((await app.run('tz 23:30 kenji'))[0], /^# 23:30 Kenji( \w{3} \d+ \w{3})? = \d\d:\d\d local/);
   assert.ok(!app.data.state.settings.zones.includes('Pacific/Chatham')); // shown, not added
   assert.equal((await app.run('tz 09:00 atlantis'))[0], "err: Unknown time zone 'atlantis'");
-  await app.run('tz rm kenji');
-  // tz ls lists every zone the browser knows, filterable; listed ones are marked.
-  const all = await app.run('tz ls');
+  assert.equal((await app.run('tz lunch'))[0], "err: tz: 'lunch' is not a time (HH:MM)");
+  await app.run('zones kenji rm');
+  // zones all lists every zone the browser knows, filterable; yours are marked. tz ls is the older form.
+  const all = await app.run('zones all');
   assert.match(all[0], /^# \d{3} time zones · earliest first$/);
-  const asia = await app.run('tz ls africa/nai');
+  const asia = await app.run('zones all africa/nai');
   assert.equal(asia[0], '# 1 time zone matching "africa/nai"');
   assert.match(asia[2], /^Africa\/Nairobi \| \d\d:\d\d \| .* \| \+03:00 \| ● listed$/);
-  assert.equal((await app.run('tz ls zzz'))[0], '# No time zones match "zzz"');
+  assert.deepEqual(await app.run('tz ls africa/nai'), asia);
+  assert.equal((await app.run('zones all zzz'))[0], '# No time zones match "zzz"');
 });
 
 test('theme and widgets commands', async () => {
@@ -1147,23 +1165,32 @@ test('theme and widgets commands', async () => {
   assert.equal((await app.run('theme neon'))[0], "err: No theme 'neon'");
   const w = await app.run('widgets');
   assert.equal(w[0], '# Widgets · 3 of 7 on');
-  assert.deepEqual(await app.run('widgets zones'), ['# zones on']);
-  assert.deepEqual(app.data.state.settings.widgets, ['clock', 'agenda', 'tasks', 'zones']);
-  await app.run('widgets clock off');
-  await app.run('widgets calendar on');
+  // The shared grammar: widgets <name> shows it; on/off, move, edit, rm, add.
+  assert.deepEqual(await app.run('widgets zones'), ['# widget zones', 'on: ○ off  [widgets zones edit on = no]', 'position: —',
+    'shows: your time zones and working-hours overlap', 'dim: Tap a value to change it, or: widgets zones on']);
+  assert.deepEqual(await app.run('widgets zones on'), ['# zones on']);
   const ws = () => app.data.state.settings.widgets;
+  assert.deepEqual(ws(), ['clock', 'agenda', 'tasks', 'zones']);
+  await app.run('widgets clock rm'); // rm turns it off
+  await app.run('widgets add calendar'); // add turns it on
   assert.deepEqual(ws(), ['agenda', 'tasks', 'zones', 'calendar']); // turned on -> bottom
-  // Reordering from the command line.
-  assert.deepEqual(await app.run('widgets move zones top'), ['# Moved zones to 1', 'dim: Order: 1. zones  2. agenda  3. tasks  4. calendar']);
-  await app.run('widgets move agenda down');
+  assert.equal((await app.run('widgets zones edit'))[0], '# Editing widgets zones · tap any value, Enter saves, Esc leaves it');
+  // Reordering.
+  assert.deepEqual(await app.run('widgets zones move top'), ['# Moved zones to 1', 'dim: Order: 1. zones  2. agenda  3. tasks  4. calendar']);
+  await app.run('widgets agenda move down');
   assert.deepEqual(ws(), ['zones', 'tasks', 'agenda', 'calendar']);
-  await app.run('widgets move calendar 2');
+  await app.run('widgets calendar edit position 2');
   assert.deepEqual(ws(), ['zones', 'calendar', 'tasks', 'agenda']);
-  await app.run('widgets move zones bottom');
+  await app.run('widgets move zones bottom'); // the older order still works
   assert.deepEqual(ws(), ['calendar', 'tasks', 'agenda', 'zones']);
-  assert.equal((await app.run('widgets move calendar up'))[0], '# calendar is already first');
-  assert.equal((await app.run('widgets move clock top'))[0], 'err: clock is off');
-  assert.equal((await app.run('widgets move bogus top'))[0], "err: No widget 'bogus'");
+  assert.equal((await app.run('widgets calendar move up'))[0], '# calendar is already first');
+  assert.equal((await app.run('widgets clock move top'))[0], 'err: clock is off');
+  assert.equal((await app.run('widgets bogus move top'))[0], "err: widgets: 'bogus move top' is not a widget");
+  assert.equal((await app.run('widgets calendar move sideways'))[0], "err: Can't move to 'sideways': top, up, down, bottom or a position");
+  await app.run('widgets clock edit on yes');
+  assert.ok(ws().includes('clock'));
+  await app.run('widgets clock edit on no');
+  assert.ok(!ws().includes('clock'));
   await app.run('widgets order clock agenda');
   assert.deepEqual(ws(), ['clock', 'agenda', 'calendar', 'tasks', 'zones']); // named first, clock turned on
   assert.equal((await app.run('widgets order clock clock'))[0], 'err: Each widget can be named once');
@@ -1171,9 +1198,10 @@ test('theme and widgets commands', async () => {
   assert.deepEqual(listed.slice(1, 3), ['1 | ● | clock | time and date', '2 | ● | agenda | overdue tasks, events and due tasks for the week']);
   assert.deepEqual(await app.run('widgets hide'), ['# Widget panel hidden']);
   assert.equal(app.data.state.settings.panel, false);
-  await app.run('widgets notes');
+  await app.run('widgets notes on');
   assert.equal(app.data.state.settings.panel, true); // turning one on shows the panel
-  assert.equal((await app.run('widgets bogus'))[0], "err: No widget 'bogus'");
+  assert.equal((await app.run('widgets bogus'))[0], "err: widgets: 'bogus' is not a widget");
+  assert.equal((await app.run('widgets add bogus'))[0], "err: No widget 'bogus'");
 });
 
 test('help, history', async () => {
@@ -1203,7 +1231,7 @@ test('help, history', async () => {
   const ht = await app.run('help t');
   assert.deepEqual(ht.slice(0, 3), ['# t · short for tasks; t <text> adds a task', '## Usage', 't <text> [due:<date>] [every:<rule>] [#tag]']);
   // Every kept thing documents the same shape.
-  for (const [noun, id] of [['notes', '<id>'], ['tasks', '<id>'], ['events', '<id>'], ['aliases', '<name>']]) {
+  for (const [noun, id] of [['notes', '<id>'], ['tasks', '<id>'], ['events', '<id>'], ['aliases', '<name>'], ['zones', '<zone>'], ['widgets', '<name>']]) {
     const u = (await app.run('help ' + noun)).filter((l) => l.startsWith(noun));
     assert.ok(u.some((l) => l.startsWith(noun + ' add ')), noun);
     assert.ok(u.includes(noun + ' ' + id), noun);

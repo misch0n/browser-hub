@@ -303,7 +303,10 @@ const palette = createPalette({
     for (const e of mine.filter((x) => x.template)) items.push({ name: e.name, desc: e.template, kind: 'engine', section: 'Your search engines', insert: e.name + ' ' });
     for (const e of mine.filter((x) => !x.template)) items.push({ name: e.name, desc: e.base, kind: 'alias', section: 'Your aliases', insert: e.name + ' ' });
     for (const t of THEMES) items.push({ name: 'theme ' + t.id, desc: t.desc, kind: 'theme', section: 'Themes', run: true });
-    for (const w of WIDGETS) items.push({ name: 'widgets ' + w.id, desc: (state.settings.widgets.includes(w.id) ? 'hide: ' : 'show: ') + w.desc, kind: 'widget', section: 'Widgets', run: true });
+    for (const w of WIDGETS) {
+      const isOn = state.settings.widgets.includes(w.id);
+      items.push({ name: 'widgets ' + w.id + (isOn ? ' off' : ' on'), desc: (isOn ? 'hide: ' : 'show: ') + w.desc, kind: 'widget', section: 'Widgets', run: true });
+    }
     return items;
   },
   onPick(item) {

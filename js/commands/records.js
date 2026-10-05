@@ -152,73 +152,94 @@ export function createRecords({ st, isBuiltin }) {
     return item ? { item } : { missing: parseId(prefix, word) };
   }
 
+  // The grammar, for anything described by an adapter:
+  //   { noun, label, target(word, bare) -> { item } | { missing } | null, key(item),
+  //     fields: [names], show(ctx, item, opts), setField(ctx, item, field, value | null),
+  //     remove(ctx, item), ids() -> [{ value, label }] }
+  // Notes, tasks, events and aliases get theirs from adapterFor(); time zones
+  // and widgets bring their own.
+  function adapterFor(kind) {
+    return {
+      noun: NOUNS[kind].noun, label: label(kind), fields: fieldsOf(kind),
+      target: (word, bare) => target(kind, word, bare),
+      key: (item) => keyOf(kind, item),
+      show: (ctx, item, opts) => show(ctx, kind, item, opts),
+      setField: (ctx, item, field, value) => setField(ctx, kind, item, field, value),
+      remove: (ctx, item) => remove(ctx, kind, item),
+      ids: () => (kind === 'alias'
+        ? st().aliases.entries.map((e) => ({ value: e.name, label: e.template ? 'engine' : 'alias' }))
+        : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || '').slice(0, 50) }))),
+    };
+  }
+  const asAdapter = (kindOrAdapter) => (typeof kindOrAdapter === 'string' ? adapterFor(kindOrAdapter) : kindOrAdapter);
+
   // Routes `<noun> …`, or its short name with spec.short set.
   // spec: { short?, list(ctx, rest), add(ctx, rest), verbs?: { name: (ctx, item, rest) }, show?(ctx, item) }
-  async function route(ctx, kind, rest, spec) {
+  async function route(ctx, kindOrAdapter, rest, spec) {
+    const A = asAdapter(kindOrAdapter);
     const { out } = ctx;
     const text = rest.trim();
     const words = text.split(/\s+/).filter(Boolean);
-    const n = NOUNS[kind];
     if (!words.length) return spec.list(ctx, '');
     if (words[0].toLowerCase() === 'add') return spec.add(ctx, text.slice(3).trim());
 
     // <key>.<field> <value>: the dot form, still understood.
     const dot = parseFieldEdit(text);
-    const dotTarget = dot && target(kind, dot.target, !spec.short);
-    if (dotTarget && dotTarget.item) return setField(ctx, kind, dotTarget.item, dot.field, dot.value);
+    const dotTarget = dot && A.target(dot.target, !spec.short);
+    if (dotTarget && dotTarget.item) return A.setField(ctx, dotTarget.item, dot.field, dot.value);
 
-    const t = target(kind, words[0], !spec.short);
+    const t = A.target(words[0], !spec.short);
     const verb = (words[1] || '').toLowerCase();
-    const verbs = verbsOf(kind, spec.verbs);
+    const verbs = ['edit', ...Object.keys(spec.verbs || {}), 'rm'];
     // With the short name, `t t3 something` is still task text unless `something` is a verb.
     const isItem = t && (!spec.short || !words[1] || verbs.includes(verb) || verb === 'show');
     if (!isItem) return spec.short ? spec.add(ctx, text) : spec.list(ctx, text);
-    if (t.missing) return out.err('No ' + label(kind) + ' ' + t.missing);
+    if (t.missing) return out.err('No ' + A.label + ' ' + t.missing);
     const item = t.item;
+    const key = A.key(item);
     // The raw text after the first i words.
     const after = (i) => {
       let s = text;
       for (let k = 0; k < i; k++) s = s.replace(/^\s*\S+/, '');
       return s.trim();
     };
-    if (!verb || verb === 'show') return spec.show ? spec.show(ctx, item) : show(ctx, kind, item);
+    if (!verb || verb === 'show') return spec.show ? spec.show(ctx, item) : A.show(ctx, item);
     if (verb === 'edit') {
       const field = words[2];
       if (!field) {
-        return show(ctx, kind, item, { open: fieldsOf(kind)[0],
-          head: [['Editing ', ''], [refOf(kind, item), kind === 'alias' ? 'accent' : 'id'], [' · tap any value, Enter saves, Esc leaves it', 'dim']] });
+        return A.show(ctx, item, { open: A.fields[0],
+          head: [['Editing ', ''], [A.noun + ' ' + key, 'id'], [' · tap any value, Enter saves, Esc leaves it', 'dim']] });
       }
       const v = after(3);
-      return setField(ctx, kind, item, field, v ? oneValue(v) : null);
+      return A.setField(ctx, item, field, v ? oneValue(v) : null);
     }
-    if (verb === 'rm' || verb === 'remove' || verb === 'delete') return remove(ctx, kind, item);
+    if (verb === 'rm' || verb === 'remove' || verb === 'delete') return A.remove(ctx, item);
     if (spec.verbs && spec.verbs[verb]) return spec.verbs[verb](ctx, item, after(2));
-    out.err(n.noun + ' ' + keyOf(kind, item) + ': no action ' + words[1]);
-    out.dim('Try: ' + verbs.map((v) => n.noun + ' ' + keyOf(kind, item) + ' ' + v).join(' · '));
+    out.err(A.noun + ' ' + key + ': no action ' + words[1]);
+    out.dim('Try: ' + verbs.map((v) => A.noun + ' ' + key + ' ' + v).join(' · '));
   }
 
   // Tab completion for `<noun> …`: ids, then actions, then field names.
-  function complete(kind, prev, spec = {}) {
-    const ids = () => (kind === 'alias'
-      ? st().aliases.entries.map((e) => ({ value: e.name, label: e.template ? 'engine' : 'alias' }))
-      : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || '').slice(0, 50) })));
-    if (prev.length === 0) return [{ value: 'add' }, ...(spec.first || []), ...ids()];
-    if (prev.length === 1 && target(kind, prev[0], true)) return verbsOf(kind, spec.verbs).map((v) => ({ value: v }));
-    if (prev.length === 2 && prev[1] === 'edit' && target(kind, prev[0], true)) return fieldsOf(kind).map((f) => ({ value: f }));
+  function complete(kindOrAdapter, prev, spec = {}) {
+    const A = asAdapter(kindOrAdapter);
+    if (prev.length === 0) return [{ value: 'add' }, ...(spec.first || []), ...A.ids()];
+    const t = A.target(prev[0], true);
+    if (prev.length === 1 && t && t.item) return ['edit', ...Object.keys(spec.verbs || {}), 'rm'].map((v) => ({ value: v }));
+    if (prev.length === 2 && prev[1] === 'edit' && t && t.item) return A.fields.map((f) => ({ value: f }));
     return [];
   }
 
   // Usage lines, all in the same shape.
-  function usageFor(kind, spec) {
-    const n = NOUNS[kind];
-    const id = kind === 'alias' ? '<name>' : '<id>';
+  function usageFor(kindOrAdapter, spec) {
+    const A = asAdapter(kindOrAdapter);
+    const id = spec.id || (kindOrAdapter === 'alias' ? '<name>' : '<id>');
     return [
-      n.noun + (spec.filter ? ' ' + spec.filter : ''),
-      n.noun + ' add ' + spec.addArgs,
-      n.noun + ' ' + id,
-      n.noun + ' ' + id + ' edit [<field> [<value>]]',
-      ...Object.keys(spec.verbs || {}).map((v) => n.noun + ' ' + id + ' ' + v),
-      n.noun + ' ' + id + ' rm',
+      A.noun + (spec.filter ? ' ' + spec.filter : ''),
+      A.noun + ' add ' + spec.addArgs,
+      A.noun + ' ' + id,
+      A.noun + ' ' + id + ' edit [<field> [<value>]]',
+      ...(spec.verbUsage || Object.keys(spec.verbs || {})).map((v) => A.noun + ' ' + id + ' ' + v),
+      A.noun + ' ' + id + ' rm',
     ];
   }
 

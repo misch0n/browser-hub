@@ -17,6 +17,7 @@ import * as Merge from '../js/core/merge.js';
 import * as Log from '../js/core/log.js';
 import * as P from '../js/core/paste.js';
 import { createSync } from '../js/sync.js';
+import * as Sync from '../js/sync.js';
 import { fakeGitHub } from './fake-github.mjs';
 import * as C from '../js/core/completion.js';
 import { createLocalStore } from '../js/core/store.js';
@@ -909,6 +910,51 @@ test('sync: setup, two devices, conflicts, races, expired tokens', async () => {
   assert.ok(A.app.data.state.tasks.items.length >= 3);
 });
 
+test('sync in a shared repository: its own directory only, never other files', async () => {
+  const gh = fakeGitHub({ tokens: ['tok'], repos: { 'me/shared': { private: true } } });
+  const others = {
+    'README.md': '# my private stuff\n',
+    'notes/journal.md': 'dear diary',
+    'other-app/data.json': '{"app":"something-else","collections":{"tasks":{"items":[]}}}', // looks a lot like ours
+    'data.json': '{"mine":"not the hub"}',
+  };
+  for (const [p, t] of Object.entries(others)) gh.seed('me/shared', p, t);
+  const device = async () => {
+    const app = await makeApp();
+    return { app, sync: createSync({ data: app.data, store: app.store, now: () => new Date(MON), fetch: gh.fetch, device: 'test' }) };
+  };
+  const A = await device();
+  await A.app.run('t from the hub');
+  await A.sync.setup('me/shared', undefined, 'tok');
+  assert.equal(A.sync.config.path, 'browser-hub/data.json'); // the default directory
+  assert.equal(gh.file('me/shared').collections.tasks.items[0].text, 'from the hub');
+  for (const [p, t] of Object.entries(others)) assert.equal(gh.raw('me/shared', p), t, p); // untouched
+  const touched = gh.state.requests.filter((r) => r.includes('/contents/')).map((r) => r.replace(/^\w+ /, ''));
+  assert.deepEqual([...new Set(touched)], ['/repos/me/shared/contents/browser-hub/data.json']);
+  assert.ok(gh.state.requests.every((r) => !r.startsWith('PUT') || r.endsWith('/browser-hub/data.json')));
+
+  // A directory of your choice; a second device finds it there.
+  const B = await device();
+  await B.sync.setup('me/shared', 'apps/hub/', 'tok');
+  assert.equal(B.sync.config.path, 'apps/hub/data.json');
+  assert.ok(gh.file('me/shared', 'apps/hub/data.json'));
+
+  // A directory whose data.json belongs to something else: refused, nothing written, nothing kept.
+  const C = await device();
+  await assert.rejects(C.sync.setup('me/shared', 'other-app', 'tok'), (e) => e.kind === 'bad-file' && /isn't the hub's file; it was left untouched/.test(e.message));
+  assert.equal(gh.raw('me/shared', 'other-app/data.json'), others['other-app/data.json']);
+  assert.equal(C.sync.config, null);
+  assert.equal(C.app.store.getLocal('sync-token'), null);
+  // Directory names: no files, no climbing out, no .git.
+  for (const bad of ['../up', 'a/../b', '.git', '.github/x', 'has space', 'x.json', 'browser-hub/data.json']) {
+    assert.ok(Sync.syncDir(bad).error, bad);
+  }
+  assert.equal(Sync.syncDir('/apps/hub/'), 'apps/hub');
+  assert.equal(Sync.syncDir(undefined), 'browser-hub');
+  // Commits in the shared history say what made them.
+  assert.equal(gh.message('me/shared'), 'browser-hub: sync from test');
+});
+
 test('sync command: status, setup asks for the token, cancel, errors, off', async () => {
   const gh = fakeGitHub({ tokens: ['tok'], repos: { 'me/data': { private: true } } });
   const app = await makeApp();
@@ -918,6 +964,8 @@ test('sync command: status, setup asks for the token, cancel, errors, off', asyn
   app.ctx.askSecret = async (label) => { asked.push(label); return answer; };
   assert.match((await app.run('sync'))[0], /^# Sync is off/);
   assert.equal((await app.run('sync setup not-a-repo'))[0], "err: 'not-a-repo' is not owner/repository");
+  assert.match((await app.run('sync setup me/data ../elsewhere'))[0], /not a directory name/);
+  assert.match((await app.run('sync setup me/data notes.json'))[0], /give a directory, not a file/);
   assert.equal((await app.run('sync setup me/data'))[0], '# Cancelled; nothing was saved'); // Esc
   assert.deepEqual(asked, ['GitHub token for me/data (hidden)']);
   answer = 'bad';
@@ -925,7 +973,8 @@ test('sync command: status, setup asks for the token, cancel, errors, off', asyn
   assert.ok(bad.includes('err: GitHub refused the token (expired or revoked)'));
   answer = 'tok';
   const ok = await app.run('sync setup me/data');
-  assert.ok(ok.includes('# Syncing with me/data · browser-hub.json'));
+  assert.ok(ok.includes('# Syncing with me/data · browser-hub/data.json'));
+  assert.ok(ok.includes('dim: Only browser-hub/data.json is read and written; the rest of me/data is left alone'));
   assert.ok(!ok.join('\n').includes('tok '));
   const st = await app.run('sync');
   assert.equal(st[0], '# Sync · in sync');

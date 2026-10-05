@@ -165,15 +165,19 @@ All data lives in `localStorage` (keys `cc:*`), behind the store interface in
 `js/core/store.js`. Safari can evict site storage, so keep a copy elsewhere:
 `export` downloads one, and **sync** keeps one in a private GitHub repository.
 
-**Sync**: notes, tasks, events, aliases and settings (not command history)
-are kept in one JSON file in a private repository of yours, so every device
-sees the same data.
+**Sync**: notes, tasks, events, aliases, settings and the shared history are
+kept in one JSON file in a private repository of yours, so every device sees
+the same data. The repository can be shared with other projects: the hub keeps
+to its own directory, `browser-hub/` unless you choose another, and only ever
+reads and writes `<directory>/data.json`. If a `data.json` already there isn't
+the hub's, sync refuses to touch it. Its commits say `browser-hub: sync from <device>`.
 
-1. Make a private repository (an empty one is fine).
+1. Use a private repository: a new one, or one you already keep private data in.
 2. Make a [fine-grained token](https://github.com/settings/personal-access-tokens/new)
    for just that repository, with **Contents: Read and write**, and an expiry.
-3. Run `sync setup <you>/<repository>`. The prompt asks for the token with the
-   input hidden; it is never shown, kept in history, exported or synced.
+3. Run `sync setup <you>/<repository>` (or `sync setup <you>/<repository> apps/hub`
+   for another directory). The prompt asks for the token with the input hidden;
+   it is never shown, kept in history, exported or synced.
 
 The token stays on that device only (each device gets its own, or the same one
 entered again). Changes go to the repo a few seconds after you make them and

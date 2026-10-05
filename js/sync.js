@@ -16,7 +16,24 @@ import { b64encode, b64decode } from './lib/misc.js';
 // opts: { data, store, now(), fetch, device: 'mac' | …, onStatus(status) }
 
 const API = 'https://api.github.com';
-const DEFAULT_PATH = 'browser-hub.json';
+// The repository may be shared with other projects: the hub keeps to one
+// directory of its own (browser-hub/ unless you pick another) and only ever
+// reads and writes the one file in it. A file there that isn't the hub's is
+// never read as data or written over.
+export const DEFAULT_DIR = 'browser-hub';
+export const FILE_NAME = 'data.json';
+
+// A directory inside the repository: 'browser-hub', 'apps/hub' (no leading or
+// trailing slash, no . or .., no .git, no spaces). -> clean name or { error }
+export function syncDir(input) {
+  const d = String(input || DEFAULT_DIR).trim().replace(/^\/+|\/+$/g, '');
+  if (!d) return { error: 'the directory is empty' };
+  if (/\.json$/i.test(d)) return { error: "give a directory, not a file: the hub keeps its data in <directory>/" + FILE_NAME };
+  const parts = d.split('/');
+  if (parts.some((p) => !/^[\w.-]+$/.test(p) || p === '.' || p === '..')) return { error: "'" + input + "' is not a directory name (letters, digits, . _ - and /)" };
+  if (parts[0].toLowerCase() === '.git' || parts[0].toLowerCase() === '.github') return { error: parts[0] + ' is not a place for data' };
+  return d;
+}
 export const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
 export class SyncError extends Error {
@@ -103,7 +120,10 @@ export function createSync(opts) {
     } catch (e) {
       throw new SyncError('bad-file', cfg.path + ' in ' + cfg.repo + ' is not a sync file (not JSON)');
     }
-    if (!file || typeof file !== 'object' || !file.collections) throw new SyncError('bad-file', cfg.path + ' is not a sync file');
+    if (!file || typeof file !== 'object' || !file.collections || (file.app && file.app !== 'control-center')) {
+      // Someone else's file in a shared repository: leave it alone.
+      throw new SyncError('bad-file', cfg.path + ' in ' + cfg.repo + " isn't the hub's file; it was left untouched. Pick another directory: sync setup " + cfg.repo + ' <directory>');
+    }
     if (file.schema > SCHEMA) throw new SyncError('bad-file', 'the repo was synced by a newer version of this page; reload it');
     return { sha: res.json.sha, collections: syncedPart(file.collections) };
   }
@@ -111,7 +131,7 @@ export function createSync(opts) {
   async function writeRemote(collections, sha) {
     const file = { app: 'control-center', schema: SCHEMA, updatedAt: now().toISOString(), by: opts.device || 'browser', collections };
     const body = {
-      message: 'Sync from ' + (opts.device || 'browser'),
+      message: 'browser-hub: sync from ' + (opts.device || 'browser'),
       content: b64encode(JSON.stringify(file, null, 1) + '\n'),
       ...(sha ? { sha } : {}),
       ...(cfg.branch ? { branch: cfg.branch } : {}),
@@ -182,11 +202,25 @@ export function createSync(opts) {
     timer = setTimeout(() => { syncNow().catch(() => {}); }, ms);
   }
 
-  async function setup(repo, path, tok) {
+  // setup(repo, directory = 'browser-hub', token): the hub's file is <directory>/data.json.
+  async function setup(repo, dirInput, tok) {
     if (!REPO_RE.test(repo)) throw new SyncError('missing', "'" + repo + "' is not owner/repository");
+    const dir = syncDir(dirInput);
+    if (dir.error) throw new SyncError('missing', dir.error);
     const { branch } = await checkRepo(repo, tok);
-    store.setLocal('sync-token', tok);
-    cfg = { repo, path: path || DEFAULT_PATH, branch, base: null, sha: null, lastSync: null };
+    const next = { repo, dir, path: dir + '/' + FILE_NAME, branch, base: null, sha: null, lastSync: null };
+    // Check the file before keeping anything: a foreign file there means no setup.
+    const prev = cfg;
+    const prevTok = store.getLocal('sync-token');
+    cfg = next;
+    try {
+      store.setLocal('sync-token', tok);
+      await readRemote();
+    } catch (e) {
+      cfg = prev;
+      if (prevTok) store.setLocal('sync-token', prevTok); else store.removeLocal('sync-token');
+      throw e;
+    }
     save();
     setStatus({ state: 'idle', message: null, lastSync: null });
     return syncNow();
@@ -210,7 +244,7 @@ export function createSync(opts) {
 
   return {
     syncNow, schedule, setup, setToken, off,
-    get config() { return cfg ? { repo: cfg.repo, path: cfg.path, branch: cfg.branch, lastSync: cfg.lastSync } : null; },
+    get config() { return cfg ? { repo: cfg.repo, dir: cfg.dir || null, path: cfg.path, branch: cfg.branch, lastSync: cfg.lastSync } : null; },
     get status() { return status; },
     get hasToken() { return !!token(); },
     tokenHint() {

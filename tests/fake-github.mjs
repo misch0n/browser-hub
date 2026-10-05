@@ -33,7 +33,7 @@ export function fakeGitHub({ tokens = [], repos = {} } = {}) {
       if (!file && body.sha) return { status: 422, json: { message: 'sha given for a new file' } };
       const text = Buffer.from(body.content, 'base64').toString('utf8');
       const sha = 'sha' + (++shaN);
-      repo.files[path] = { text, sha };
+      repo.files[path] = { text, sha, message: body.message };
       return { status: file ? 200 : 201, json: { content: { path, sha } } };
     }
     return { status: 405, json: { message: 'Method not allowed' } };
@@ -45,10 +45,15 @@ export function fakeGitHub({ tokens = [], repos = {} } = {}) {
   }
 
   // The data in a repo's sync file, parsed.
-  const file = (repo, path = 'browser-hub.json') => {
+  const file = (repo, path = 'browser-hub/data.json') => {
     const f = state.repos[repo].files[path];
     return f ? JSON.parse(f.text) : null;
   };
 
-  return { handle, fetch, state, file, revoke: (t) => valid.delete(t), allow: (t) => valid.add(t) };
+  // Puts a file in a repo, as another project sharing it would have.
+  const seed = (repo, path, text) => { state.repos[repo].files[path] = { text, sha: 'seed' + (++shaN) }; };
+  const raw = (repo, path) => (state.repos[repo].files[path] || {}).text;
+  const message = (repo, path = 'browser-hub/data.json') => (state.repos[repo].files[path] || {}).message;
+
+  return { handle, fetch, state, file, seed, raw, message, revoke: (t) => valid.delete(t), allow: (t) => valid.add(t) };
 }

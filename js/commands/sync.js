@@ -1,21 +1,21 @@
 import { relative } from '../lib/misc.js';
-import { REPO_RE } from '../sync.js';
+import { REPO_RE, syncDir, FILE_NAME } from '../sync.js';
 
 // sync: keep notes, tasks, events, aliases and settings in a file in a
 // private GitHub repository. The token stays on this device.
 
 const HOW = [
-  'Make a private repository on GitHub (an empty one is fine), e.g. browser-hub-data',
+  'Use a private GitHub repository: a new one, or one you share with other projects (the hub keeps to its own directory)',
   'Make a fine-grained token at github.com/settings/personal-access-tokens/new: only that repository, Contents: Read and write, and an expiry',
-  'Run: sync setup <you>/<repository>  (the prompt then asks for the token, hidden)',
+  'Run: sync setup <you>/<repository> [directory]  (default directory: browser-hub; the prompt then asks for the token, hidden)',
 ];
 
 export default function register(add, { usage }) {
   add({
     name: 'sync', group: 'Sync', noUndo: true, private: true, // its output (repo, token hint) stays out of the shared history
     desc: 'sync with a private GitHub repository; the token stays on this device',
-    usage: ['sync', 'sync setup <owner/repo> [file]', 'sync now', 'sync token', 'sync off'],
-    examples: ['sync setup me/browser-hub-data', 'sync now', 'sync token'],
+    usage: ['sync', 'sync setup <owner/repo> [directory]', 'sync now', 'sync token', 'sync off'],
+    examples: ['sync setup me/private-data', 'sync setup me/private-data apps/hub', 'sync now', 'sync token'],
     complete: (prev) => (prev.length === 0 ? ['setup', 'now', 'token', 'off'].map((v) => ({ value: v })) : []),
     async run(ctx, rest) {
       const { out } = ctx;
@@ -50,7 +50,7 @@ export default function register(add, { usage }) {
         out.head([['Sync', 'strong'], [' · ', 'faint'], state], s.state === 'error' || s.state === 'auth' ? 'err' : 'ok');
         out.kv([
           ['repository', [[c.repo, 'strong']]],
-          ['file', [[c.path, ''], [c.branch ? ' on ' + c.branch : '', 'dim']]],
+          ['file', [[c.path, ''], [c.branch ? ' on ' + c.branch : '', 'dim'], [' · the only file the hub touches', 'faint']]],
           ['last sync', c.lastSync ? [[relative(new Date(c.lastSync), ctx.now()), 'dim']] : [['never', 'faint']]],
           ['token', sync.hasToken ? [[sync.tokenHint(), 'dim'], [' · on this device only', 'faint']] : [['none on this device', 'err']]],
         ]);
@@ -61,15 +61,17 @@ export default function register(add, { usage }) {
       }
 
       if (cmd === 'setup') {
-        const [repo, path] = args;
+        const [repo, dirArg] = args;
         if (!repo || args.length > 2) return usage(ctx, this);
         if (!REPO_RE.test(repo)) return out.err("'" + repo + "' is not owner/repository");
-        if (path && !/^[\w.\-/]+\.json$/.test(path)) return out.err('the file must be a .json path inside the repository');
+        const dir = syncDir(dirArg);
+        if (dir.error) return out.err(dir.error);
         const tok = await askToken(repo);
         if (!tok) return out.head('Cancelled; nothing was saved', 'dim');
         out.dim('Checking ' + repo + '…');
         try {
-          report(await sync.setup(repo, path, tok), 'Syncing with ');
+          report(await sync.setup(repo, dir, tok), 'Syncing with ');
+          out.dim('Only ' + dir + '/' + FILE_NAME + ' is read and written; the rest of ' + repo + ' is left alone');
           out.dim('Changes sync a few seconds after you make them, and when the page opens or comes back into view');
         } catch (e) {
           failed(e);

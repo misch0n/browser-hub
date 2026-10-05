@@ -1612,3 +1612,110 @@ test('a second tab is never overwritten by a stale copy', async () => {
   await tabB.run('t from B'); // tabB never reloaded
   assert.deepEqual(JSON.parse(storage.getItem('cc:tasks')).items.map((t) => [t.id, t.text]), [['t1', 'from A'], ['t2', 'from B']]);
 });
+
+test('clip: sealed with a passphrase, one item, gone after 15 minutes, never kept', async () => {
+  const Clip = await import('../js/core/clip.js');
+  // Sealing: only the right passphrase opens it, and only on the times and device it was made with.
+  const meta = { at: '2026-10-05T10:00:00.000Z', expires: '2026-10-05T10:15:00.000Z', device: 'd1', deviceName: 'Mac · Chrome' };
+  const item = await Clip.seal('secret text ✓', 'correct horse battery', meta);
+  assert.ok(!JSON.stringify(item).includes('secret'));
+  assert.equal(await Clip.unseal(item, 'correct horse battery'), 'secret text ✓');
+  assert.equal(await Clip.unseal(item, 'wrong horse battery'), null);
+  assert.equal(await Clip.unseal({ ...item, expires: '2027-01-01T00:00:00.000Z' }, 'correct horse battery'), null); // moved: refused
+  // Expiry and merging: the newer wins; an expired one is wiped the same way everywhere.
+  const t = (iso) => new Date(iso);
+  assert.equal(Clip.isLive(item, t('2026-10-05T10:14:59Z')), true);
+  assert.equal(Clip.isLive(item, t('2026-10-05T10:15:00Z')), false);
+  assert.deepEqual(Clip.expire(item, t('2026-10-05T10:20:00Z')), { at: '2026-10-05T10:15:00.000Z', cleared: true });
+  const newer = { ...item, at: '2026-10-05T10:05:00.000Z', expires: '2026-10-05T10:20:00.000Z' };
+  assert.equal(Clip.mergeClip(item, newer, t('2026-10-05T10:06:00Z'), Merge.canonical).at, newer.at);
+  assert.equal(Clip.mergeClip(newer, item, t('2026-10-05T10:06:00Z'), Merge.canonical).at, newer.at);
+  assert.deepEqual(Clip.mergeClip(newer, { at: null }, t('2026-10-05T11:00:00Z'), Merge.canonical), { at: '2026-10-05T10:20:00.000Z', cleared: true });
+  const wiped = { at: '2026-10-05T10:07:00.000Z', cleared: true }; // `clip clear` after the newer one
+  assert.deepEqual(Clip.mergeClip(newer, wiped, t('2026-10-05T10:08:00Z'), Merge.canonical), wiped);
+
+  // Two devices through the fake GitHub.
+  const gh = fakeGitHub({ tokens: ['tok'], repos: { 'me/data': { private: true } } });
+  const device = async (name) => {
+    const app = await makeApp();
+    app.ctx.device.name = name;
+    app.ctx.sync = createSync({ data: app.data, store: app.store, now: () => app.ctx.now(), fetch: gh.fetch, device: name });
+    let answer = null;
+    app.ctx.askSecret = async () => answer;
+    app.answer = (a) => { answer = a; };
+    await app.ctx.sync.setup('me/data', null, 'tok');
+    return app;
+  };
+  const A = await device('laptop');
+  const B = await device('phone');
+
+  // Without a passphrase a clip stays on the device: nothing synced.
+  const local = await A.run('clip on this device only');
+  assert.match(local[0], /^# Clipped · 19 characters · on this device only/);
+  assert.deepEqual(await A.run('clip'), ['# Clip · from this device · 15 min left · this device only', '= on this device only', 'clip clear wipes it now']);
+  assert.ok(!JSON.stringify(gh.state.repos).includes('this device only'));
+  assert.equal(A.store.getLocal('clip').text, 'on this device only');
+
+  // A passphrase: too short is refused; Esc cancels; a good one is kept on the device only.
+  A.answer('short');
+  assert.match((await A.run('clip key'))[0], /^err: Use at least 10 characters/);
+  A.answer(null);
+  assert.equal((await A.run('clip key'))[0], '# Cancelled; the passphrase is unchanged');
+  A.answer('two devices one secret');
+  assert.match((await A.run('clip key'))[0], /^# Passphrase saved on this device/);
+
+  // Shared: sealed in the repo, opened on the other device once it has the passphrase.
+  const sent = await A.run('clip add https://example.com/path?token=abc');
+  assert.match(sent[0], /^# Clipped · 34 characters · sent sealed to your other devices · wiped in 15 minutes/);
+  assert.equal(A.store.getLocal('clip'), null); // the local-only one is replaced
+  const repo = JSON.stringify(gh.state.repos);
+  assert.ok(!repo.includes('example.com') && !repo.includes('two devices one secret'));
+  assert.ok(gh.file('me/data').collections.clip.sealed);
+  await B.ctx.sync.syncNow();
+  assert.deepEqual((await B.run('clip')).slice(0, 2), ['# A clip from laptop · sealed · 15 min left', 'Run clip key with the passphrase your other devices use']);
+  B.answer('not the same secret');
+  const wrongKey = await B.run('clip key');
+  assert.ok(wrongKey.includes('warn: It does not open the clip from laptop: is it the same passphrase?'));
+  assert.match((await B.run('clip'))[1], /passphrase isn't the one it was sealed with/);
+  B.answer('two devices one secret');
+  assert.ok((await B.run('clip key')).includes('It opens the clip from laptop · clip'));
+  const got = await B.run('clip');
+  assert.deepEqual(got.slice(0, 2), ['# Clip · from laptop · 15 min left', '= https://example.com/path?token=abc']);
+  assert.equal(got.copied, 'https://example.com/path?token=abc');
+
+  // One item: a newer clip from either side replaces it.
+  B.setNow(new Date(MON.getTime() + 60000));
+  await B.run('clip from the phone');
+  await A.ctx.sync.syncNow();
+  assert.equal((await A.run('clip'))[1], '= from the phone');
+
+  // Kept out of everything that lasts.
+  assert.equal(A.data.steps().undo.some((x) => x.label.startsWith('clip')), false);
+  assert.equal(A.commands.byName.get('clip').private, true);
+  assert.equal(A.commands.byName.get('clip').noHistory, true);
+  assert.ok(!JSON.stringify(await A.store.exportAll()).includes('"clip"'));
+  assert.ok(!JSON.stringify(A.data.state.log).includes('from the phone'));
+
+  // 15 minutes on: wiped here, and the wipe reaches the repository.
+  A.setNow(new Date(MON.getTime() + 60000 + Clip.CLIP_TTL));
+  assert.equal((await A.run('clip'))[0], '# The clipboard is empty');
+  assert.deepEqual(A.data.state.clip, { at: new Date(MON.getTime() + 60000 + Clip.CLIP_TTL).toISOString(), cleared: true });
+  await A.ctx.sync.syncNow();
+  assert.deepEqual(gh.file('me/data').collections.clip, A.data.state.clip);
+  // The other device, if it never swept, still agrees at its next sync (no conflict).
+  B.setNow(new Date(MON.getTime() + 60000 + Clip.CLIP_TTL + 1000));
+  const r = await B.ctx.sync.syncNow();
+  assert.deepEqual(r.conflicts, []);
+  assert.deepEqual(B.data.state.clip, A.data.state.clip);
+
+  // clip clear wipes it everywhere before then; a word after clip is text unless it is the whole command.
+  await A.run('clip add clear');
+  assert.equal((await A.run('clip'))[1], '= clear');
+  assert.match((await A.run('clip clear'))[0], /^# Clip wiped · on every device/);
+  await A.ctx.sync.syncNow();
+  assert.equal(gh.file('me/data').collections.clip.cleared, true);
+  assert.equal((await A.run('clip clear'))[0], '# The clipboard was already empty');
+  A.answer(null);
+  assert.match((await A.run('clip key off'))[0], /^# Passphrase forgotten on this device/);
+  assert.equal(A.store.getLocal('clip-key'), null);
+});

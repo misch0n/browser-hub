@@ -15,8 +15,9 @@
 // Pure: plain collection documents in, merged documents out.
 
 import { mergeLog } from './log.js';
+import { mergeClip } from './clip.js';
 
-export const SYNCED = ['meta', 'aliases', 'notes', 'tasks', 'events', 'settings', 'log'];
+export const SYNCED = ['meta', 'aliases', 'notes', 'tasks', 'events', 'settings', 'log', 'clip'];
 
 // JSON with object keys sorted, so equal data compares equal whatever the key order.
 export function canonical(v) {
@@ -99,11 +100,16 @@ function mergeSettings(b, l, r, noBase, out) {
 }
 
 // -> { collections, conflicts: [keys], renumbered: [{ from, to }] }
-export function merge3(base, local, remote) {
+// opts.now: the time, for wiping an expired shared clip (core/clip.js).
+export function merge3(base, local, remote, opts = {}) {
   const out = { conflicts: [], renumbered: [] };
   const noBase = !base;
   const B = base || {}, L = local || {}, R = remote || {};
-  if (!remote) return { collections: clone(local), ...out };
+  if (!remote) {
+    const collections = clone(local);
+    if (collections && collections.clip) collections.clip = mergeClip(collections.clip, null, opts.now, canonical);
+    return { collections, ...out };
+  }
   const doc = (X, c) => X[c] || {};
   const col = {};
 
@@ -138,6 +144,9 @@ export function merge3(base, local, remote) {
 
   // The visual history: every entry from both sides, clear marks three-way.
   if (L.log || R.log) col.log = mergeLog(base ? B.log : null, L.log, R.log);
+
+  // The shared clip: the newer one, or nothing once it has expired.
+  if (L.clip || R.clip) col.clip = mergeClip(L.clip, R.clip, opts.now, canonical);
 
   const lm = doc(L, 'meta'), rm = doc(R, 'meta');
   const stamps = (k) => [lm[k], rm[k]].filter((x) => typeof x === 'string').sort();

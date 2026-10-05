@@ -36,6 +36,7 @@ still work.
 | Tasks | `tasks` (`t`) |
 | Calendar | `events` (`ev`), `cal`, `agenda`, `today` |
 | Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units` |
+| Share | `clip` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
 | Sync | `sync` |
@@ -190,6 +191,20 @@ one. `sync` shows the state (also the `sync ✓` button under the prompt),
 `sync now` syncs right away, `sync off` forgets the token on this device. Sync
 refuses public repositories. The page may only connect to `api.github.com`
 (its Content Security Policy blocks everything else).
+
+**Shared clip**: `clip <text>` hands one piece of text to your other devices
+(`clip` there shows it, with a copy button; a device that gets a new clip
+says so). It is handled with care, because git keeps every version of the
+sync file for ever:
+
+- One item only: a new clip replaces the old one, from whichever device.
+- For 15 minutes: then it is wiped on every device and in the sync file
+  (`clip clear` wipes it sooner), and it disappears from the screen.
+- Sealed: the text goes to the repository encrypted (AES-GCM, with a key made
+  from a passphrase by PBKDF2). Give each device the same passphrase once with
+  `clip key` (asked hidden, kept on that device only, never synced). Without
+  one, a clip stays on the device it was made on.
+- Never kept: not in the shared history, ↑ recall, undo, `find` or `export`.
 
 ## Code layout
 

@@ -179,6 +179,15 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
         push(h('div', { class: 'value' }, h('span', { class: 'value-text', text }), copyButton(() => text)));
         out.copyable(text);
       },
+      // What this turn shows goes away after `ms` (a shared clip expiring):
+      // values and code are replaced by a note, and the copy button forgets `text`.
+      transient(ms, text) {
+        if (mode.replay) return;
+        setTimeout(() => {
+          for (const v of turnEl.querySelectorAll('.value, .code-wrap')) v.replaceWith(h('div', { class: 'line t-dim', text: 'expired: the clip was wiped' }));
+          if (opts.onExpired) opts.onExpired(text);
+        }, Math.max(0, Math.min(ms, 2147483647)));
+      },
       // Marks `text` as this command's result for the copy button.
       copyable(text) {
         if (opts.onCopyable && text && !mode.replay) opts.onCopyable(String(text));

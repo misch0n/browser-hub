@@ -9,13 +9,15 @@ import view from './view.js';
 import meta from './meta.js';
 import sync from './sync.js';
 import config from './config.js';
+import clip from './clip.js';
 import { usageSegs } from '../core/format.js';
 import { createRecords } from './records.js';
 import { removes } from '../core/undo.js';
 
 // Built-in commands. Each def is
 //   { name, group, desc, usage: [...], examples?: [...], complete?(prevArgs), run(ctx, rest),
-//     noUndo? (never an undo step), private? (kept out of the shared history), hidden? (an older
+//     noUndo? (never an undo step), private? (kept out of the shared history), noHistory? (not
+//     kept for ↑ either), hidden? (an older
 //     name: still works, not listed) }
 // and talks to the page only through ctx:
 //   ctx.out     structured output for this command (see ui/transcript.js); table rows
@@ -41,7 +43,7 @@ export function createCommands(getCtx) {
   };
   const records = createRecords({ st, isBuiltin });
   const helpers = { st, usage, isBuiltin, defs, byName, records };
-  for (const register of [find, notes, tasks, calendar, tools, zones, aliases, view, sync, config, meta]) register(add, helpers);
+  for (const register of [find, notes, tasks, calendar, tools, clip, zones, aliases, view, sync, config, meta]) register(add, helpers);
 
   // Runs a built-in as one undoable step (unless it is undo/redo itself).
   // Anything thrown is reported in the command's output. A step that removed

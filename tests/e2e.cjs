@@ -556,6 +556,32 @@ async function check(name, fn) {
     await page.waitForFunction(() => [...document.querySelectorAll('article.turn')].some((t) => /t from device b/.test(t.innerText) && /Phone B/.test(t.innerText)), null, { timeout: 5000 });
     assert.equal(await page.locator('article.turn .you-text', { hasText: 'sync now' }).count() >= 1, true);
     assert.equal(await page.locator('article.turn[data-id] .you-text', { hasText: /^sync/ }).count(), 0);
+
+    // The shared clip: a passphrase on each device (hidden), sealed in the repo, announced on the other device.
+    for (const [sendFn, pg] of [[send, page], [bsend, b]]) {
+      await sendFn('clip key');
+      assert.equal(await pg.locator('#prompt').getAttribute('type'), 'password');
+      await pg.locator('#prompt').pressSequentially('a long shared passphrase');
+      await pg.keyboard.press('Enter');
+      await pg.waitForFunction(() => /Passphrase saved/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 5000 });
+    }
+    await send('clip https://example.com/secret-link');
+    await page.waitForFunction(() => /Clipped/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 5000 });
+    assert.ok(!JSON.stringify(gh.state.repos).includes('secret-link'));
+    await bsend('sync now');
+    await b.waitForFunction(() => /Clip from/.test(document.getElementById('turns').innerText), null, { timeout: 5000 });
+    await b.locator('.turn.notice [data-run="clip"]').last().click();
+    await b.waitForFunction(() => /secret-link/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 5000 });
+    // Never kept: not in the shared history, not in ↑ recall, not in either device's storage as text.
+    const kept = async (pg) => pg.evaluate(() => Object.keys(localStorage).map((k) => localStorage.getItem(k)).join('\n'));
+    assert.ok(!(await kept(page)).includes('secret-link'));
+    assert.ok(!(await kept(b)).includes('secret-link'));
+    assert.equal(await page.locator('article.turn[data-id] .you-text', { hasText: /^clip/ }).count(), 0);
+    await prompt.fill('');
+    await page.keyboard.press('ArrowUp');
+    assert.ok(!/^clip/.test(await prompt.inputValue()));
+    await prompt.fill('');
+    await send('clip clear');
     await other.close();
 
     // The token is revoked: sync pauses, says so once, and a new token resumes it.

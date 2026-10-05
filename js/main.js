@@ -12,6 +12,8 @@ import { loadDevice } from './core/device.js';
 import { newEntryId, makeEntry, visible } from './core/log.js';
 import { createSync } from './sync.js';
 import { SYNCED } from './core/merge.js';
+import { sweepClip } from './commands/clip.js';
+import { isLive, timeLeft } from './core/clip.js';
 import { createTranscript } from './ui/transcript.js';
 import { createPrompt } from './ui/prompt.js';
 import { createPalette } from './ui/palette.js';
@@ -34,6 +36,7 @@ const transcript = createTranscript($('transcript'), $('turns'), {
   run: (cmd) => { run(cmd); autoFocus(); },
   refocus: () => autoFocus(),
   onCopyable: (text) => setCopyable(text),
+  onExpired: (text) => { if (lastCopyable === text) { lastCopyable = ''; copyEl.hidden = true; } },
 });
 
 // The copy button by the prompt: copies the latest result worth copying
@@ -124,6 +127,19 @@ function syncSoon(ms) {
   if (sync.config) sync.schedule(ms);
 }
 
+// ---- shared clip -------------------------------------------------------------------
+// A clip from another device is announced once; an expired one is wiped
+// (and the wipe syncs).
+
+function announceClip() {
+  const c = state.clip;
+  if (!isLive(c, now()) || c.device === device.id || store.getLocal('clip-seen') === c.at) return;
+  store.setLocal('clip-seen', c.at);
+  transcript.notice().head([['Clip from ' + (c.deviceName || 'another device'), 'strong'], [' · ', 'faint'],
+    ['clip', 'accent', { run: 'clip' }], [' shows it · ' + timeLeft(c, now()) + ' left', 'dim']], 'info');
+}
+const sweep = () => sweepClip(data, store, now).catch(() => {});
+
 // ---- shared visual history ------------------------------------------------------------
 // What every device ran, merged by time (core/log.js). The view is per device:
 // all devices (default), this one, or another one (session show …).
@@ -167,11 +183,13 @@ function run(raw, shown) {
   const res = dispatch(input, dispatchEnv());
   // Every command goes into the shared visual history once it has finished,
   // tagged with this device, except private ones (sync).
-  const keep = !(res.kind === 'builtin' && commands.byName.get(res.name).private);
+  const def = res.kind === 'builtin' ? commands.byName.get(res.name) : null;
+  const keep = !(def && def.private);
   const at = now().toISOString();
   const id = newEntryId(device.id, at);
   const out = transcript.turn(echoed, { at, pending: keep ? id : null });
-  const saved = data.addHistory(input);
+  // A shared clip isn't kept for ↑ either.
+  const saved = def && def.noHistory ? Promise.resolve() : data.addHistory(input);
   const record = () => (keep ? data.appendLog(makeEntry({ id, at, device: device.id, deviceName: device.name, input: echoed, ops: out.ops })) : Promise.resolve());
 
   if (res.kind === 'builtin') return commands.run(res.name, res.rest, ctxFor(out)).then(record);
@@ -388,6 +406,7 @@ const widgets = createWidgets({
 
 data.onChange((col) => {
   if (col === null || col === 'log') renderLog();
+  if (col === null || col === 'clip') announceClip();
   if (col === null || SYNCED.includes(col)) syncSoon(4000);
   if (col === null || col === 'settings' || col === 'aliases') applySettings();
   renderPinned();
@@ -481,6 +500,8 @@ async function start() {
   renderLog();
   renderPinned();
   setInterval(renderPinned, 60000); // a new day brings a new summary
+  sweep();
+  setInterval(sweep, 20000);
   showSyncStatus(sync.status);
   syncSoon(0);
   setInterval(() => { if (document.visibilityState === 'visible') syncSoon(0); }, 5 * 60000);

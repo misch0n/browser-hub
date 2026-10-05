@@ -150,7 +150,7 @@ export function createSync(opts) {
       const remote = await readRemote();
       const local = syncedPart(await data.read(SYNCED));
       const base = cfg.base || null;
-      const m = merge3(base, local, remote ? remote.collections : null);
+      const m = merge3(base, local, remote ? remote.collections : null, { now: now() });
       if (!sameData(m.collections, local) && !(await data.applySync(m.collections, local))) continue; // changed meanwhile
       let sha = remote ? remote.sha : null;
       if (!remote || !sameData(m.collections, remote.collections)) {

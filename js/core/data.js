@@ -30,6 +30,7 @@ export const DEFAULTS = {
     summary: 'on', summaryDismissed: null, name: null }),
   history: () => ({ items: [] }),
   log: () => emptyLog(),
+  clip: () => ({ at: null }), // the shared clipboard: one sealed item (core/clip.js)
 };
 
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);

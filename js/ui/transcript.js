@@ -124,14 +124,16 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
       err: (text) => { setTone('err'); line(text, 'err'); },
       dim: (text) => line(text, 'dim'),
       section: (content) => push(h('div', { class: 'section' }, rich(content))),
-      table(columns, rows) {
+      // opts.stack: a name -> description table (help, keys) that stacks each
+      // description under its name on narrow screens instead of squeezing it.
+      table(columns, rows, opts = {}) {
         const width = Math.max(columns ? columns.length : 0, ...rows.map((r) => (Array.isArray(r) ? r.length : 1)));
         // A row given as { section } is a group heading spanning the table.
         const tbody = h('tbody', null, ...rows.map((r) => (Array.isArray(r)
           ? h('tr', null, ...r.map((c) => h('td', null, rich(c))))
           : h('tr', { class: 'tr-section' }, h('td', { colspan: String(width) }, rich(r.section))))));
         const thead = columns ? h('thead', null, h('tr', null, ...columns.map((c) => h('th', { text: c })))) : null;
-        push(h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, thead, tbody)));
+        push(h('div', { class: 'tbl-wrap' }, h('table', { class: opts.stack ? 'tbl tbl-stack' : 'tbl' }, thead, tbody)));
       },
       kv(pairs) {
         push(h('dl', { class: 'kv' }, ...pairs.flatMap(([k, v]) => [h('dt', { text: k }), h('dd', null, rich(v))])));

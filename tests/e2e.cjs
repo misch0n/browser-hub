@@ -621,6 +621,32 @@ async function check(name, fn) {
     await touch.close();
   });
 
+  await check('phone width: tables never squeeze a column into a sliver (help, keys, lists)', async () => {
+    const touch = await browser.newContext({ viewport: { width: 375, height: 700 }, isMobile: true, hasTouch: true });
+    const tp = await touch.newPage();
+    await tp.goto(base);
+    await tp.waitForSelector('#prompt');
+    const send2 = async (c) => { await tp.locator('#prompt').fill(c); await tp.keyboard.press('Enter'); await tp.waitForTimeout(80); };
+    await send2('alias gh https://github.com/ https://github.com/{} --path');
+    await send2('t a task with a fairly long description that has to wrap somewhere due:tomorrow #home');
+    for (const c of ['help', 'keys', 'alias ls', 'tasks', 'tz', 'theme', 'widgets', 'help alias', 'agenda']) await send2(c);
+    const bad = await tp.evaluate(() => {
+      const out = [];
+      for (const t of document.querySelectorAll('.tbl')) {
+        const wrap = t.parentElement;
+        // A row as tall as many lines means a column was squeezed to a character or two.
+        for (const r of t.querySelectorAll('tr')) {
+          if (r.getBoundingClientRect().height > 90) out.push('tall row: ' + r.innerText.slice(0, 40));
+        }
+        if (t.classList.contains('tbl-stack') && t.getBoundingClientRect().width > wrap.clientWidth + 1) out.push('stack table overflows');
+      }
+      return out;
+    });
+    assert.deepEqual(bad, []);
+    assert.ok(await tp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    await touch.close();
+  });
+
   await check('desktop: no key bar toggle; palette groups commands, engines and aliases', async () => {
     assert.equal(await page.locator('#keys-toggle').isVisible(), false);
     await prompt.fill('');

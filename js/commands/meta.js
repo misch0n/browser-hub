@@ -48,7 +48,7 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
       rows.push({ section: [['Your aliases  ', ''], kindSeg('alias')] });
       if (!aliases.length) rows.push([[['none yet', 'faint']], [['alias <name> <url>', 'dim']]]);
       for (const e of aliases) rows.push([[[e.name, 'accent', { run: 'alias show ' + e.name }]], [[e.base, 'url']]]);
-      out.table(null, rows);
+      out.table(null, rows, { stack: true });
       out.section('Everything else');
       out.line([['Anything else is searched with ', 'dim'], [doc.defaultEngine, 'accent'],
         [' · help <command> for details · keys (or ?) for shortcuts', 'dim']]);
@@ -70,7 +70,7 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
           rows.push([caps, [[!isApple(os) && it.pc ? it.pc : it.desc, 'dim']]]);
         }
       }
-      out.table(null, rows);
+      out.table(null, rows, { stack: true });
       out.dim('On a phone, the keys button under the prompt shows buttons for the most useful ones');
     },
   });

@@ -181,9 +181,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .tbl .t-num, .tbl .t-date, .tbl .t-id, .tbl .t-faint, .tbl .t-warn { white-space: nowrap; }
 .tbl .tr-section td { padding-top: 8px; color: var(--strong); font-weight: 600; white-space: normal; }
 .tbl tbody .tr-section:first-child td { padding-top: 0; }
-.tbl tbody tr.tr-section:hover td { background: none; }
+.tbl tbody tr.tr-section td { background: none !important; }
 .tbl th:last-child, .tbl td:last-child { padding-right: 0; }
-.tbl tbody tr:hover td { background: var(--bg-hl); }
+/* Row highlight only with a real pointer: on touch screens :hover sticks after a tap. */
+@media (hover: hover) {
+  .tbl tbody tr:hover td { background: var(--bg-hl); }
+}
 
 /* key / value */
 .kv {
@@ -771,6 +774,16 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 
 @media (max-width: 520px) {
+  /* name -> description tables: the description goes under the name */
+  .tbl-stack, .tbl-stack tbody, .tbl-stack tr, .tbl-stack td { display: block; }
+  .tbl-stack thead { display: none; }
+  .tbl-stack tr { padding: 2px 0; }
+  .tbl-stack td, .tbl-stack td:first-child { padding: 0; white-space: normal; }
+  .tbl-stack td + td { padding-left: 2ch; }
+  .tbl-stack td:empty { display: none; }
+  .tbl-stack .tr-section td { padding-top: 8px; }
+  .tbl-stack tbody .tr-section:first-child td { padding-top: 0; }
+
   .tbl { font-size: 12px; }
   .tbl td, .tbl th { padding-right: 1.5ch; }
   #palette-list li { gap: 1.2ch; }

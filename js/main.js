@@ -185,7 +185,7 @@ const prompt = createPrompt({
   onList(input, candidates) {
     const out = transcript.turn(input);
     out.head([[plural(candidates.length, 'completion'), 'strong'], [' · keep typing or press tab', 'dim']]);
-    out.table(null, candidates.map((c) => [[[c.value, 'accent']], c.kind ? [kindSeg(c.kind)] : [], [[c.label || '', 'dim']]]));
+    out.table(null, candidates.map((c) => [[[c.value, 'accent']], c.kind ? [kindSeg(c.kind)] : [], [[c.label || '', 'dim']]]), { stack: true });
   },
 });
 

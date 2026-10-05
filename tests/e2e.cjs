@@ -347,6 +347,34 @@ async function check(name, fn) {
     await phone.close();
   });
 
+  await check('touch devices: text fields are 16px so iOS does not zoom on focus; ghost stays aligned', async () => {
+    const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    const tp = await touch.newPage();
+    await tp.goto(base);
+    await tp.waitForSelector('#prompt');
+    const sizes = await tp.evaluate(() => ['#prompt', '#ghost', '#palette-input'].map((sel) => getComputedStyle(document.querySelector(sel)).fontSize));
+    assert.deepEqual(sizes, ['16px', '16px', '16px']);
+    await tp.locator('#prompt').tap();
+    await tp.locator('#prompt').pressSequentially('hel');
+    const align = await tp.evaluate(() => {
+      const r = document.createRange();
+      r.selectNodeContents(document.getElementById('ghost-typed'));
+      const typed = r.getBoundingClientRect().width;
+      const probe = document.createElement('span');
+      probe.textContent = 'hel';
+      probe.style.font = getComputedStyle(document.getElementById('prompt')).font;
+      probe.style.position = 'fixed';
+      document.body.appendChild(probe);
+      const w = probe.getBoundingClientRect().width;
+      probe.remove();
+      return Math.abs(typed - w);
+    });
+    assert.ok(align < 0.5);
+    await touch.close();
+    // desktop (fine pointer) keeps the compact size
+    assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('prompt')).fontSize), '14px');
+  });
+
   await check('no console errors during the whole run', async () => {
     assert.deepEqual(errors.filter((e) => !/Content Security Policy|Refused to (connect|evaluate|execute)|Failed to fetch/i.test(e)), []);
   });

@@ -649,6 +649,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   .p-kind { display: none; }
 }
 
+/* Touch devices: iOS Safari zooms the page into any focused text field whose
+   font is under 16px. Keep the fields at 16px there (the ghost layer inherits
+   the same size, so completion stays aligned) instead of disabling zoom. */
+@media (pointer: coarse) {
+  .prompt-box, #palette-input { font-size: 16px; }
+  body { touch-action: manipulation; } /* no double-tap zoom on buttons */
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }

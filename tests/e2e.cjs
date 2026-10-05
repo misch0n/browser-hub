@@ -246,6 +246,32 @@ async function check(name, fn) {
     assert.ok(label);
   });
 
+  await check('developer tools: diff of two pastes, colour swatches, a JWT kept nowhere', async () => {
+    const paste = (text) => prompt.evaluate((el, t) => {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', t);
+      return el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, text);
+    await type('diff ');
+    await paste('one\ntwo\nthree');
+    await prompt.pressSequentially(' ');
+    await paste('one\n2\nthree');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Differs/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    const lines = await lastTurn().locator('pre.code > div').allInnerTexts();
+    assert.deepEqual(lines, ['  one', '- two', '+ 2', '  three']);
+    assert.equal(await lastTurn().locator('pre.code > div').nth(1).locator('.t-err').count(), 1);
+    await send('color #777 on #fff');
+    assert.equal(await lastTurn().locator('.swatches svg rect').getAttribute('fill'), '#ffffff');
+    assert.equal(await lastTurn().locator('.swatches svg text').getAttribute('fill'), '#777777');
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const token = b64({ alg: 'HS256' }) + '.' + b64({ sub: 'secret-subject' }) + '.sig';
+    await send('jwt ' + token);
+    assert.match(await lastText(), /secret-subject/);
+    const kept = await page.evaluate(() => Object.keys(localStorage).map((k) => localStorage.getItem(k)).join('\n'));
+    assert.ok(!kept.includes('secret-subject') && !kept.includes(token.slice(0, 20)));
+  });
+
   await check('history with arrows; Esc clears; ? shows shortcuts', async () => {
     await send('calc 1+1');
     await page.keyboard.press('ArrowUp');

@@ -37,6 +37,7 @@ still work.
 | Calendar | `events` (`ev`), `cal`, `agenda`, `today` |
 | Dates | `date`, `days`, `week` |
 | Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr` |
+| Developer | `hash`, `jwt`, `url`, `regex`, `diff`, `cron`, `color` |
 | Share | `clip` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
@@ -200,6 +201,15 @@ or back in days, weeks, months, years or workdays (Monday to Friday);
 the distance in days, weeks, months and workdays. `week` shows this ISO week
 (`week 52`, `week 1 2027`, `week 25 dec` for others), each day linking to
 `date`. Dates are written any way the rest of the hub understands them.
+
+**Developer tools**, all offline: `hash` (MD5, SHA-1/256/384/512), `jwt`
+(header, claims and expiry; the signature isn't checked, and the token is kept
+nowhere, not even for ↑), `url` (a URL taken apart, `url encode|decode`),
+`regex /pattern/flags <text>` (every match and its groups), `diff` (paste two
+texts after it, or quote two lines: line by line or word by word), `cron`
+(a schedule in words and its next runs in your time) and `color` (hex, rgb,
+hsl, and WCAG contrast: `color #777 on #fff`). `hash` input stays out of the
+shared history.
 
 **QR codes**: `qr <text>` draws one for a link or any text, made on the page
 (nothing is sent anywhere), always dark on white so phones can scan it in any

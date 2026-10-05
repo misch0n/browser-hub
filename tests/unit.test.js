@@ -418,6 +418,7 @@ function recorder() {
     value: (text) => { lines.push('= ' + text); lines.copied = text; }, // the page's value() also marks it copyable
     copyable: (text) => { lines.copied = text; },
     qr: (text, ecl) => lines.push('QR ' + ecl + ' ' + text),
+    swatch: (items) => lines.push('SWATCH ' + items.map((i) => i.color + (i.text ? ' ' + i.text.value + ' ' + i.text.color : '') + (i.label ? ' ' + i.label : '')).join(' | ')),
     calendar: (spec) => lines.push('CAL ' + spec.year + '-' + spec.month + ' marks=' + spec.marks.sort((a, b) => a - b).join(',')),
   };
   return { out, lines, tone: () => tone };
@@ -1806,4 +1807,124 @@ test('date, days and week commands', async () => {
   assert.equal((await app.run('week 2026-W10'))[0].slice(0, 25), '# Week 10 of 2026 · Monda');
   assert.equal((await app.run('week 25 dec'))[0].slice(0, 19), '# Week 52 of 2026 ·');
   assert.equal((await app.run('week 54'))[0], 'err: 2026 has weeks 1 to 53');
+});
+
+test('developer helpers: md5, jwt, diff, cron, colour', async () => {
+  const Dv = await import('../js/lib/dev.js');
+  // RFC 1321 test suite, plus multi-block and UTF-8 input.
+  const md5 = { '': 'd41d8cd98f00b204e9800998ecf8427e', a: '0cc175b9c0f1b6a831c399e269772661', abc: '900150983cd24fb0d6963f7d28e17f72',
+    'message digest': 'f96b697d7cb7938d525a2f31aaf161d0', abcdefghijklmnopqrstuvwxyz: 'c3fcd3d76192e4007dfb496cca67e13b',
+    '12345678901234567890123456789012345678901234567890123456789012345678901234567890': '57edf4a22be3c955ac49da2e2107b67a',
+    'The quick brown fox jumps over the lazy dog': '9e107d9d372bb6826bd81d3542a419d6' };
+  for (const [k, v] of Object.entries(md5)) assert.equal(Dv.md5(k), v, k);
+  assert.equal(Dv.md5('a'.repeat(1000)), 'cabe45dcc9ae5b66ba86600cca6b8ba8');
+  assert.equal(Dv.md5('héllo wörld'), execFileSync('md5sum', { input: 'héllo wörld' }).toString().slice(0, 32));
+
+  const b = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const tok = b({ alg: 'RS256' }) + '.' + b({ sub: 'u1', exp: 1 }) + '.sig';
+  assert.deepEqual(Dv.decodeJWT('Bearer ' + tok), { header: { alg: 'RS256' }, payload: { sub: 'u1', exp: 1 }, signature: 'sig' });
+  assert.throws(() => Dv.decodeJWT('a.b'), /header isn't base64url JSON/);
+  assert.throws(() => Dv.decodeJWT('nodots'), /three parts/);
+
+  const ops = Dv.diffLists(['a', 'b', 'c', 'd'], ['a', 'x', 'c', 'd', 'e']);
+  assert.deepEqual(ops, [['=', 'a'], ['-', 'b'], ['+', 'x'], ['=', 'c'], ['=', 'd'], ['+', 'e']]);
+  const long = Array.from({ length: 30 }, (_, i) => 'line ' + i);
+  const changed = long.slice(); changed[15] = 'changed';
+  assert.deepEqual(Dv.diffView(Dv.diffLists(long, changed)).map((l) => l.op + ' ' + l.text),
+    ['… 13 unchanged lines', '= line 13', '= line 14', '- line 15', '+ changed', '= line 16', '= line 17', '… 12 unchanged lines']);
+  assert.throws(() => Dv.diffLists(Array.from({ length: 3000 }, (_, i) => 'a' + i), Array.from({ length: 3000 }, (_, i) => 'b' + i)), /too large/);
+
+  const cron = (e) => Dv.describeCron(Dv.parseCron(e));
+  assert.equal(cron('*/15 * * * *'), 'Every 15 minutes');
+  assert.equal(cron('30 9 * * 1-5'), 'At 09:30, on Monday to Friday');
+  assert.equal(cron('0 9,17 * * mon-fri'), 'At 09:00 and 17:00, on Monday to Friday');
+  assert.equal(cron('@hourly'), 'At minute 0 of every hour');
+  assert.equal(cron('0 0 1 1 *'), 'At 00:00, on day 1 of the month, in January');
+  assert.equal(cron('23 0-20/2 * * *'), 'At minute 23, every 2 hours from 00:00 to 20:00');
+  assert.equal(cron('*/10 9-17 * * 1-5'), 'Every 10 minutes, from 09:00 to 17:59, on Monday to Friday');
+  assert.equal(cron('0 0 * * 7'), 'At 00:00, on Sunday'); // 7 is Sunday too
+  const next = (e, n) => Dv.cronNext(Dv.parseCron(e), MON, n).map((d) => U.toISO(d) + ' ' + U.pad2(d.getHours()) + ':' + U.pad2(d.getMinutes()));
+  assert.deepEqual(next('30 9 * * 1-5', 3), ['2026-10-06 09:30', '2026-10-07 09:30', '2026-10-08 09:30']);
+  assert.deepEqual(next('0 12 * * *', 1), ['2026-10-06 12:00']); // strictly after now (12:00)
+  assert.deepEqual(next('0 0 1,15 * 1', 3), ['2026-10-12 00:00', '2026-10-15 00:00', '2026-10-19 00:00']); // day or weekday
+  assert.deepEqual(next('0 0 */2 * 1', 2), ['2026-10-19 00:00', '2026-11-09 00:00']); // */2 isn't a restriction: odd days AND Mondays
+  assert.deepEqual(next('0 0 29 2 *', 1), ['2028-02-29 00:00']);
+  assert.deepEqual(next('0 0 30 2 *', 1), []);
+  for (const [bad, msg] of [['* * *', /5 fields/], ['61 * * * *', /'61' is not a minute/], ['5-1 * * * *', /runs backwards/], ['* * * foo *', /'foo' is not a month/], ['*/0 * * * *', /step/]]) {
+    assert.throws(() => Dv.parseCron(bad), msg, bad);
+  }
+
+  const c = Dv.parseColor;
+  assert.deepEqual(c('#0af'), { r: 0, g: 170, b: 255, a: 1 });
+  assert.deepEqual(c('00AAFF'), { r: 0, g: 170, b: 255, a: 1 });
+  assert.deepEqual(c('rgb(0 170 255 / 50%)'), { r: 0, g: 170, b: 255, a: 0.5 });
+  assert.deepEqual(c('rgba(0, 170, 255, 0.5)'), { r: 0, g: 170, b: 255, a: 0.5 });
+  assert.deepEqual(c('hsl(200, 100%, 50%)'), { r: 0, g: 170, b: 255, a: 1 });
+  assert.equal(c('nope'), null);
+  assert.equal(Dv.toHex(c('#00aaff80')), '#00aaff80');
+  assert.deepEqual(Dv.toHsl(c('#00aaff')), { h: 200, s: 100, l: 50 });
+  assert.equal(Dv.contrast(c('#000'), c('#fff')).toFixed(1), '21.0');
+  assert.equal(Dv.contrast(c('#777'), c('#fff')).toFixed(2), '4.48');
+});
+
+test('developer commands: hash, jwt (kept nowhere), url, regex, diff, cron, color', async () => {
+  const app = await makeApp();
+  const h = await app.run('hash hello');
+  assert.deepEqual(h.slice(1, 5), ['MD5 | 5d41402abc4b2a76b9719d911017c592', 'SHA-1 | aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d',
+    'SHA-256 | 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+    'SHA-512 | 9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043']);
+  assert.equal(h.copied, '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824');
+  assert.deepEqual(await app.run('hash sha384 abc'), ['# SHA-384 · 3 bytes of UTF-8',
+    '= cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7']);
+  assert.equal(app.commands.byName.get('hash').private, true);
+
+  const b = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const exp = Math.floor(MON.getTime() / 1000) + 7200;
+  const j = await app.run('jwt ' + b({ alg: 'HS256', typ: 'JWT' }) + '.' + b({ sub: 'user-1', exp }) + '.c2ln');
+  assert.equal(j[0], '# JWT · HS256 · valid, expires in 2 hours');
+  assert.equal(j.tone, 'ok');
+  assert.ok(j.includes('subject: user-1'));
+  assert.ok(j.includes('expires: Monday 5 October 14:00 · in 2 hours'));
+  const old = await app.run('jwt ' + b({ alg: 'none' }) + '.' + b({ exp: 1 }) + '.');
+  assert.match(old[0], /^# JWT · none · expired \d+ years ago$/);
+  assert.equal(old.tone, 'err');
+  assert.equal(app.commands.byName.get('jwt').noHistory, true);
+  assert.equal(app.commands.byName.get('jwt').private, true);
+
+  const u = await app.run('url example.com/a%20b?q=hello%20world&x=1#top');
+  assert.deepEqual(u.slice(0, 6), ['# example.com · https', 'scheme: https', 'host: example.com', 'port: 443 (default)', 'path: /a b', 'fragment: top']);
+  assert.deepEqual(u.slice(6), ['## Query · 2 parameters', 'q | hello world', 'x | 1']);
+  assert.equal((await app.run('url encode a&b=c d'))[0], '= a%26b%3Dc%20d');
+  assert.equal((await app.run('url decode a%26b%3Dc%20d'))[0], '= a&b=c d');
+  assert.equal((await app.run('url decode %zz'))[0], 'err: Not valid percent-encoding: %zz');
+
+  const r = await app.run('regex /(\\d{3})-(\\d{4})/ call 555-1234 or 555-9876');
+  assert.deepEqual(r, ['# 2 matches · /(\\d{3})-(\\d{4})/', 'call 555-1234 or 555-9876', '| # | at | match | groups',
+    '1 | 5 | 555-1234 | 1=555  2=1234', '2 | 17 | 555-9876 | 1=555  2=9876']);
+  assert.equal((await app.run('regex /^(?<user>[^@]+)@(?<domain>.+)$/ me@example.com'))[3], '1 | 0 | me@example.com | user=me  domain=example.com');
+  assert.equal((await app.run('regex /a|/ ba'))[0], '# 3 matches · /a|/'); // empty matches don't loop for ever
+  assert.equal((await app.run('regex /[/]x/'))[0], '# Valid · 0 groups · add some text after it to try it');
+  assert.match((await app.run('regex /(/ x'))[0], /^err: Invalid regular expression/);
+  assert.equal((await app.run('regex /zz/ abc'))[0], '# No match · /zz/');
+
+  assert.deepEqual(await app.run('diff "the quick brown fox" "the quick red fox"'), ['# Differs · 2 words changed', '− the quick brown fox', '+ the quick red fox']);
+  app.ctx.pasted = ['one\ntwo\nthree', 'one\n2\nthree\nfour'];
+  assert.deepEqual(await app.run('diff x'), ['# Differs · −1 +2 · 3 lines → 4 lines', '  one', '- two', '+ 2', '  three', '+ four']);
+  app.ctx.pasted = [];
+  assert.equal((await app.run('diff "same" "same"'))[0], '# Identical · 1 line');
+  assert.match((await app.run('diff only-one'))[0], /^# Usage/);
+
+  const cr = await app.run('cron 30 9 * * 1-5');
+  assert.deepEqual(cr.slice(0, 3), ['# At 09:30, on Monday to Friday · 30 9 * * 1-5', '## Next runs · your time', 'Tuesday 6 October | 09:30 | in 21 hours']);
+  assert.equal((await app.run('cron 0 0 30 2 *'))[1], 'warn: never runs (no such date)');
+
+  const col = await app.run('color #0af');
+  assert.deepEqual(col, ['# #00aaff', 'SWATCH #00aaff | #ffffff Aa #00aaff on white | #000000 Aa #00aaff on black', 'hex: #00aaff', 'rgb: rgb(0 170 255)',
+    'hsl: hsl(200 100% 50%)', 'on white: 2.56:1 fails', 'on black: 8.19:1 AAA']);
+  const pair = await app.run('color #777 on white');
+  assert.match(pair[0], /^err: Not a colour: 'white'/);
+  const ok = await app.run('color #595959 on #fff');
+  assert.equal(ok[0], '# 7.00:1 contrast · AAA');
+  assert.equal(ok.tone, 'ok');
+  assert.equal((await app.run('color #777 on #fff')).tone, 'warn');
 });

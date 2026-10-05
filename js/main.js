@@ -157,7 +157,8 @@ ctxBase.setLogView = (v) => {
 
 let currentCtx = ctxBase;
 const commands = createCommands(() => currentCtx);
-const ctxFor = (out) => (currentCtx = Object.assign({}, ctxBase, { out }));
+// `pasted`: the texts pasted into the command, one per placeholder (diff takes two).
+const ctxFor = (out, pasted) => (currentCtx = Object.assign({}, ctxBase, { out, pasted: pasted || [] }));
 
 // "https://www.google.com/search?q=x" -> "google.com": how an engine is named to the user.
 function siteOf(url) {
@@ -174,7 +175,7 @@ const dispatchEnv = () => ({
 // run() may await, so file pickers still count as user-initiated.
 // `shown`: what the transcript echoes when it differs from what runs (a paste
 // placeholder instead of the pasted text).
-function run(raw, shown) {
+function run(raw, shown, pasted) {
   const input = raw.trim();
   const echoed = (shown || raw).trim();
   if (!input) return Promise.resolve();
@@ -192,7 +193,7 @@ function run(raw, shown) {
   const saved = def && def.noHistory ? Promise.resolve() : data.addHistory(input);
   const record = () => (keep ? data.appendLog(makeEntry({ id, at, device: device.id, deviceName: device.name, input: echoed, ops: out.ops })) : Promise.resolve());
 
-  if (res.kind === 'builtin') return commands.run(res.name, res.rest, ctxFor(out)).then(record);
+  if (res.kind === 'builtin') return commands.run(res.name, res.rest, ctxFor(out, pasted)).then(record);
   if (res.kind === 'error') { out.err(res.message); return record(); }
 
   let target;

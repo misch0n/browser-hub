@@ -1,6 +1,6 @@
 import { complete, applyTab } from '../core/completion.js';
 import { edit, actionFor, historySearch } from '../core/lineedit.js';
-import { shouldCollapse, labelFor, expandAll, expandAt, removeAt, toField } from '../core/paste.js';
+import { shouldCollapse, labelFor, expandAll, expandAt, removeAt, toField, placeholders } from '../core/paste.js';
 
 // The input line: ghost-text completion, Tab, history, and a live hint that
 // says what Enter would do.
@@ -191,10 +191,11 @@ export function createPrompt(opts) {
         // The command gets the pasted text; the transcript shows what was in the field.
         const shown = input.value;
         const v = expandAll(shown, pastes);
+        const pasted = placeholders(shown, pastes).map((p) => pastes.get(p.label)); // each paste, for diff
         histIdx = -1;
         pastes.clear();
         set('');
-        opts.onSubmit(v, shown);
+        opts.onSubmit(v, shown, pasted);
         break;
       }
       case 'Tab': {

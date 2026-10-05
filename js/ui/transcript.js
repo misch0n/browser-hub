@@ -9,7 +9,7 @@ const MAX_TURNS = 400;
 
 // The Out methods that draw something: recorded, so a turn can be stored in
 // the shared history and drawn again later, on any device.
-const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr'];
+const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'swatch'];
 const plain = (v) => JSON.parse(JSON.stringify(v === undefined ? null : v));
 
 // The scrolling conversation: each command is a turn with the echoed input
@@ -171,7 +171,10 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
         ])));
       },
       code(text, lang) {
-        const lines = lang === 'json' ? jsonLines(text) : text.split('\n').map((l) => [[l, '']]);
+        const diffCls = { '+': 'ok', '-': 'err', '…': 'faint' };
+        const lines = lang === 'json' ? jsonLines(text)
+          : lang === 'diff' ? text.split('\n').map((l) => [[l, diffCls[l[0]] || 'dim']])
+            : text.split('\n').map((l) => [[l, '']]);
         const pre = h('pre', { class: 'code' }, ...lines.map((segs) => h('div', null, rich(segs.length ? segs : [[' ', '']]))));
         push(h('div', { class: 'code-wrap' }, pre, copyButton(() => text)));
         out.copyable(text);
@@ -213,6 +216,29 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
         path.setAttribute('fill', '#000');
         svg.append(bg, path);
         push(h('div', { class: 'qr-wrap' }, svg));
+      },
+      // Colour samples: [{ color: '#rrggbb[aa]', label }]. SVG fills, so no inline styles (CSP).
+      swatch(items) {
+        const NS = 'http://www.w3.org/2000/svg';
+        const row = h('div', { class: 'swatches' });
+        for (const it of items) {
+          const svg = document.createElementNS(NS, 'svg');
+          svg.setAttribute('viewBox', '0 0 40 24');
+          svg.setAttribute('class', 'swatch-box');
+          svg.setAttribute('aria-hidden', 'true');
+          const r = document.createElementNS(NS, 'rect');
+          for (const [k, v] of [['width', '40'], ['height', '24'], ['rx', '4'], ['fill', /^#[0-9a-f]{6,8}$/i.test(it.color) ? it.color : '#000']]) r.setAttribute(k, v);
+          svg.appendChild(r);
+          if (it.text) {
+            const t = document.createElementNS(NS, 'text');
+            for (const [k, v] of [['x', '20'], ['y', '16.5'], ['text-anchor', 'middle'], ['font-size', '11'], ['font-weight', '600'],
+              ['fill', /^#[0-9a-f]{6}$/i.test(it.text.color) ? it.text.color : '#000']]) t.setAttribute(k, v);
+            t.textContent = it.text.value;
+            svg.appendChild(t);
+          }
+          row.appendChild(h('span', { class: 'swatch-item' }, svg, it.label ? h('span', { class: 'swatch-label', text: it.label }) : null));
+        }
+        push(row);
       },
       calendar(spec) {
         push(h('div', { class: 'cal-wrap' }, monthGrid(spec)));

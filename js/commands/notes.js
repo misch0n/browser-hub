@@ -74,7 +74,7 @@ export default function register(add, { st, usage }) {
       out.head([[plural(list.length, 'note'), 'strong'], [f ? ' matching "' + rest + '"' : '', 'dim']]);
       out.table(['id', 'date', 'note'], list.map((n) => [
         [[n.id, 'id']],
-        [[dayLabel(n.created.slice(0, 10), today), 'dim']],
+        [[dayLabel(todayISO(new Date(n.created)), today), 'dim']], // local day, not the UTC one
         n.text,
       ]));
     },

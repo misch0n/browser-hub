@@ -572,7 +572,7 @@ test('export then import into empty storage brings everything back', async () =>
   await a.run('ev 2026-10-12 09:00 review');
   await a.run('alias gh https://github.com/ https://github.com/{} --path');
   await a.run('engine default ddg');
-  await a.run('tz add Asia/Tokyo');
+  await a.run('tz add Pacific/Chatham'); // a zone no test machine runs in
   await a.run('tz add Africa/Nairobi Kenji');
   await a.run('theme dracula');
   await a.run('widgets notes on');
@@ -590,7 +590,7 @@ test('export then import into empty storage brings everything back', async () =>
   assert.equal(s.events.items[0].title, 'review');
   assert.deepEqual(s.aliases.entries.map((e) => e.name).sort(), ['ddg', 'g', 'gh']);
   assert.equal(s.aliases.defaultEngine, 'ddg');
-  assert.deepEqual(s.settings.zones, ['Asia/Tokyo', 'Africa/Nairobi']);
+  assert.deepEqual(s.settings.zones, ['Pacific/Chatham', 'Africa/Nairobi']);
   assert.deepEqual(s.settings.zoneNames, { 'Africa/Nairobi': 'Kenji' });
   assert.equal(s.settings.theme, 'dracula');
   assert.deepEqual(s.settings.widgets, ['clock', 'agenda', 'tasks', 'notes']);

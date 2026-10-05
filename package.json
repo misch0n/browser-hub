@@ -5,6 +5,8 @@
   "description": "Command-line new-tab page. No build step; this file only configures the tests.",
   "scripts": {
     "test": "node --test tests/unit.test.js",
-    "test:e2e": "node tests/e2e.cjs"
+    "test:tz": "node tests/run-tz.mjs",
+    "test:e2e": "node tests/e2e.cjs",
+    "test:all": "node tests/run-tz.mjs && node tests/e2e.cjs"
   }
 }

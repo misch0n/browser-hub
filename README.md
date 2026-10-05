@@ -72,6 +72,7 @@ Tests:
 
 ```sh
 npm test                                         # unit tests, no dependencies
+npm run test:tz                                  # unit tests in six time zones (UTC-11 … UTC+14)
 NODE_PATH=$(npm root -g) npm run test:e2e        # the real page in Chromium (needs Playwright)
 ```
 
@@ -80,7 +81,9 @@ see the acceptance tests in the plan and run them by hand.
 
 ## Deployment
 
-Pushes to `main` are deployed automatically by `.github/workflows/pages.yml`.
+`.github/workflows/pages.yml` runs every test on each push and pull request
+(unit tests in six time zones, then the browser tests in Chromium). Pushes to
+`main` are deployed only when all of them pass.
 In the repository settings, set **Pages → Source** to **GitHub Actions**.
 
 The workflow runs `node tools/build-site.mjs _site <commit>`, which stamps

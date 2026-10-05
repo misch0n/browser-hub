@@ -1928,3 +1928,78 @@ test('developer commands: hash, jwt (kept nowhere), url, regex, diff, cron, colo
   assert.equal(ok.tone, 'ok');
   assert.equal((await app.run('color #777 on #fff')).tone, 'warn');
 });
+
+test('text helpers: passwords, counting, case, IP ranges', async () => {
+  const T = await import('../js/lib/text.js');
+  // Uniform: values past the last whole multiple are drawn again, not folded.
+  const seq = [0xffffffff, 7];
+  const fake = { getRandomValues: (a) => { a[0] = seq.shift(); return a; } };
+  assert.equal(T.randomBelow(10, fake), 7);
+  for (let i = 0; i < 50; i++) {
+    const p = T.password(12);
+    assert.equal(p.length, 12);
+    assert.ok(/[a-z]/.test(p) && /[A-Z]/.test(p) && /[2-9]/.test(p) && /[!#$%&*+\-=?@^_~]/.test(p), p);
+    assert.ok(!/[lIO01]/.test(p), p);
+  }
+  assert.match(T.password(30, ['lower', 'upper', 'digits']), /^[a-zA-Z2-9]{30}$/);
+  assert.match(T.pin(8), /^\d{8}$/);
+  const { WORDS } = await import('../js/lib/wordlist.js');
+  assert.equal(WORDS.length, 7776);
+  assert.equal(new Set(WORDS).size, 7776);
+  assert.equal(T.passphrase(WORDS, 6).split('-').length, 6);
+  assert.equal(T.bits(7776, 6), 77);
+
+  assert.deepEqual(T.countText('Hello world. It’s here!\n\nSecond para'), { characters: 36, noSpaces: 30, bytes: 38, words: 6, lines: 3,
+    sentences: 3, paragraphs: 2, readingMinutes: 6 / 230 });
+  assert.equal(T.countText('👍🏽 ok').characters, 5); // code points, not UTF-16 units
+  assert.equal(T.countText('').lines, 0);
+
+  assert.deepEqual(T.words('parseHTTPResponse_code-v2 now'), ['parse', 'http', 'response', 'code', 'v2', 'now']);
+  const ws = T.words('user account ID');
+  assert.deepEqual(Object.fromEntries(Object.entries(T.CASES).map(([k, f]) => [k, f(ws)])), {
+    camel: 'userAccountId', pascal: 'UserAccountId', snake: 'user_account_id', kebab: 'user-account-id', constant: 'USER_ACCOUNT_ID',
+    title: 'User Account Id', sentence: 'User account id', lower: 'user account id', upper: 'USER ACCOUNT ID', dot: 'user.account.id' });
+
+  const ip = (s) => { const r = T.parseIP(s); return r && T.formatIP(r.n, r.family); };
+  assert.equal(ip('2001:0db8:0000:0000:0001:0000:0000:0001'), '2001:db8::1:0:0:1'); // the first longest zero run
+  assert.equal(ip('::ffff:192.0.2.1'), '::ffff:c000:201');
+  assert.equal(ip('[::1]'), '::1');
+  assert.equal(ip('1:0:0:2:0:0:0:3'), '1:0:0:2::3');
+  for (const bad of ['1::2::3', '12345::', '1:2:3:4:5:6:7', '256.1.1.1', '1.2.3', '01.2.3.4', 'x']) assert.equal(T.parseIP(bad), null, bad);
+  const r = T.parseCIDR('172.20.5.9/12');
+  assert.deepEqual([T.formatIP(r.network, 4), T.formatIP(r.last, 4), T.formatIP(r.mask, 4), r.size], ['172.16.0.0', '172.31.255.255', '255.240.0.0', 1048576n]);
+  assert.equal(T.parseCIDR('0.0.0.0/0').size, 2n ** 32n);
+  assert.throws(() => T.parseCIDR('::/129'), /0 to 128/);
+  assert.equal(T.contains(T.parseCIDR('2001:db8::/32'), T.parseIP('2001:db8:ffff::1')), true);
+  assert.equal(T.contains(T.parseCIDR('10.0.0.0/8'), T.parseIP('::1')), false);
+  assert.deepEqual(['10.1.1.1', '8.8.8.8', '100.64.0.1', 'fe80::1', '2606:4700::1111'].map((s) => T.ipKind(T.parseIP(s))),
+    ['private', 'public', 'shared (carrier-grade NAT)', 'link-local', 'public']);
+});
+
+test('text commands: pw (kept out of the shared history), count, case, cidr', async () => {
+  const app = await makeApp();
+  const pw = await app.run('pw');
+  assert.match(pw[0], /^# New password · 122 bits/);
+  assert.match(pw[1], /^= .{20}$/);
+  assert.equal(app.commands.byName.get('pw').private, true);
+  assert.match((await app.run('pw words 4'))[1], /^= [a-z-]+(-[a-z-]+){3}$/);
+  assert.match((await app.run('pw pin'))[1], /^= \d{6}$/);
+  assert.equal((await app.run('pw 7'))[0], 'err: Length: 8 to 128');
+  assert.equal((await app.run('pw words 2'))[0], 'err: Words: 3 to 12');
+  assert.match((await app.run('pw nonsense'))[0], /^# Usage/);
+  assert.equal(app.data.steps().undo.length, 0);
+
+  assert.deepEqual((await app.run('count one two three')).slice(0, 2), ['# 3 words · 13 characters', 'characters: 13 · 11 without spaces']);
+  const cs = await app.run('case user account id');
+  assert.equal(cs[3], 'snake_case | user_account_id');
+  assert.deepEqual(await app.run('case kebab parseHTTPResponse'), ['# kebab-case', '= parse-http-response']);
+  const c = await app.run('cidr 10.0.1.5/22');
+  assert.deepEqual(c, ['# 10.0.0.0/22 · IPv4 · private', 'address: 10.0.1.5 (inside the range)', 'network: 10.0.0.0/22', 'netmask: 255.255.252.0',
+    'wildcard: 0.0.3.255', 'first: 10.0.0.1', 'last: 10.0.3.254', 'broadcast: 10.0.3.255', 'addresses: 1,024 · 1,022 usable hosts']);
+  assert.equal((await app.run('cidr 10.0.0.0/22 10.0.3.9'))[0], '# 10.0.3.9 is in 10.0.0.0/22');
+  assert.equal((await app.run('cidr 10.0.0.0/22 10.0.4.1')).tone, 'err');
+  assert.deepEqual((await app.run('cidr 2001:db8::/48')).slice(0, 4), ['# 2001:db8::/48 · IPv6 · documentation', 'network: 2001:db8::/48', 'first: 2001:db8::',
+    'last: 2001:db8:0:ffff:ffff:ffff:ffff:ffff']);
+  assert.deepEqual(await app.run('cidr 10.0.0.1/31'), ['# 10.0.0.0/31 · IPv4 · private', 'address: 10.0.0.1 (inside the range)', 'network: 10.0.0.0/31',
+    'netmask: 255.255.255.254', 'wildcard: 0.0.0.1', 'first: 10.0.0.0', 'last: 10.0.0.1', 'addresses: 2']);
+});

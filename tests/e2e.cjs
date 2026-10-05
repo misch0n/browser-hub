@@ -145,7 +145,10 @@ async function check(name, fn) {
     assert.match(await page.locator('#hint').innerText(), /tab → help/);
     await page.keyboard.press('Tab');
     assert.equal(await prompt.inputValue(), 'help ');
-    await type('ca');
+    await type('ep');
+    await page.keyboard.press('Tab');
+    assert.equal(await prompt.inputValue(), 'epoch ');
+    await type('cal');
     await page.keyboard.press('Tab');
     assert.equal(await prompt.inputValue(), 'cal');
     await page.keyboard.press('Tab');
@@ -270,6 +273,12 @@ async function check(name, fn) {
     assert.match(await lastText(), /secret-subject/);
     const kept = await page.evaluate(() => Object.keys(localStorage).map((k) => localStorage.getItem(k)).join('\n'));
     assert.ok(!kept.includes('secret-subject') && !kept.includes(token.slice(0, 20)));
+    // The word list loads on demand (through a versioned URL, checked later); the passphrase is kept nowhere.
+    await send('pw words');
+    await page.waitForFunction(() => /New passphrase/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    const phrase = await lastTurn().locator('.value-text').textContent();
+    assert.match(phrase, /^[a-z-]+(-[a-z-]+){5}$/);
+    assert.ok(!(await page.evaluate(() => localStorage.getItem('cc:log'))).includes(phrase));
   });
 
   await check('history with arrows; Esc clears; ? shows shortcuts', async () => {

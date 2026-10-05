@@ -36,8 +36,9 @@ still work.
 | Tasks | `tasks` (`t`) |
 | Calendar | `events` (`ev`), `cal`, `agenda`, `today` |
 | Dates | `date`, `days`, `week` |
-| Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr` |
-| Developer | `hash`, `jwt`, `url`, `regex`, `diff`, `cron`, `color` |
+| Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `pw` |
+| Text | `count`, `case` |
+| Developer | `cidr`, `hash`, `jwt`, `url`, `regex`, `diff`, `cron`, `color` |
 | Share | `clip` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
@@ -210,6 +211,14 @@ texts after it, or quote two lines: line by line or word by word), `cron`
 (a schedule in words and its next runs in your time) and `color` (hex, rgb,
 hsl, and WCAG contrast: `color #777 on #fff`). `hash` input stays out of the
 shared history.
+
+**Text and networks**: `pw` makes a password (`pw 32`, `pw simple` without
+symbols), a passphrase (`pw words`, from the EFF word list) or a PIN, with the
+browser's secure random numbers; it never goes into the shared history.
+`count` gives words, characters, lines and reading time; `case` rewrites text
+as camelCase, snake_case, kebab-case, Title Case and the rest; `cidr` takes an
+IPv4 or IPv6 range or address apart (`cidr 10.0.0.0/22 10.0.3.9` says
+whether the address is inside).
 
 **QR codes**: `qr <text>` draws one for a link or any text, made on the page
 (nothing is sent anywhere), always dark on white so phones can scan it in any

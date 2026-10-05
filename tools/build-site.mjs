@@ -17,7 +17,7 @@ const fail = (msg) => { console.error('build-site: ' + msg); process.exit(1); };
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
-for (const f of ['style.css', 'themes.css', 'js']) cpSync(f, join(out, f), { recursive: true });
+for (const f of ['style.css', 'themes.css', 'opensearch.xml', 'js']) cpSync(f, join(out, f), { recursive: true });
 
 // index.html: the four entry points.
 let html = readFileSync('index.html', 'utf8');

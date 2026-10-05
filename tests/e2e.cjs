@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
 // Test the deployable build: the same cache-busting step the Pages workflow runs.
 const root = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cc-site-'));
 require('child_process').execFileSync(process.execPath, ['tools/build-site.mjs', root, 'e2e'], { cwd: path.join(__dirname, '..'), stdio: 'ignore' });
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+const types = { '.xml': 'application/opensearchdescription+xml', '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const file = path.join(root, req.url.split('?')[0] === '/' ? 'index.html' : req.url.split('?')[0]);
   if (!file.startsWith(root) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
@@ -275,6 +275,30 @@ async function check(name, fn) {
     await page.keyboard.press('ArrowUp');
     assert.equal(await prompt.inputValue(), 'gh org/repo');
     await page.keyboard.press('Escape');
+  });
+
+  await check('address bar: ?q= opens aliases and searches; built-ins are only pre-filled', async () => {
+    assert.match(await page.locator('link[rel=search]').getAttribute('href'), /^opensearch\.xml/);
+    const xml = fs.readFileSync(path.join(root, 'opensearch.xml'), 'utf8'); // the built copy
+    assert.match(xml, /template="https:\/\/[^"]+\?q=\{searchTerms\}"/);
+    await page.goto(base + '?q=' + encodeURIComponent('gh org/x y'));
+    await page.waitForURL(/github\.com/);
+    assert.equal(external.at(-1), 'https://github.com/org/x%20y');
+    await page.goto(base + '?q=' + encodeURIComponent('some words'));
+    await page.waitForURL(/google\.com/);
+    assert.equal(external.at(-1), 'https://www.google.com/search?q=some%20words');
+    // A link from anywhere must not be able to change data: built-ins wait for Enter.
+    await page.goto(base + '?q=' + encodeURIComponent('t from a link'));
+    await page.waitForSelector('#prompt');
+    assert.equal(await prompt.inputValue(), 't from a link');
+    assert.match(await page.locator('#turns').innerText(), /press Enter to run it/);
+    assert.equal(await page.evaluate(() => location.search), ''); // reload won't repeat it
+    const count = () => page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks') || '{"items":[]}').items.filter((t) => t.text === 'from a link').length);
+    assert.equal(await count(), 0);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Added task/.test(document.getElementById('turns').innerText));
+    assert.equal(await count(), 1);
+    await send('t rm ' + (await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.find((t) => t.text === 'from a link').id)));
   });
 
   await check('javascript: aliases are rejected', async () => {

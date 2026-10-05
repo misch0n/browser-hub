@@ -54,6 +54,7 @@ const ctxBase = {
   },
   revealPanel(show) { if (show && drawerQuery.matches) setDrawer(true); },
   navigate(url) { location.assign(url); },
+  leave(url) { location.replace(url); },
 };
 
 let currentCtx = ctxBase;
@@ -102,7 +103,7 @@ function run(raw) {
   if (res.note) out.warn(res.note);
   out.dim(res.url);
   // History is written before leaving, so ↑ recalls the command after Back.
-  return saved.then(() => ctxBase.navigate(res.url));
+  return saved.then(() => ctxBase.navigate(target.href));
 }
 
 // ---- prompt -------------------------------------------------------------------
@@ -255,6 +256,8 @@ window.addEventListener('pageshow', (e) => {
   // Also fires when Safari restores the page from the back-forward cache:
   // clear whatever was left in the prompt and take focus again.
   prompt.reset();
+  // ...except a command handed over by the address bar (see fromAddressBar).
+  if (prefill) { prompt.set(prefill); prefill = null; }
   if (!palette.isOpen) prompt.focus();
   if (e.persisted) reloadAll();
 });
@@ -324,8 +327,37 @@ async function start() {
     for (const [kind, text] of notices) out[kind](text);
   }
 
+  fromAddressBar();
   prompt.update();
   prompt.focus();
+}
+
+// `?q=<input>`: the page as a browser search engine. Aliases, engines and
+// searches go straight to their target (replacing this entry, so Back skips
+// the hub). Built-in commands are only put into the prompt: any site can link
+// here with a ?q=, and that must never be able to change or delete data.
+let prefill = null;
+function fromAddressBar() {
+  const params = new URLSearchParams(location.search);
+  const q = (params.get('q') || '').trim();
+  if (!params.has('q')) return;
+  history.replaceState(null, '', location.pathname + location.hash);
+  if (!q) return;
+  const res = dispatch(q, dispatchEnv());
+  if (res.kind === 'redirect' || res.kind === 'search') {
+    let target;
+    try { target = new URL(res.url); } catch (e) { target = null; }
+    if (target && (target.protocol === 'http:' || target.protocol === 'https:')) {
+      transcript.notice().head([['Opening ', ''], [target.href, 'url']], 'info');
+      data.addHistory(q).finally(() => ctxBase.leave(target.href));
+      return;
+    }
+  }
+  prompt.set(q);
+  prefill = q; // pageshow may still be on its way, and it clears the prompt
+  if (res.kind === 'builtin') {
+    transcript.notice().head([['From the address bar: ', 'dim'], [q, 'strong'], [' · press Enter to run it', 'dim']], 'info');
+  }
 }
 
 window.CC = { run, data, commands }; // handy from the console and for tests

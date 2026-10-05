@@ -35,6 +35,16 @@ toggles one, `widgets move zones top` (or `up|down|bottom|<n>`) and
 `widgets order zones clock` reorder them, `widgets hide|show` toggles the panel. On narrow screens the
 panel becomes a drawer opened from the `widgets` button under the prompt.
 
+**From the address bar**: `https://misch0n.github.io/browser-hub/?q=<input>`
+runs an alias, engine or search straight away, so the page works as a browser
+search engine. In Chrome, open Settings → Search engine → Manage search engines
+→ Site search → Add, and use `https://misch0n.github.io/browser-hub/?q=%s` as
+the URL (make it the default, or give it a shortcut such as `cc`). Firefox
+offers to add it from the address bar's search menu, since the page advertises
+an OpenSearch description. Built-in commands (`t …`, `n …`) are only put into
+the prompt and wait for Enter, so a link from another site can never change
+your data.
+
 All data lives in `localStorage` (keys `cc:*`), behind the store interface in
 `js/core/store.js`. **`export` is the only backup**: Safari can evict site
 storage, so the page reminds you when your last export is more than 14 days

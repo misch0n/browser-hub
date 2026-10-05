@@ -5,7 +5,7 @@
 //   flour milk          every word must match, in any field (any case)
 //   "oat milk"          a quoted phrase matches as one piece
 //   /^buy\s/i           a regular expression (flags allowed, `i` if none given)
-//   in:tasks flour      only one category (notes, tasks, events, links, commands, history)
+//   in:tasks flour      only one category (notes, tasks, events, snippets, later, links, commands, history)
 //
 // Words match as a whole word (best), the start of a word, anywhere in a
 // word, or fuzzily (the letters in order, close together: `pmt` finds
@@ -17,6 +17,8 @@ export const CATEGORIES = [
   { id: 'tasks', label: 'Tasks', weight: 1 },
   { id: 'notes', label: 'Notes', weight: 1 },
   { id: 'events', label: 'Events', weight: 1 },
+  { id: 'snippets', label: 'Snippets', weight: 1 },
+  { id: 'later', label: 'Read later', weight: 1 },
   { id: 'links', label: 'Your aliases and engines', weight: 1 },
   { id: 'commands', label: 'Built-in commands', weight: 0.8 },
   { id: 'history', label: 'Command history', weight: 0.5 },
@@ -106,6 +108,14 @@ export function documents(state, defs, isBuiltin) {
     docs.push({ category: 'events', key: e.id, title: e.title, run: 'events ' + e.id, rank: 1,
       fields: [{ name: 'title', text: e.title, weight: 1 }, { name: 'date', text: e.date + (e.time ? ' ' + e.time : ''), weight: 0.7 },
         { name: 'id', text: e.id, weight: 0.6 }], event: e });
+  }
+  for (const s of state.snippets ? state.snippets.items : []) {
+    docs.push({ category: 'snippets', key: s.id, title: s.name, run: 'snippets ' + s.id, rank: 1,
+      fields: [{ name: 'name', text: s.name, weight: 1.2 }, { name: 'text', text: s.text, weight: 1 }, { name: 'id', text: s.id, weight: 0.6 }], snippet: s });
+  }
+  for (const l of state.later ? state.later.items : []) {
+    docs.push({ category: 'later', key: l.id, title: l.title || l.url, run: 'later ' + l.id, rank: l.read ? 0.6 : 1,
+      fields: [{ name: 'title', text: l.title || '', weight: 1 }, { name: 'url', text: l.url, weight: 0.8 }, { name: 'id', text: l.id, weight: 0.6 }], link: l });
   }
   for (const a of state.aliases.entries) {
     if (isBuiltin && isBuiltin(a.name)) continue;

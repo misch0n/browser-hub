@@ -4,7 +4,7 @@ import { dueSeg, tagSegs, dayLabel, longDate } from '../core/format.js';
 import { repeatLabel } from '../core/repeat.js';
 import { oneValue } from '../core/args.js';
 
-// One grammar for everything you keep: notes, tasks, events and aliases.
+// One grammar for everything you keep: notes, tasks, events, snippets, links to read later and aliases.
 //
 //   tasks                          list them
 //   tasks add <text>               add one
@@ -23,6 +23,8 @@ export const NOUNS = {
   note: { noun: 'notes', short: 'n', one: 'note' },
   task: { noun: 'tasks', short: 't', one: 'task' },
   event: { noun: 'events', short: 'ev', one: 'event' },
+  snippet: { noun: 'snippets', short: 'snip', one: 'snippet' },
+  link: { noun: 'later', short: 'later', one: 'link' },
   alias: { noun: 'aliases', short: 'alias', one: 'alias' },
 };
 
@@ -38,6 +40,10 @@ function display(kind, field, item, today) {
     case 'task.repeat': return item.repeat ? [['↻ ' + repeatLabel(item.repeat), '']] : none;
     case 'event.date': return [[longDate(item.date, today), 'date'], [' · ' + dayLabel(item.date, today), 'faint']];
     case 'event.time': return item.time ? [[item.time, 'num']] : [['all day', 'faint']];
+    case 'snippet.name': return [[item.name, 'accent']];
+    case 'link.url': return [[item.url, 'url']];
+    case 'link.title': return item.title ? [[item.title, 'strong']] : none;
+    case 'link.read': return item.read ? [['✓ read', 'ok']] : [['○ unread', 'dim']];
     case 'alias.base': return [[item.base, 'url']];
     case 'alias.template': return item.template ? [[item.template, 'url']] : none;
     case 'alias.escape': return [[item.escape, 'dim']];
@@ -49,7 +55,8 @@ function display(kind, field, item, today) {
 // Read-only rows shown under the editable ones.
 function extras(kind, item, today) {
   const when = (iso) => [[dayLabel(todayISO(new Date(iso)), today), 'dim']];
-  if (kind === 'note') return [['created', when(item.created)], ['updated', when(item.updated)]];
+  if (kind === 'note' || kind === 'snippet') return [['created', when(item.created)], ['updated', when(item.updated)]];
+  if (kind === 'link') return [['added', when(item.created)], ...(item.read && item.readAt ? [['read', when(item.readAt)]] : [])];
   if (kind === 'task') {
     const rows = [['created', when(item.created)]];
     if (item.repeat && item.lastDone) rows.push(['last done', [...when(item.lastDone), [' · ' + (item.doneCount || 1) + '×', 'faint']]]);
@@ -113,7 +120,7 @@ export function createRecords({ st, isBuiltin }) {
       if (i < 0) return;
       // Replace, not merge: a cleared field (repeat none) must go.
       d.items[i] = r.item;
-      if (kind === 'note') d.items[i].updated = ctx.now().toISOString();
+      if (kind === 'note' || kind === 'snippet') d.items[i].updated = ctx.now().toISOString();
       saved = d.items[i];
     });
     if (!saved) return out.err('No ' + label(kind) + ' ' + key);
@@ -135,7 +142,7 @@ export function createRecords({ st, isBuiltin }) {
     }
     await ctx.data.mutate(KINDS[kind].col, (d) => { d.items = d.items.filter((x) => x.id !== key); });
     out.head([['Removed ' + label(kind) + ' ', ''], [key, 'id']], 'ok');
-    out.line(item.text || item.title, 'gone');
+    out.line(kind === 'snippet' ? item.name : kind === 'link' ? item.title || item.url : item.text || item.title, 'gone');
   }
 
   // The entry `word` names: an id for notes, tasks and events (t3, or just 3
@@ -147,6 +154,10 @@ export function createRecords({ st, isBuiltin }) {
       return item ? { item } : null;
     }
     const prefix = KINDS[kind].prefix;
+    if (kind === 'snippet' && !/^s?\d+$/i.test(word)) { // snippets also go by name
+      const item = findRecord(kind, st(), word);
+      return item ? { item } : null;
+    }
     if (!new RegExp('^' + prefix + '\\d+$', 'i').test(word) && !(bare && /^\d+$/.test(word))) return null;
     const item = findRecord(kind, st(), word);
     return item ? { item } : { missing: parseId(prefix, word) };
@@ -168,7 +179,8 @@ export function createRecords({ st, isBuiltin }) {
       remove: (ctx, item) => remove(ctx, kind, item),
       ids: () => (kind === 'alias'
         ? st().aliases.entries.map((e) => ({ value: e.name, label: e.template ? 'engine' : 'alias' }))
-        : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || '').slice(0, 50) }))),
+        : kind === 'snippet' ? st().snippets.items.map((x) => ({ value: x.name, label: x.text.split('\n')[0].slice(0, 50) }))
+          : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || x.url || '').slice(0, 50) }))),
     };
   }
   const asAdapter = (kindOrAdapter) => (typeof kindOrAdapter === 'string' ? adapterFor(kindOrAdapter) : kindOrAdapter);
@@ -258,5 +270,5 @@ export function createRecords({ st, isBuiltin }) {
     return verb === 'show' ? keyFor(second) : keyFor(second) + ' ' + verb;
   }
 
-  return { show, setField, remove, route, complete, usageFor, target, fieldsOf, legacy };
+  return { show, setField, remove, route, complete, usageFor, target, fieldsOf, legacy, adapterFor };
 }

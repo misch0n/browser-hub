@@ -10,8 +10,9 @@
 
 import { canonical } from './merge.js';
 
-export const UNDOABLE = ['aliases', 'notes', 'tasks', 'events', 'settings', 'log'];
-const LISTS = { notes: ['items', 'id'], tasks: ['items', 'id'], events: ['items', 'id'], aliases: ['entries', 'name'] };
+export const UNDOABLE = ['aliases', 'notes', 'tasks', 'events', 'snippets', 'later', 'settings', 'log'];
+const LISTS = { notes: ['items', 'id'], tasks: ['items', 'id'], events: ['items', 'id'], snippets: ['items', 'id'], later: ['items', 'id'],
+  aliases: ['entries', 'name'] };
 
 const same = (a, b) => canonical(a) === canonical(b);
 const idNum = (id) => parseInt(String(id).slice(1), 10);

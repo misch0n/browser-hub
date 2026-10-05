@@ -1,5 +1,6 @@
 import { SCHEMA, parseISO, parseTime, isValidZone, canonicalZone, truncate } from './util.js';
 import { validateEntry, siteRoot, SHIPPED_DEFAULT } from './aliases.js';
+import { SNIPPET_NAME, linkURL } from './records.js';
 import { parseRepeat } from './repeat.js';
 import { migrateCollections, HISTORY_CAP } from './data.js';
 import { isTheme, isWidget, DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js';
@@ -8,7 +9,7 @@ import { isTheme, isWidget, DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js'
 // every field is checked, bad entries are skipped and reported, and nothing
 // existing is overwritten silently.
 //
-// current: { meta, aliases, notes, tasks, events, settings, history } (documents)
+// current: { meta, aliases, notes, tasks, events, snippets, later, settings, history } (documents)
 // Returns { collections, counts, invalid, lines }: `collections` are full replacement
 // documents, `lines` explain every skipped or changed entry.
 
@@ -53,7 +54,7 @@ export function merge(current, file, isBuiltin, now) {
   const nextId = (prefix) => { counters[prefix] = (counters[prefix] || 0) + 1; return prefix + counters[prefix]; };
   const stamp = (v) => (isStamp(v) ? v : now().toISOString());
   const items = (c) => (src[c] && Array.isArray(src[c].items) ? src[c].items : []);
-  const added = { notes: 0, tasks: 0, events: 0, history: 0 };
+  const added = { notes: 0, tasks: 0, events: 0, snippets: 0, later: 0, history: 0 };
   let invalid = 0;
 
   for (const n of items('notes')) {
@@ -85,6 +86,24 @@ export function merge(current, file, isBuiltin, now) {
     if (!e || !isStr(e.title, 200) || !parseISO(e.date) || (time !== null && parseTime(time) !== time)) { invalid++; continue; }
     out.events.items.push({ id: nextId('e'), date: e.date, time, title: e.title });
     added.events++;
+  }
+
+  // Snippets go by name: one already here with that name keeps its text.
+  for (const s of items('snippets')) {
+    const name = s && typeof s.name === 'string' ? s.name.toLowerCase() : '';
+    if (!SNIPPET_NAME.test(name) || /^s\d+$/.test(name) || !isStr(s.text, MAX_TEXT)) { invalid++; continue; }
+    if (out.snippets.items.some((x) => x.name === name)) { lines.push("skipped snippet '" + name + "': already exists"); continue; }
+    out.snippets.items.push({ id: nextId('s'), name, text: s.text, created: stamp(s.created), updated: stamp(s.updated || s.created) });
+    added.snippets++;
+  }
+
+  for (const l of items('later')) {
+    const url = l && typeof l.url === 'string' ? linkURL(l.url) : null;
+    if (!url || (l.title != null && !isStr(l.title, 200))) { invalid++; continue; }
+    if (out.later.items.some((x) => x.url === url)) continue; // saved here already
+    const read = l.read === true;
+    out.later.items.push({ id: nextId('l'), url, title: l.title || null, read, readAt: read && isStamp(l.readAt) ? l.readAt : null, created: stamp(l.created) });
+    added.later++;
   }
 
   // Aliases follow the conflict rules: never overwrite, report every collision.
@@ -145,6 +164,6 @@ export function merge(current, file, isBuiltin, now) {
     if (!sameList(ws, DEFAULT_WIDGETS)) out.settings.widgets = ws;
   }
 
-  const counts = { notes: added.notes, tasks: added.tasks, events: added.events, aliases: aliasesAdded, zones: zonesAdded };
+  const counts = { notes: added.notes, tasks: added.tasks, events: added.events, snippets: added.snippets, later: added.later, aliases: aliasesAdded, zones: zonesAdded };
   return { collections: out, counts, invalid, lines };
 }

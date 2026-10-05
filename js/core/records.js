@@ -1,4 +1,4 @@
-// Editable fields of notes, tasks, events and aliases. Pure: reading the
+// Editable fields of notes, tasks, events, snippets, links and aliases. Pure: reading the
 // command, checking the new value and producing the changed record. Commands
 // in commands/records.js do the saving and printing.
 //
@@ -16,6 +16,20 @@ import { validateEntry } from './aliases.js';
 import { parseRepeat, firstDue } from './repeat.js';
 
 const NONE = /^(none|-|clear)$/i;
+export const SNIPPET_NAME = /^[\p{L}\p{N}_.-]{1,40}$/u;
+
+// A link to keep: http(s) only; a bare domain gets https://. -> the URL or null
+export function linkURL(v) {
+  const t = String(v).trim();
+  if (!t || /\s/.test(t)) return null;
+  try {
+    const u = new URL(/^[a-z][\w+.-]*:/i.test(t) ? t : 'https://' + t);
+    if ((u.protocol !== 'https:' && u.protocol !== 'http:') || (!u.hostname.includes('.') && u.hostname !== 'localhost')) return null;
+    return u.href;
+  } catch (e) {
+    return null;
+  }
+}
 const MAX_TEXT = 10000;
 
 const text = (max) => (v) => {
@@ -118,6 +132,52 @@ export const KINDS = {
       },
     },
   },
+  snippet: {
+    col: 'snippets', cmd: 'snip', prefix: 's', label: 'snippet',
+    fields: {
+      name: {
+        aliases: [],
+        raw: (x) => x.name,
+        parse(v) {
+          const n = v.trim().toLowerCase();
+          return SNIPPET_NAME.test(n) && !/^s\d+$/.test(n) ? { value: n } : { error: "is one word (letters, digits, . _ -), and not an id like s3" };
+        },
+      },
+      text: { aliases: ['body', 'value'], parse: text(MAX_TEXT), raw: (x) => x.text },
+    },
+  },
+  link: {
+    col: 'later', cmd: 'later', prefix: 'l', label: 'link',
+    fields: {
+      url: {
+        aliases: ['link', 'href'],
+        raw: (x) => x.url,
+        parse(v) {
+          const u = linkURL(v);
+          return u ? { value: u } : { error: "'" + v.trim() + "' is not a web address (https://…)" };
+        },
+      },
+      title: {
+        aliases: ['name', 'text'],
+        raw: (x) => x.title || 'none',
+        parse: (v) => (NONE.test(v.trim()) ? { value: null } : text(200)(v)),
+      },
+      read: {
+        aliases: ['done', 'status'],
+        raw: (x) => (x.read ? 'yes' : 'no'),
+        parse(v) {
+          const s = v.trim().toLowerCase();
+          if (['yes', 'y', 'true', 'read', 'done', '1'].includes(s)) return { value: true };
+          if (['no', 'n', 'false', 'unread', 'open', '0'].includes(s)) return { value: false };
+          return { error: 'is yes or no' };
+        },
+        apply(item, value, env) {
+          item.read = value;
+          item.readAt = value ? item.readAt || env.now().toISOString() : null;
+        },
+      },
+    },
+  },
   alias: {
     col: 'aliases', cmd: 'alias', label: 'alias',
     fields: {
@@ -161,6 +221,7 @@ export function parseFieldEdit(rest) {
 export function findRecord(kind, state, target) {
   const k = KINDS[kind];
   if (kind === 'alias') return state.aliases.entries.find((e) => e.name === String(target).toLowerCase()) || null;
+  if (kind === 'snippet' && !/^s?\d+$/i.test(target)) return state.snippets.items.find((x) => x.name === String(target).toLowerCase()) || null;
   const id = parseId(k.prefix, target);
   return id ? state[k.col].items.find((x) => x.id === id) || null : null;
 }
@@ -175,6 +236,9 @@ export function applyField(kind, item, field, value, env) {
   if (spec.apply) spec.apply(next, r.value, env);
   else next[field] = r.value;
   if (kind === 'event' && !parseISO(next.date)) return { error: 'date is not valid' };
+  if (kind === 'snippet' && next.name !== item.name && env.state.snippets.items.some((x) => x.name === next.name)) {
+    return { error: "a snippet named '" + next.name + "' already exists" };
+  }
   if (kind !== 'alias') return { item: next };
 
   // Aliases are checked as a whole, with the same rules as `alias set`.

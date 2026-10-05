@@ -378,6 +378,24 @@ async function check(name, fn) {
     await page.keyboard.press('Escape');
   });
 
+  await check('snippets copy; later saves links and opens one once it is in the history', async () => {
+    await send('snip sig Cheers, M');
+    await send('snippets');
+    await lastTurn().locator('tr.tr-run').first().click();
+    await page.waitForFunction(() => /Cheers, M/.test([...document.querySelectorAll('.turn')].pop().querySelector('.value-text')?.textContent || ''));
+    await send('later example.com/read-me Read me');
+    await send('later');
+    assert.match(await lastText(), /1 link to read[\s\S]*Read me/);
+    await send('later l1 open');
+    await page.waitForURL(/example\.com\/read-me/);
+    assert.equal(external.at(-1), 'https://example.com/read-me');
+    await page.goBack();
+    await page.waitForSelector('#prompt');
+    const log = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:log')).entries.map((e) => e.input));
+    assert.ok(log.includes('later l1 open'));
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('cc:later')).items[0].read), true);
+  });
+
   await check('address bar: ?q= opens aliases and searches; built-ins are only pre-filled', async () => {
     assert.match(await page.locator('link[rel=search]').getAttribute('href'), /^opensearch\.xml/);
     const xml = fs.readFileSync(path.join(root, 'opensearch.xml'), 'utf8'); // the built copy

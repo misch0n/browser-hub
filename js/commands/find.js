@@ -22,7 +22,7 @@ const hl = (text, ranges, cls) => {
 
 export default function register(add, { st, defs, isBuiltin }) {
   add({
-    name: 'find', group: 'Find', desc: 'search everything: tasks, notes, events, aliases, commands, history',
+    name: 'find', group: 'Find', desc: 'search everything: tasks, notes, events, snippets, links, aliases, commands, history',
     usage: ['find <words>', 'find "<phrase>"', 'find /<regex>/[flags]', 'find <words> in:<category>'],
     examples: ['find flour', 'find pmt', 'find "oat milk"', 'find /^buy\\s/', 'find standup in:events', 'find #home'],
     complete: () => CATEGORIES.map((c) => ({ value: 'in:' + c.id, label: c.label })),
@@ -62,6 +62,12 @@ export default function register(add, { st, defs, isBuiltin }) {
             case 'events': {
               const e = doc.event;
               return [[link(e.id, 'id')], hl(e.title, hits.title), [[longDate(e.date, today), 'date'], [e.time ? ' ' + e.time : '', 'num']]];
+            }
+            case 'snippets':
+              return [[link(doc.key, 'id')], [...hl(doc.snippet.name, hits.name, 'accent'), ['  ', ''], ...hl(doc.snippet.text.split('\n')[0], hits.text, 'dim')], []];
+            case 'later': {
+              const l = doc.link;
+              return [[link(l.id, l.read ? 'faint' : 'id')], [...(l.title ? [...hl(l.title, hits.title, l.read ? 'gone' : ''), ['  ', '']] : []), ...hl(l.url, hits.url, 'url')], []];
             }
             case 'links': {
               const a = doc.alias;

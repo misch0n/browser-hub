@@ -19,13 +19,15 @@ tasks t3 rm                    remove it                 (undo brings it back)
 tasks t3 done                  actions of its own        (aliases: gh default)
 ```
 
-Swap `tasks` for `notes`, `events`, `aliases`, `zones` or `widgets`; the item
-is named by its id (`t3`), or for the others by name: `aliases gh edit template …`,
+Swap `tasks` for `notes`, `events`, `snippets`, `later`, `aliases`, `zones` or
+`widgets`; the item is named by its id (`t3`), or for the others by name
+(snippets by either): `aliases gh edit template …`,
 `zones tokyo edit name Kenji`, `widgets zones move top`. Their own actions:
-`tasks t3 done`, `aliases ddg default`, `widgets zones on|off|move <where>`;
-`zones all` and `tasks all` list everything. Notes, tasks, events and aliases
-have a short name that does exactly the same and also adds from plain text:
-`t buy milk`, `n call mum`, `ev fri 19:00 dinner`, `alias gh https://github.com/`.
+`tasks t3 done`, `later l2 open|done`, `aliases ddg default`, `widgets zones on|off|move <where>`;
+`zones all`, `tasks all` and `later all` list everything. Notes, tasks, events,
+snippets and aliases have a short name that does exactly the same and also adds
+from plain text: `t buy milk`, `n call mum`, `ev fri 19:00 dinner`,
+`snip sig Cheers, M`, `alias gh https://github.com/`; `later <url> [title]` saves a link.
 The older orders (`t done t3`, `n rm n2`, `tz add tokyo`, `widgets move zones top`)
 still work.
 
@@ -36,6 +38,8 @@ still work.
 | Tasks | `tasks` (`t`) |
 | Calendar | `events` (`ev`), `cal`, `agenda`, `today` |
 | Dates | `date`, `days`, `week` |
+| Snippets | `snippets` (`snip`) |
+| Read later | `later` |
 | Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `pw` |
 | Text | `count`, `case` |
 | Developer | `cidr`, `hash`, `jwt`, `url`, `regex`, `diff`, `cron`, `color` |
@@ -169,7 +173,7 @@ All data lives in `localStorage` (keys `cc:*`), behind the store interface in
 `js/core/store.js`. Safari can evict site storage, so keep a copy elsewhere:
 `export` downloads one, and **sync** keeps one in a private GitHub repository.
 
-**Sync**: notes, tasks, events, aliases, settings and the shared history are
+**Sync**: notes, tasks, events, snippets, links, aliases, settings and the shared history are
 kept in one JSON file in a private repository of yours, so every device sees
 the same data. The repository can be shared with other projects: the hub keeps
 to its own directory, `browser-hub/` unless you choose another, and only ever
@@ -194,6 +198,11 @@ one. `sync` shows the state (also the `sync ✓` button under the prompt),
 `sync now` syncs right away, `sync off` forgets the token on this device. Sync
 refuses public repositories. The page may only connect to `api.github.com`
 (its Content Security Policy blocks everything else).
+
+**Snippets** are named pieces of text you paste often (a signature, an
+address, a command): `snip sig` shows one with a copy button. **Later** keeps
+links to read: `later` lists the unread ones, `later l2 open` opens one and
+marks it read. Both sync, undo and turn up in `find` like everything else.
 
 **Date maths**: `date` describes a day (week number, day of the year,
 quarter); `date fri + 3 wd`, `date + 90d`, `date 31 jan + 1m` count forward

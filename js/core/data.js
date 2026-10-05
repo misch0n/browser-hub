@@ -26,6 +26,8 @@ export const DEFAULTS = {
   notes: () => ({ items: [] }),
   tasks: () => ({ items: [] }),
   events: () => ({ items: [] }),
+  snippets: () => ({ items: [] }),
+  later: () => ({ items: [] }), // links to read later
   settings: () => ({ zones: [], zoneNames: {}, theme: DEFAULT_THEME, widgets: DEFAULT_WIDGETS.slice(), panel: true,
     summary: 'on', summaryDismissed: null, name: null }),
   history: () => ({ items: [] }),
@@ -264,6 +266,7 @@ export function createData(store, now) {
   function hasUserData() {
     const starterNames = starters().map((e) => e.name);
     return state.notes.items.length > 0 || state.tasks.items.length > 0 || state.events.items.length > 0 ||
+      state.snippets.items.length > 0 || state.later.items.length > 0 ||
       state.settings.zones.length > 0 || Object.keys(state.settings.zoneNames).length > 0 || state.aliases.entries.some((e) => !starterNames.includes(e.name));
   }
 

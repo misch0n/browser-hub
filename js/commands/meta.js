@@ -37,7 +37,7 @@ export default function register(add, helpers) {
       out.head([['Help', 'strong'], [' · ' + defs.filter((x) => !x.hidden).length + ' built-in commands · ' + plural(engines.length, 'engine') + ' and ' +
         plural(aliases.length, 'alias', 'aliases') + ' of yours', 'dim']]);
       // The one shape every kept thing follows.
-      out.section('Notes, tasks, events and aliases all work the same way');
+      out.section('Notes, tasks, events, snippets, links and aliases all work the same way');
       out.table(null, [
         [usageSegs('tasks'), [['list them', 'dim']]],
         [usageSegs('tasks add <text>'), [['add one', 'dim']]],
@@ -46,7 +46,7 @@ export default function register(add, helpers) {
         [usageSegs('tasks <id> edit <field> <value>'), [['change one field', 'dim']]],
         [usageSegs('tasks <id> rm'), [['remove it (undo brings it back)', 'dim']]],
       ], { stack: true });
-      out.dim('Short names do the same, and add from plain text: t buy milk, n call mum, ev fri 19:00 dinner, alias gh https://github.com/');
+      out.dim('Short names do the same, and add from plain text: t buy milk, n call mum, ev fri 19:00 dinner, snip sig Cheers, later https://…, alias gh https://github.com/');
       // One table, so descriptions line up across groups.
       const rows = [];
       let group = null;
@@ -230,6 +230,8 @@ export default function register(add, helpers) {
         ['notes', [[String(count('notes')), 'num']]],
         ['tasks', [[String(count('tasks')), 'num']]],
         ['events', [[String(count('events')), 'num']]],
+        ['snippets', [[String(count('snippets')), 'num']]],
+        ['links', [[String(count('later')), 'num']]],
         ['aliases', [[String(c.aliases ? c.aliases.entries.length : 0), 'num']]],
         ['size', [[bytes(text.length), 'dim']]],
       ]);
@@ -272,7 +274,7 @@ export default function register(add, helpers) {
         await ctx.data.load();
         // One undo step for the whole import.
         for (const c of Object.keys(r.collections)) ctx.data.noteChange(c, current[c], st()[c]);
-        const total = r.counts.notes + r.counts.tasks + r.counts.events + r.counts.aliases + r.counts.zones;
+        const total = Object.values(r.counts).reduce((a, b) => a + b, 0);
         out.head([['Imported ', ''], [file.name, 'strong']], r.lines.some((l) => l.startsWith('skipped')) || r.invalid ? 'warn' : total ? 'ok' : 'dim');
         out.kv(Object.keys(r.counts).map((k) => [k, [[String(r.counts[k]), r.counts[k] ? 'num' : 'faint']]]));
         if (r.invalid) out.warn(plural(r.invalid, 'invalid entry', 'invalid entries') + ' skipped');

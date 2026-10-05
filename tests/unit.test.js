@@ -1567,7 +1567,7 @@ test('import: conflicts reported, bad entries rejected, schema checked, never ov
   assert.ok(r.lines.some((l) => /skipped alias 'gh'.*already exists/.test(l)));
   assert.ok(r.lines.some((l) => /skipped alias 'help'.*built-in/.test(l)));
   assert.ok(r.lines.some((l) => /skipped alias 'js'/.test(l)));
-  assert.deepEqual(r.counts, { notes: 1, tasks: 0, events: 0, aliases: 2, zones: 1 });
+  assert.deepEqual(r.counts, { notes: 1, tasks: 0, events: 0, snippets: 0, later: 0, aliases: 2, zones: 1 });
   assert.equal(r.invalid, 2);
   assert.equal(r.collections.settings.theme, 'nord'); // this browser already chose a theme
   assert.deepEqual(r.collections.settings.widgets, ['notes']);
@@ -2002,4 +2002,95 @@ test('text commands: pw (kept out of the shared history), count, case, cidr', as
     'last: 2001:db8:0:ffff:ffff:ffff:ffff:ffff']);
   assert.deepEqual(await app.run('cidr 10.0.0.1/31'), ['# 10.0.0.0/31 · IPv4 · private', 'address: 10.0.0.1 (inside the range)', 'network: 10.0.0.0/31',
     'netmask: 255.255.255.254', 'wildcard: 0.0.0.1', 'first: 10.0.0.0', 'last: 10.0.0.1', 'addresses: 2']);
+});
+
+test('snippets and later: the shared grammar, names, read state, undo, find, export, sync', async () => {
+  const app = await makeApp();
+  // Snippets: snip <name> <text> adds, snip <name> shows it ready to copy.
+  assert.deepEqual(await app.run('snip sig Best regards, Mihail'), ['# Added snippet sig · s1']);
+  const shown = await app.run('snip sig');
+  assert.deepEqual(shown.slice(0, 2), ['# Snippet sig · s1', '= Best regards, Mihail']);
+  assert.equal(shown.copied, 'Best regards, Mihail');
+  assert.equal((await app.run('snippets s1'))[1], '= Best regards, Mihail'); // by id too
+  assert.match((await app.run('snip sig again'))[0], /^err: There is already a snippet named 'sig'/);
+  assert.match((await app.run('snip s2 text'))[0], /^err: The name is one word/); // ids aren't names
+  await app.run('snippets add addr "1 Long Street, Sofia"');
+  assert.equal((await app.run('snip addr'))[1], '= 1 Long Street, Sofia');
+  const list = await app.run('snippets');
+  assert.deepEqual(list, ['# 2 snippets · snip <name> copies one', '| id | name | text', 's2 | addr | 1 Long Street, Sofia', 's1 | sig | Best regards, Mihail']);
+  // Edit by name or id, rename, refuse a clash.
+  await app.run('snip sig edit text Cheers, M');
+  assert.equal(app.data.state.snippets.items[0].text, 'Cheers, M');
+  assert.equal((await app.run('snippets s1 edit name addr'))[0], "err: a snippet named 'addr' already exists");
+  await app.run('snippets s1 edit name signature');
+  assert.equal((await app.run('snip signature'))[1], '= Cheers, M');
+  // A multi-line snippet shows as code with its own copy button.
+  await app.run('snip poem roses are red\nviolets are blue');
+  assert.deepEqual((await app.run('snip poem')).slice(1, 3), ['roses are red', 'violets are blue']);
+  await app.run('snip poem rm');
+  assert.equal(app.data.state.snippets.items.length, 2);
+  await app.run('undo');
+  assert.equal(app.data.state.snippets.items.length, 3);
+
+  // Later: a URL first saves it; lists the unread; open marks read and opens after the command.
+  assert.deepEqual(await app.run('later example.com/long-read A long read'), ['# Saved for later l1 · A long read']);
+  assert.equal(app.data.state.later.items[0].url, 'https://example.com/long-read');
+  await app.run('later add https://blog.example.org/post');
+  assert.deepEqual(await app.run('later https://example.com/long-read'), ['# Already saved as l1']);
+  assert.equal((await app.run('later javascript:alert(1)'))[0], '# No links match "javascript:alert(1)"'); // not a link, so a filter
+  assert.equal(app.data.state.later.items.length, 2);
+  assert.match((await app.run('later add javascript:alert(1)'))[0], /^err: 'javascript:alert\(1\)' is not a web address/);
+  const l = await app.run('later');
+  assert.deepEqual(l.slice(0, 4), ['# 2 links to read', '| id | link | site | saved', 'l2 | blog.example.org/post | blog.example.org | today', 'l1 | A long read | example.com | today']);
+  app.ctx.navigateAfter = null;
+  await app.run('later l1 open');
+  assert.equal(app.ctx.navigateAfter, 'https://example.com/long-read');
+  app.ctx.navigateAfter = null;
+  assert.equal(app.data.state.later.items[0].read, true);
+  await app.run('later l2 done');
+  assert.match((await app.run('later'))[0], /^# Nothing left to read · 2 links read/);
+  assert.equal((await app.run('later all'))[0], '# 0 links to read · and 2 read');
+  await app.run('later l2 edit read no');
+  assert.equal((await app.run('later'))[0], '# 1 link to read');
+  assert.ok((await app.run('later l1')).includes('read: ✓ read  [later l1 edit read = yes]'));
+  assert.equal((await app.run('later l1 edit url not a url'))[0], "err: url 'not a url' is not a web address (https://…)");
+
+  // find sees both.
+  const f = await app.run('find long read');
+  assert.ok(f.includes('## Read later 1'));
+  assert.ok((await app.run('find cheers')).includes('## Snippets 1'));
+
+  // Export, then import into an empty hub: everything comes back; again: nothing doubles.
+  const file = await app.store.exportAll();
+  assert.equal(file.collections.snippets.items.length, 3);
+  const other = await makeApp();
+  const { merge: mergeImport } = await import('../js/core/importer.js');
+  const cur = {};
+  for (const k of Object.keys(DEFAULTS)) cur[k] = other.data.state[k];
+  const r = mergeImport(cur, file, other.commands.isBuiltin, () => MON);
+  assert.equal(r.counts.snippets, 3);
+  assert.equal(r.counts.later, 2);
+  const again = mergeImport(r.collections, file, other.commands.isBuiltin, () => MON);
+  assert.deepEqual([again.counts.snippets, again.counts.later], [0, 0]);
+  assert.ok(again.lines.includes("skipped snippet 'signature': already exists"));
+
+  // Sync: both made s1 offline; one is renumbered, both kept.
+  const gh = fakeGitHub({ tokens: ['tok'], repos: { 'me/data': { private: true } } });
+  const dev = async () => {
+    const a = await makeApp();
+    a.ctx.sync = createSync({ data: a.data, store: a.store, now: () => new Date(MON), fetch: gh.fetch, device: 'test' });
+    return a;
+  };
+  const A = await dev(), B = await dev();
+  await A.run('snip one first');
+  await B.run('snip two second');
+  await B.run('later example.com/x');
+  await A.ctx.sync.setup('me/data', null, 'tok');
+  const rb = await B.ctx.sync.setup('me/data', null, 'tok');
+  assert.deepEqual(rb.renumbered, [{ from: 's1', to: 's2' }]);
+  await A.ctx.sync.syncNow();
+  for (const x of [A, B]) {
+    assert.deepEqual(x.data.state.snippets.items.map((s) => s.id + ':' + s.name), ['s1:one', 's2:two']);
+    assert.equal(x.data.state.later.items[0].url, 'https://example.com/x');
+  }
 });

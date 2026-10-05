@@ -193,7 +193,13 @@ function run(raw, shown, pasted) {
   const saved = def && def.noHistory ? Promise.resolve() : data.addHistory(input);
   const record = () => (keep ? data.appendLog(makeEntry({ id, at, device: device.id, deviceName: device.name, input: echoed, ops: out.ops })) : Promise.resolve());
 
-  if (res.kind === 'builtin') return commands.run(res.name, res.rest, ctxFor(out, pasted)).then(record);
+  if (res.kind === 'builtin') {
+    const ctx = ctxFor(out, pasted);
+    // A command that opens a page (later <id> open) does it once it is in the history.
+    return commands.run(res.name, res.rest, ctx).then(record).then(() => {
+      if (ctx.navigateAfter && /^https?:\/\//i.test(ctx.navigateAfter)) return saved.then(() => ctxBase.navigate(ctx.navigateAfter));
+    });
+  }
   if (res.kind === 'error') { out.err(res.message); return record(); }
 
   let target;

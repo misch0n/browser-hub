@@ -1060,6 +1060,7 @@ test('clear and session: per device, undoable, synced across devices', async () 
   await phone.sync.syncNow();
   assert.deepEqual(inputs(phone), ['tasks', 'notes', 'find milk']); // the undo reached the phone too
   // clear all: everything, everywhere.
+  phone.app.ctx.now = () => new Date('2026-10-05T10:06:00Z'); // after every entry, in any time zone
   await phone.app.run('clear all');
   await phone.sync.syncNow();
   await pc.sync.syncNow();

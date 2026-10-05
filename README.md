@@ -35,7 +35,7 @@ still work.
 | Notes | `notes` (`n`) |
 | Tasks | `tasks` (`t`) |
 | Calendar | `events` (`ev`), `cal`, `agenda`, `today` |
-| Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units` |
+| Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr` |
 | Share | `clip` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
@@ -192,6 +192,10 @@ one. `sync` shows the state (also the `sync ✓` button under the prompt),
 refuses public repositories. The page may only connect to `api.github.com`
 (its Content Security Policy blocks everything else).
 
+**QR codes**: `qr <text>` draws one for a link or any text, made on the page
+(nothing is sent anywhere), always dark on white so phones can scan it in any
+theme. Error correction is raised as far as the size allows.
+
 **Shared clip**: `clip <text>` hands one piece of text to your other devices
 (`clip` there shows it, with a copy button; a device that gets a new clip
 says so). It is handled with care, because git keeps every version of the
@@ -239,7 +243,8 @@ Tests:
 ```sh
 npm test                                         # unit tests, no dependencies
 npm run test:tz                                  # unit tests in six time zones (UTC-11 … UTC+14)
-NODE_PATH=$(npm root -g) npm run test:e2e        # the real page in Chromium (needs Playwright)
+NODE_PATH=$(npm root -g) npm run test:e2e        # the real page in Chromium (needs Playwright, and jsqr below)
+npm i --no-save jsqr@1.4.0 && node --test tests/qr.test.mjs   # QR codes read back by an independent decoder
 ```
 
 Safari-only behaviour (⌘T focus, storage eviction) can't be covered by these;

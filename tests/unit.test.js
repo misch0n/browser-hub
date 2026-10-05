@@ -417,6 +417,7 @@ function recorder() {
     code: (text) => lines.push(...text.split('\n')),
     value: (text) => { lines.push('= ' + text); lines.copied = text; }, // the page's value() also marks it copyable
     copyable: (text) => { lines.copied = text; },
+    qr: (text, ecl) => lines.push('QR ' + ecl + ' ' + text),
     calendar: (spec) => lines.push('CAL ' + spec.year + '-' + spec.month + ' marks=' + spec.marks.sort((a, b) => a - b).join(',')),
   };
   return { out, lines, tone: () => tone };
@@ -1718,4 +1719,11 @@ test('clip: sealed with a passphrase, one item, gone after 15 minutes, never kep
   A.answer(null);
   assert.match((await A.run('clip key off'))[0], /^# Passphrase forgotten on this device/);
   assert.equal(A.store.getLocal('clip-key'), null);
+});
+
+test('qr command: drawn from the text, too long refused', async () => {
+  const app = await makeApp();
+  assert.deepEqual(await app.run('qr https://example.com'), ['# QR code · 19 bytes · version 2 · error correction Q', 'QR Q https://example.com', 'dim: https://example.com']);
+  assert.match((await app.run('qr ' + 'x'.repeat(3000)))[0], /^err: too long for a QR code: 3000 bytes \(at most 2331 at level M\)/);
+  assert.match((await app.run('qr'))[0], /^# Usage/);
 });

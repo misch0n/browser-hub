@@ -667,6 +667,36 @@ async function check(name, fn) {
     fs.unlinkSync(f);
   });
 
+  await check('qr: drawn dark on white in any theme, scans back to the text, redrawn from history', async () => {
+    const jsQR = require('jsqr');
+    const url = 'https://misch0n.github.io/browser-hub/?q=t%20hello';
+    await send('theme dark');
+    await send('qr ' + url);
+    assert.match(await lastText(), /QR code · 50 bytes · version \d+ · error correction [LMQH]/);
+    const scan = async () => {
+      const png = await page.locator('#turns .turn').last().locator('svg.qr').screenshot();
+      const blank = await context.newPage();
+      const px = await blank.evaluate(async (b64) => {
+        const bmp = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: 'image/png' }));
+        const c = new OffscreenCanvas(bmp.width, bmp.height);
+        const g = c.getContext('2d');
+        g.drawImage(bmp, 0, 0);
+        return { w: bmp.width, h: bmp.height, data: Array.from(g.getImageData(0, 0, bmp.width, bmp.height).data) };
+      }, png.toString('base64'));
+      await blank.close();
+      const r = jsQR(Uint8ClampedArray.from(px.data), px.w, px.h);
+      return r && r.data;
+    };
+    assert.equal(await scan(), url);
+    // Kept in the shared history as text only, and drawn again after a reload.
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:log')).entries.pop());
+    assert.deepEqual(stored.ops.find((o) => o[0] === 'qr'), ['qr', url, stored.ops.find((o) => o[0] === 'qr')[2]]);
+    await page.reload();
+    await page.waitForSelector('#turns svg.qr');
+    assert.equal(await scan(), url);
+    await send('theme auto');
+  });
+
   await check('copy buttons and json colouring', async () => {
     await send('json {"a":[1,true,null]}');
     assert.ok(await lastTurn().locator('.code .t-num').count() > 0);

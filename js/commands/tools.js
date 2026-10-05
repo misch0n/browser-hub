@@ -1,6 +1,7 @@
 import { plural } from '../core/util.js';
 import { evaluate, formatNumber } from '../lib/calc.js';
 import { convert, listUnits } from '../lib/units.js';
+import { encodeQR } from '../lib/qr.js';
 import { uuid, b64encode, b64decode, prettyJson, parseEpochInput, fmtUTC, fmtLocal, relative } from '../lib/misc.js';
 
 export default function register(add, { st, usage }) {
@@ -107,6 +108,27 @@ export default function register(add, { st, usage }) {
       } catch (e) {
         out.err(e.message);
       }
+    },
+  });
+
+  add({
+    name: 'qr', group: 'Tools', desc: 'a QR code for text or a link, to scan with a phone',
+    usage: ['qr <text>'],
+    examples: ['qr https://misch0n.github.io/browser-hub/', 'qr call me back on 0123 456'],
+    async run(ctx, rest) {
+      const { out } = ctx;
+      const text = rest.trim();
+      if (!text) return usage(ctx, this);
+      let q;
+      try {
+        q = encodeQR(text);
+      } catch (e) {
+        return out.err(e.message);
+      }
+      const bytes = new TextEncoder().encode(text).length;
+      out.head([['QR code', 'strong'], [' · ' + plural(bytes, 'byte') + ' · version ' + q.version + ' · error correction ' + q.ecl, 'dim']]);
+      out.qr(text, q.ecl);
+      out.dim(text.length > 80 ? text.slice(0, 79) + '…' : text);
     },
   });
 }

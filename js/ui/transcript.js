@@ -3,12 +3,13 @@ import { monthGrid } from './components.js';
 import { jsonLines } from '../core/format.js';
 import { oneValue, quote } from '../core/args.js';
 import { toField, fromField } from '../core/paste.js';
+import { encodeQR, qrPath } from '../lib/qr.js';
 
 const MAX_TURNS = 400;
 
 // The Out methods that draw something: recorded, so a turn can be stored in
 // the shared history and drawn again later, on any device.
-const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar'];
+const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr'];
 const plain = (v) => JSON.parse(JSON.stringify(v === undefined ? null : v));
 
 // The scrolling conversation: each command is a turn with the echoed input
@@ -191,6 +192,27 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
       // Marks `text` as this command's result for the copy button.
       copyable(text) {
         if (opts.onCopyable && text && !mode.replay) opts.onCopyable(String(text));
+      },
+      // A QR code for `text`, drawn here (stored as the text, so history stays small).
+      qr(text, ecl) {
+        const q = encodeQR(text, { ecl });
+        const n = q.size + 8;
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 ' + n + ' ' + n);
+        svg.setAttribute('class', 'qr');
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', 'QR code: ' + text);
+        svg.setAttribute('shape-rendering', 'crispEdges');
+        const bg = document.createElementNS(NS, 'rect');
+        bg.setAttribute('width', String(n));
+        bg.setAttribute('height', String(n));
+        bg.setAttribute('fill', '#fff');
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', qrPath(q.modules));
+        path.setAttribute('fill', '#000');
+        svg.append(bg, path);
+        push(h('div', { class: 'qr-wrap' }, svg));
       },
       calendar(spec) {
         push(h('div', { class: 'cal-wrap' }, monthGrid(spec)));

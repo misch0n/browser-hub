@@ -18,10 +18,12 @@ jobs:
           node-version: 22
       - name: Unit tests in several time zones
         run: node tests/run-tz.mjs
-      - name: Install Playwright and Chromium
+      - name: Install Playwright, Chromium and a QR decoder (test-only)
         run: |
-          npm install --no-save --no-package-lock playwright@1.56.1
+          npm install --no-save --no-package-lock playwright@1.56.1 jsqr@1.4.0
           npx playwright install --with-deps chromium
+      - name: QR codes scan back with an independent decoder
+        run: node --test tests/qr.test.mjs
       - name: Browser tests against the built site
         run: node tests/e2e.cjs
 

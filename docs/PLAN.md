@@ -283,7 +283,7 @@ The page is deployed to GitHub Pages; the code is public and the data stays in t
 
 - Routing from Safari's address bar (needs an extension or a local server).
 - Background reminders and notifications.
-- Calendar sync with Google, iCloud or Reminders.
+- Calendar sync with Google, iCloud or Reminders. (Data sync to a private GitHub repository was added later: see the README.)
 - History indexing, page archiving, feeds, watchers, anything server-side.
 - Storage other than `localStorage`.
 

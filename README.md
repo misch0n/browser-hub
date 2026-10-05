@@ -110,9 +110,30 @@ the prompt and wait for Enter, so a link from another site can never change
 your data.
 
 All data lives in `localStorage` (keys `cc:*`), behind the store interface in
-`js/core/store.js`. **`export` is the only backup**: Safari can evict site
-storage, so the page reminds you when your last export is more than 14 days
-old, and the backup widget shows how long it has been.
+`js/core/store.js`. Safari can evict site storage, so keep a copy elsewhere:
+`export` downloads one, and **sync** keeps one in a private GitHub repository.
+
+**Sync**: notes, tasks, events, aliases and settings (not command history)
+are kept in one JSON file in a private repository of yours, so every device
+sees the same data.
+
+1. Make a private repository (an empty one is fine).
+2. Make a [fine-grained token](https://github.com/settings/personal-access-tokens/new)
+   for just that repository, with **Contents: Read and write**, and an expiry.
+3. Run `sync setup <you>/<repository>`. The prompt asks for the token with the
+   input hidden; it is never shown, kept in history, exported or synced.
+
+The token stays on that device only (each device gets its own, or the same one
+entered again). Changes go to the repo a few seconds after you make them and
+come in when the page opens or comes back into view. Each sync merges item by
+item against what was last synced, so edits on two devices both survive; an
+item changed on both keeps this device's version and says so, and two items
+created offline under the same id get renumbered. When GitHub refuses the token
+(it expired or was revoked), sync pauses and says so; `sync token` enters a new
+one. `sync` shows the state (also the `sync ✓` button under the prompt),
+`sync now` syncs right away, `sync off` forgets the token on this device. Sync
+refuses public repositories. The page may only connect to `api.github.com`
+(its Content Security Policy blocks everything else).
 
 ## Code layout
 

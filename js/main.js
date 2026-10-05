@@ -8,6 +8,8 @@ import { DAY_NAMES_LONG, MONTH_NAMES, kindSeg } from './core/format.js';
 import { daySummary, summaryVisible, summaryRows, summaryCounts, tomorrowLine } from './core/summary.js';
 import { createCommands } from './commands/index.js';
 import { detectOS, keyLabel } from './core/keys.js';
+import { createSync } from './sync.js';
+import { SYNCED } from './core/merge.js';
 import { createTranscript } from './ui/transcript.js';
 import { createPrompt } from './ui/prompt.js';
 import { createPalette } from './ui/palette.js';
@@ -81,6 +83,38 @@ const ctxBase = {
   leave(url) { location.replace(url); },
 };
 
+// ---- sync ---------------------------------------------------------------------------
+// With a private GitHub repo set up (`sync setup`), changes go there a few
+// seconds after they are made, and come in when the page opens or comes back
+// into view (and every few minutes while it is in view).
+
+const sync = createSync({ data, store, now, device: ctxBase.os, onStatus: (s) => showSyncStatus(s) });
+ctxBase.sync = sync;
+ctxBase.askSecret = (label) => prompt.askSecret(label);
+let authNoticeShown = false;
+
+function showSyncStatus(s) {
+  const el = $('status-sync');
+  el.hidden = s.state === 'off';
+  const look = { ok: ['sync ✓', 'Synced ' + (s.lastSync ? new Date(s.lastSync).toLocaleTimeString() : '')], syncing: ['sync …', 'Syncing'],
+    idle: ['sync', 'Waiting to sync'], error: ['sync !', 'Sync failed: ' + (s.message || '')], auth: ['sync !', 'Token refused: run sync token'] }[s.state];
+  if (look) { el.textContent = look[0]; el.title = look[1]; }
+  el.dataset.state = s.state;
+  if (s.state === 'auth' && !authNoticeShown) {
+    authNoticeShown = true;
+    const out = transcript.notice();
+    out.head([['Sync paused', 'strong'], [' · GitHub refused the token (expired or revoked)', 'dim']], 'warn');
+    out.line([['Make a new token for the same repository, then run ', 'dim'], ['sync token', 'accent', { run: 'sync token' }]]);
+  }
+  if (s.state === 'ok') authNoticeShown = false;
+}
+
+// A merge from the repo also lands here as a change; the sync that follows
+// finds nothing new and only reads.
+function syncSoon(ms) {
+  if (sync.config) sync.schedule(ms);
+}
+
 let currentCtx = ctxBase;
 const commands = createCommands(() => currentCtx);
 const ctxFor = (out) => (currentCtx = Object.assign({}, ctxBase, { out }));
@@ -136,7 +170,8 @@ const completionEnv = () => ({ defs: commands.defs, entries: state.aliases.entri
 
 const hintEl = $('hint');
 
-function describe(v, ghost, hist, search) {
+function describe(v, ghost, hist, search, secret) {
+  if (secret) return [['hidden input', 'accent'], [' · not shown, not kept in history · ↵ saves · esc cancels', 'faint']];
   if (search) {
     return [['history search ', 'faint'], ['“' + search.query + '”', 'strong'], [': ', 'faint'],
       search.match ? [search.match, 'accent'] : ['no match', 'err'],
@@ -172,9 +207,9 @@ const prompt = createPrompt({
   ghostRest: $('ghost-rest'),
   env: () => completionEnv(),
   history: () => state.history.items,
-  hint(v, ghost, hist, search) {
+  hint(v, ghost, hist, search, secret) {
     hintEl.textContent = '';
-    hintEl.appendChild(rich(describe(v, ghost, hist, search)));
+    hintEl.appendChild(rich(describe(v, ghost, hist, search, secret)));
   },
   onSubmit: run,
   onPalette: () => palette.open(),
@@ -296,6 +331,8 @@ function setDrawer(open) {
   if (!open) autoFocus();
 }
 
+$('status-sync').addEventListener('click', () => { run('sync'); autoFocus(); });
+
 $('panel-toggle').addEventListener('click', () => {
   if (drawerQuery.matches) setDrawer(!root.classList.contains('drawer-open'));
   else data.mutate('settings', (d) => { d.panel = !d.panel; }).catch((e) => transcript.notice().err(e.message));
@@ -314,6 +351,7 @@ const widgets = createWidgets({
 });
 
 data.onChange((col) => {
+  if (col === null || SYNCED.includes(col)) syncSoon(4000);
   if (col === null || col === 'settings' || col === 'aliases') applySettings();
   renderPinned();
   widgets.render();
@@ -364,6 +402,7 @@ window.addEventListener('pageshow', (e) => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     reloadAll();
+    syncSoon(300);
     widgets.start();
     autoFocus();
   } else {
@@ -400,6 +439,9 @@ async function start() {
   ]);
   renderPinned();
   setInterval(renderPinned, 60000); // a new day brings a new summary
+  showSyncStatus(sync.status);
+  syncSoon(0);
+  setInterval(() => { if (document.visibilityState === 'visible') syncSoon(0); }, 5 * 60000);
 
   const notices = [];
   if (!store.persistent) notices.push(['warn', 'Storage is unavailable (private browsing?); nothing will be saved']);

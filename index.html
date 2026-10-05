@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com; object-src 'none'; base-uri 'none'">
   <meta name="color-scheme" content="light dark">
   <title>Control Center</title>
   <link rel="search" type="application/opensearchdescription+xml" title="Control Center" href="opensearch.xml">
@@ -40,6 +40,7 @@
         <div id="statusbar">
           <span id="hint" aria-live="off"></span>
           <span class="status-right">
+            <button id="status-sync" type="button" hidden title="Sync status">sync</button>
             <span class="status-engine-wrap" title="Default search engine">engine <span id="status-engine" class="t-accent"></span></span>
             <button id="keys-toggle" type="button" aria-controls="keybar" aria-pressed="false" title="Show or hide key buttons">keys</button>
             <button id="panel-toggle" type="button" aria-controls="panel" title="Show or hide widgets">widgets</button>

@@ -16,6 +16,9 @@ export function createPrompt(opts) {
   // Ctrl+R history search, as in bash: the prompt holds the query, the hint
   // shows the match. { query, idx, saved } while searching, else null.
   let search = null;
+  // askSecret(): the next Enter hands over the text instead of running it,
+  // with the field masked; it is never echoed or kept in history.
+  let secret = null; // { resolve, placeholder }
 
   function set(text) {
     input.value = text;
@@ -33,7 +36,23 @@ export function createPrompt(opts) {
     return candidates[0].value.slice(token.length);
   }
 
+  function endSecret(value) {
+    const s = secret;
+    secret = null;
+    input.type = 'text';
+    input.placeholder = s.placeholder;
+    input.value = '';
+    update();
+    s.resolve(value);
+  }
+
   function update() {
+    if (secret) {
+      ghostTyped.textContent = '';
+      ghostRest.textContent = '';
+      opts.hint('', '', null, null, { secret: true });
+      return;
+    }
     const v = input.value;
     if (search && v !== search.query) {
       // The query changed: look again from the newest entry.
@@ -88,6 +107,11 @@ export function createPrompt(opts) {
     // Safari fires compositionend *before* the keydown of the Enter that
     // confirms an IME conversion; keyCode 229 marks that keydown.
     if (e.isComposing || composing || e.keyCode === 229) return;
+    if (secret) {
+      if (e.key === 'Enter') { e.preventDefault(); endSecret(input.value.trim() || null); }
+      else if (e.key === 'Escape') { e.preventDefault(); endSecret(null); }
+      return; // nothing else: no completion, history or line editing on a secret
+    }
     const action = actionFor(e);
     if (action === 'history-search') { e.preventDefault(); startOrOlder(); return; }
     if (search) {
@@ -167,6 +191,22 @@ export function createPrompt(opts) {
   document.addEventListener('selectionchange', () => { if (document.activeElement === input) update(); });
 
   return {
+    // Asks for a secret (a token) in the prompt: masked, not echoed, not in
+    // history. Resolves to the text, or null on Esc.
+    askSecret(label) {
+      if (secret) endSecret(null);
+      return new Promise((resolve) => {
+        secret = { resolve, placeholder: input.placeholder };
+        histIdx = -1;
+        search = null;
+        input.value = '';
+        input.type = 'password';
+        input.placeholder = label;
+        update();
+        input.focus({ preventScroll: true });
+      });
+    },
+    get askingSecret() { return !!secret; },
     // Acts as if `spec` were pressed in the prompt: 'Escape', 'Tab', 'ArrowUp',
     // 'ctrl+r' … (the phone key bar).
     press(spec) {
@@ -178,7 +218,7 @@ export function createPrompt(opts) {
     },
     set,
     update,
-    reset() { histIdx = -1; search = null; set(''); },
+    reset() { if (secret) endSecret(null); histIdx = -1; search = null; set(''); },
     focus() { input.focus({ preventScroll: true }); },
     blur() { input.blur(); },
     get value() { return input.value; },

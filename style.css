@@ -520,7 +520,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 #hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-right { display: flex; align-items: center; gap: 2ch; flex-shrink: 0; }
 
-#panel-toggle, #keys-toggle {
+#panel-toggle, #keys-toggle, #status-sync {
   color: var(--dim);
   background: none;
   border: 1px solid var(--border);
@@ -531,6 +531,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 #panel-toggle:hover, #panel-toggle[aria-pressed="true"],
 #keys-toggle:hover, #keys-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+#status-sync { font: inherit; }
+#status-sync[hidden] { display: none; }
+#status-sync[data-state="ok"] { color: var(--ok); }
+#status-sync[data-state="error"], #status-sync[data-state="auth"] { color: var(--err); border-color: var(--err); }
 
 /* ---- command palette ------------------------------------------------------------------- */
 

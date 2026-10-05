@@ -8,10 +8,12 @@
 // entries by name), `before`/`after` hold each changed item, null meaning
 // absent. Every other top-level field that changed goes in `fields`.
 
+import { canonical } from './merge.js';
+
 export const UNDOABLE = ['aliases', 'notes', 'tasks', 'events', 'settings'];
 const LISTS = { notes: ['items', 'id'], tasks: ['items', 'id'], events: ['items', 'id'], aliases: ['entries', 'name'] };
 
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const same = (a, b) => canonical(a) === canonical(b);
 const idNum = (id) => parseInt(String(id).slice(1), 10);
 
 // The patch from `before` to `after` for collection `col`, or null if nothing changed.

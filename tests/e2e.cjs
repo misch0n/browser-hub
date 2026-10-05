@@ -31,12 +31,25 @@ async function check(name, fn) {
   const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 900 } });
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const external = [];
-  await context.route('**/*', (route) => {
+  // GitHub's API, faked in memory for the sync tests (with CORS, as the real one has).
+  const { fakeGitHub } = await import(require('url').pathToFileURL(path.join(__dirname, 'fake-github.mjs')).href);
+  const gh = fakeGitHub({ tokens: ['tok-a', 'tok-b'], repos: { 'me/data': { private: true } } });
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type, accept, x-github-api-version',
+    'access-control-allow-methods': 'GET, PUT, OPTIONS' };
+  const github = (route) => {
+    const req = route.request();
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    const r = gh.handle(req.method(), req.url(), req.headers(), req.postData() || '');
+    return route.fulfill({ status: r.status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(r.json) });
+  };
+  const routeAll = (ctx) => ctx.route('**/*', (route) => {
     const u = route.request().url();
     if (u.startsWith(base)) return route.continue();
+    if (u.startsWith('https://api.github.com/')) return github(route);
     external.push(u);
     return route.fulfill({ status: 200, contentType: 'text/html', body: '<title>external</title>external page' });
   });
+  await routeAll(context);
 
   const page = await context.newPage();
   const unstamped = [];
@@ -46,7 +59,11 @@ async function check(name, fn) {
   });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', (m) => {
+    // The browser logs every 4xx response; GitHub's 404 (no sync file yet) and
+    // 401 (the revoked-token test) are expected answers, handled by the page.
+    if (m.type() === 'error' && !(m.location().url || '').startsWith('https://api.github.com/')) errors.push(m.text());
+  });
   await page.goto(base);
 
   const prompt = page.locator('#prompt');
@@ -69,7 +86,7 @@ async function check(name, fn) {
 
   await check('CSP meta blocks outbound connections and inline scripts', async () => {
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
-    assert.match(csp, /connect-src 'none'/);
+    assert.match(csp, /connect-src https:\/\/api\.github\.com;/); // sync only, nothing else
     assert.equal(await page.evaluate(() => fetch('https://example.com/').then(() => false, () => true)), true);
     const ran = await page.evaluate(() => new Promise((resolve) => {
       const s = document.createElement('script');
@@ -385,6 +402,69 @@ async function check(name, fn) {
     const id = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.find((t) => t.text === 'pinned summary task').id);
     await send('t rm ' + id);
     assert.doesNotMatch(await page.locator('#pinned').innerText(), /pinned summary task/); // follows the data
+  });
+
+  await check('sync: token asked hidden and kept off the record; two devices converge; a refused token pauses and is renewed', async () => {
+    await send('sync');
+    assert.match(await lastText(), /Sync is off[\s\S]*fine-grained token/);
+    // Setup: the token goes into a masked prompt, never into the transcript or history.
+    await send('sync setup me/data');
+    assert.equal(await prompt.getAttribute('type'), 'password');
+    assert.match(await page.locator('#hint').innerText(), /hidden input/);
+    await prompt.pressSequentially('tok-a');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Syncing with me\/data/.test(document.getElementById('turns').innerText), null, { timeout: 5000 });
+    assert.equal(await prompt.getAttribute('type'), 'text');
+    const leaked = await page.evaluate(() => [document.getElementById('turns').innerText, localStorage.getItem('cc:history')].join('\n').includes('tok-a'));
+    assert.equal(leaked, false);
+    await page.waitForFunction(() => /sync ✓/.test(document.getElementById('status-sync').textContent));
+    assert.ok(gh.file('me/data'));
+
+    // A change here reaches the repo by itself, a few seconds later.
+    await send('t synced across devices');
+    await page.waitForFunction(() => /sync ✓/.test(document.getElementById('status-sync').textContent));
+    await new Promise((r) => setTimeout(r, 5500));
+    assert.ok(gh.file('me/data').collections.tasks.items.some((t) => t.text === 'synced across devices'));
+
+    // Device B picks it up when set up, and its dismissal of the summary reaches A.
+    const other = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+    await routeAll(other);
+    const b = await other.newPage();
+    await b.goto(base);
+    await b.waitForSelector('#prompt');
+    const bsend = async (c) => { await b.locator('#prompt').fill(c); await b.keyboard.press('Enter'); await b.waitForTimeout(80); };
+    await bsend('sync setup me/data');
+    await b.locator('#prompt').pressSequentially('tok-b');
+    await b.keyboard.press('Enter');
+    await b.waitForFunction(() => /synced across devices/.test(document.querySelector('[data-widget=tasks]').innerText), null, { timeout: 5000 });
+    await send('today pin');
+    await send('sync now');
+    await bsend('sync now');
+    await bsend('today dismiss');
+    await bsend('sync now');
+    await b.waitForFunction(() => /Synced with/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    await send('sync now');
+    await page.waitForFunction(() => document.getElementById('pinned').hidden, null, { timeout: 5000 });
+    await other.close();
+
+    // The token is revoked: sync pauses, says so once, and a new token resumes it.
+    gh.revoke('tok-a');
+    await send('sync now');
+    assert.match(await lastText(), /refused the token/);
+    await page.waitForFunction(() => /Sync paused/.test(document.getElementById('turns').innerText));
+    assert.equal(await page.locator('#status-sync').textContent(), 'sync !');
+    await send('sync token');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => /Cancelled/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    gh.allow('tok-a2');
+    await send('sync token');
+    await prompt.pressSequentially('tok-a2');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /New token saved/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 5000 });
+    assert.equal(await page.locator('#status-sync').textContent(), 'sync ✓');
+    await send('sync off');
+    assert.equal(await page.locator('#status-sync').isVisible(), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem('cc-device:sync-token')), null);
   });
 
   await check('javascript: aliases are rejected', async () => {

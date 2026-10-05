@@ -2,6 +2,7 @@ import { SCHEMA } from './util.js';
 import { starters, SHIPPED_DEFAULT } from './aliases.js';
 import { DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js';
 import { UNDOABLE, diff, conflicts, apply } from './undo.js';
+import { sameDoc } from './merge.js';
 
 export const HISTORY_CAP = 500;
 export const UNDO_MAX = 30;
@@ -140,6 +141,35 @@ export function createData(store, now) {
 
   const steps = () => loadSteps();
 
+  // ---- sync ----
+  // The stored documents of `cols`, read fresh.
+  function read(cols) {
+    return serial(async () => {
+      const out = {};
+      for (const c of cols) out[c] = await readDoc(c);
+      return out;
+    });
+  }
+
+  // Writes a merge from sync, but only if this device's data is still what
+  // the merge started from (`expected`); otherwise false, and sync retries.
+  // Not an undo step: undo still works item by item around it.
+  function applySync(merged, expected) {
+    return serial(async () => {
+      for (const c of Object.keys(expected)) {
+        if (!sameDoc(await readDoc(c), expected[c])) return false;
+      }
+      for (const c of Object.keys(merged)) {
+        if (!DEFAULTS[c] || sameDoc(merged[c], expected[c])) continue;
+        const doc = shape(DEFAULTS[c](now), merged[c]);
+        await store.put(c, doc);
+        state[c] = doc;
+        emit(c);
+      }
+      return true;
+    });
+  }
+
   // Re-reads the collection from the store, applies fn(doc), saves. Reading
   // fresh each time means a second open tab's changes are never overwritten
   // by a stale copy (last write still wins per collection).
@@ -244,5 +274,6 @@ export function createData(store, now) {
   return {
     state, load, reload, mutate, allocId, allocIds, addHistory, hasUserData, exportAgeDays, markExported, onChange,
     transaction, noteChange, undo: (force) => step('undo', force), redo: (force) => step('redo', force), steps,
+    read, applySync,
   };
 }

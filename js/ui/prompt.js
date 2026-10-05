@@ -107,6 +107,7 @@ export function createPrompt(opts) {
     update,
     reset() { histIdx = -1; set(''); },
     focus() { input.focus({ preventScroll: true }); },
+    blur() { input.blur(); },
     get value() { return input.value; },
   };
 }

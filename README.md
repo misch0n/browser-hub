@@ -19,6 +19,8 @@ the default search engine.
 
 Keys: **Tab** completes (again to list), **→** accepts the grey suggestion,
 **↑/↓** history, **/** command palette, **?** shortcuts, **Esc** clears.
+On touch screens, tap outside the prompt box to put the keyboard away and tap
+the box to bring it back.
 
 **Themes**: `theme` lists them with colour swatches; `theme nord` switches.
 `auto` follows the system's light/dark setting.
@@ -40,6 +42,7 @@ No build step and no dependencies; the page loads native ES modules.
 ```
 index.html, style.css, themes.css
 js/boot.js        applies the saved theme before first paint
+tools/            build-site.mjs: cache-busted copy of the site for deploys
 js/main.js        wiring: prompt, transcript, palette, widgets, lifecycle
 js/core/          data model: store, collections, dispatch, completion, import
 js/lib/           pure helpers: calc, units, time zones, ics, base64, epoch
@@ -74,6 +77,12 @@ see the acceptance tests in the plan and run them by hand.
 
 Pushes to `main` are deployed automatically by `.github/workflows/pages.yml`.
 In the repository settings, set **Pages → Source** to **GitHub Actions**.
+
+The workflow runs `node tools/build-site.mjs _site <commit>`, which stamps
+every stylesheet, script and module import with the commit
+(`style.css?v=…`). GitHub Pages can't control caching, and Safari otherwise
+keeps serving old files after a deploy, which mixes a new page with stale
+styles. The browser tests run against this build.
 
 All project sites under `<user>.github.io` share one origin and therefore one
 `localStorage`. Use a custom domain or a dedicated account or organisation

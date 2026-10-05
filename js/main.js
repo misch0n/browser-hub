@@ -15,6 +15,9 @@ import { rich } from './ui/dom.js';
 const $ = (id) => document.getElementById(id);
 const root = document.documentElement;
 const drawerQuery = window.matchMedia('(max-width: 860px)');
+// Touch screens: focusing the prompt raises the on-screen keyboard, so the page
+// only takes focus when asked (opening the page, tapping the prompt box).
+const touchQuery = window.matchMedia('(pointer: coarse)');
 
 const store = createLocalStore();
 const data = createData(store);
@@ -181,13 +184,13 @@ function setDrawer(open) {
   root.classList.toggle('drawer-open', open);
   $('scrim').hidden = !open;
   applySettings();
-  if (!open) prompt.focus();
+  if (!open) autoFocus();
 }
 
 $('panel-toggle').addEventListener('click', () => {
   if (drawerQuery.matches) setDrawer(!root.classList.contains('drawer-open'));
   else data.mutate('settings', (d) => { d.panel = !d.panel; }).catch((e) => transcript.notice().err(e.message));
-  prompt.focus();
+  autoFocus();
 });
 $('scrim').addEventListener('click', () => setDrawer(false));
 $('panel-close').addEventListener('click', () => setDrawer(false));
@@ -196,7 +199,7 @@ drawerQuery.addEventListener('change', () => setDrawer(false));
 const widgets = createWidgets({
   listEl: $('widgets'),
   data, store, now,
-  run: (cmd) => { if (drawerQuery.matches) setDrawer(false); run(cmd); prompt.focus(); },
+  run: (cmd) => { if (drawerQuery.matches) setDrawer(false); run(cmd); autoFocus(); },
   setInput: (text) => { if (drawerQuery.matches) setDrawer(false); ctxBase.setInput(text); },
   onClose: (id) => run('widgets ' + id + ' off'),
 });
@@ -209,9 +212,22 @@ data.onChange((col) => {
 
 // ---- focus and tab lifecycle -------------------------------------------------------
 
+// Refocus that happens on its own (after a widget action, a drawer closing,
+// coming back to the tab). Skipped on touch screens so the keyboard stays down.
+function autoFocus() {
+  if (!touchQuery.matches && !palette.isOpen) prompt.focus();
+}
+
 document.addEventListener('click', (e) => {
   if (palette.isOpen) {
     if (!$('palette').contains(e.target)) palette.close();
+    return;
+  }
+  if (touchQuery.matches) {
+    // A tap anywhere outside the prompt box dismisses the keyboard; tapping
+    // the box (not just the text field) brings it back.
+    if (e.target.closest('.prompt-box')) prompt.focus();
+    else if (!e.target.closest('input, textarea, select')) prompt.blur();
     return;
   }
   if (e.target.closest('a, button, input, textarea, select, label')) return;
@@ -221,7 +237,7 @@ document.addEventListener('click', (e) => {
   prompt.focus();
 });
 
-window.addEventListener('focus', () => { if (!palette.isOpen) prompt.focus(); });
+window.addEventListener('focus', autoFocus);
 
 window.addEventListener('pageshow', (e) => {
   // Also fires when Safari restores the page from the back-forward cache:
@@ -235,7 +251,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     reloadAll();
     widgets.start();
-    if (!palette.isOpen) prompt.focus();
+    autoFocus();
   } else {
     widgets.stop();
   }

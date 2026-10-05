@@ -7,7 +7,9 @@ const path = require('path');
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 
-const root = path.join(__dirname, '..');
+// Test the deployable build: the same cache-busting step the Pages workflow runs.
+const root = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cc-site-'));
+require('child_process').execFileSync(process.execPath, ['tools/build-site.mjs', root, 'e2e'], { cwd: path.join(__dirname, '..'), stdio: 'ignore' });
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const file = path.join(root, req.url.split('?')[0] === '/' ? 'index.html' : req.url.split('?')[0]);
@@ -36,6 +38,11 @@ async function check(name, fn) {
   });
 
   const page = await context.newPage();
+  const unstamped = [];
+  context.on('request', (r) => {
+    const u = r.url();
+    if (u.startsWith(base) && /\.(js|css)(\?|$)/.test(u) && !u.includes('?v=e2e')) unstamped.push(u);
+  });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -375,6 +382,37 @@ async function check(name, fn) {
     assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('prompt')).fontSize), '14px');
   });
 
+  await check('every stylesheet and module is loaded through a versioned URL', async () => {
+    assert.deepEqual(unstamped, []);
+  });
+
+  await check('touch: tapping outside the prompt drops focus (keyboard); tapping the box restores it', async () => {
+    const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const tp = await touch.newPage();
+    await tp.goto(base);
+    await tp.waitForSelector('[data-widget=tasks]');
+    const active = () => tp.evaluate(() => document.activeElement && document.activeElement.id);
+    assert.equal(await active(), 'prompt'); // the page opens ready to type
+    await tp.locator('#transcript').tap({ position: { x: 150, y: 400 } });
+    assert.notEqual(await active(), 'prompt');
+    await tp.waitForTimeout(400);
+    assert.notEqual(await active(), 'prompt'); // nothing pulls it back
+    await tp.locator('.prompt-glyph').tap(); // anywhere on the box, not just the text
+    assert.equal(await active(), 'prompt');
+    await tp.locator('#prompt').fill('t touch task');
+    await tp.keyboard.press('Enter');
+    await tp.locator('#transcript').tap({ position: { x: 150, y: 600 } });
+    // widget actions don't raise the keyboard either
+    await tp.locator('#panel-toggle').tap();
+    await tp.waitForTimeout(300);
+    assert.notEqual(await active(), 'prompt');
+    await tp.locator('[data-widget=tasks] .w-check').first().tap();
+    await tp.waitForFunction(() => /Completed/.test(document.getElementById('turns').innerText));
+    await tp.waitForTimeout(200);
+    assert.notEqual(await active(), 'prompt');
+    await touch.close();
+  });
+
   await check('no console errors during the whole run', async () => {
     assert.deepEqual(errors.filter((e) => !/Content Security Policy|Refused to (connect|evaluate|execute)|Failed to fetch/i.test(e)), []);
   });
@@ -382,5 +420,6 @@ async function check(name, fn) {
   await page.screenshot({ path: process.env.SHOT || path.join(require('os').tmpdir(), 'cc.png') });
   await browser.close();
   server.close();
+  fs.rmSync(root, { recursive: true, force: true });
   console.log(passed + ' browser checks passed' + (process.exitCode ? ' (with failures)' : ''));
 })().catch((e) => { console.error(e); process.exit(1); });

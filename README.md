@@ -9,9 +9,9 @@ the default search engine.
 
 | Area | Commands |
 | --- | --- |
-| Notes | `n`, `notes`, `n edit`, `n rm` |
-| Tasks | `t`, `tasks`, `t done`, `t rm` |
-| Calendar | `cal`, `agenda`, `ev`, `ics import` |
+| Notes | `n`, `notes`, `n show`, `n edit`, `n rm` |
+| Tasks | `t`, `tasks`, `t show`, `t edit`, `t done`, `t rm` |
+| Calendar | `cal`, `agenda`, `ev`, `ev show`, `ev edit`, `ics import` |
 | Tools | `calc`, `tz`, `epoch`, `uuid`, `b64`, `json`, `units` |
 | Aliases & engines | `alias`, `engine` |
 | View | `theme`, `widgets` |
@@ -22,6 +22,26 @@ Keys: **Tab** completes (again to list), **→** accepts the grey suggestion,
 The prompt has readline editing keys: Ctrl+A/E (start/end), Ctrl+W (cut
 word), Ctrl+U/K (cut to start/end), Ctrl+Y (paste), Alt+B/F (word back/forward).
 Press `?` on an empty prompt for the full list.
+
+**Editing**: every note, task, event and alias can be changed field by field,
+from the command line or by tapping. `n edit n1.text new words`,
+`t edit t3.due fri`, `t edit t3.tags #home #errands`, `ev edit e2.time none`,
+`alias edit gh.template https://github.com/{}`. `show` prints an entry with
+its fields editable in place (ids in lists link to it): tap a value, change it,
+press Enter, and the page runs the matching `edit` command, so the transcript
+and history show exactly what changed.
+
+**Quotes** are optional. Plain words work; quotes say what you mean when it
+matters: `n "rm the weeds"` is a note, not a removal, `t "due:friday"` is task
+text, `tz add tokyo "Kenji's team"` names a clock. A quote only counts at the
+start of a word, so text like `project="APP"` needs no escaping.
+
+**Aliases** take `{}` (or `%s`) for everything typed after the name, and
+`{1}`, `{2}` … for single arguments: `alias jira https://jira.example.com/browse/{1}-{2}`
+then `jira APP 42`. Templates may contain spaces and quotes, pasted as they
+are: `alias bug https://jira.example.com/issues/?jql=project="APP" AND text ~ "%s"`.
+`alias edit <name>` puts the whole definition in the prompt. `import` also
+reads an xsearch export (a JSON object of name to URL).
 
 On touch screens, tap outside the prompt box to put the keyboard away and tap
 the box to bring it back.

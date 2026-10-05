@@ -1,5 +1,5 @@
 import { SCHEMA, parseISO, parseTime, isValidZone, canonicalZone, truncate } from './util.js';
-import { validateEntry, SHIPPED_DEFAULT } from './aliases.js';
+import { validateEntry, siteRoot, SHIPPED_DEFAULT } from './aliases.js';
 import { migrateCollections, HISTORY_CAP } from './data.js';
 import { isTheme, isWidget, DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js';
 
@@ -17,8 +17,26 @@ const isStr = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= m
 const isStamp = (v) => typeof v === 'string' && !isNaN(Date.parse(v));
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
+// An xsearch (Safari extension) export is a plain object of name -> URL with
+// %s: { "mobile": "https://…%s…" }. Read it as a file of aliases.
+function fromXsearch(file) {
+  if (!file || typeof file !== 'object' || Array.isArray(file) || 'schema' in file || 'collections' in file) return null;
+  const pairs = Object.entries(file);
+  if (!pairs.length || !pairs.every(([, v]) => typeof v === 'string' && /^https?:\/\//i.test(v))) return null;
+  const entries = pairs.map(([name, url]) => {
+    const template = /%s|\{[1-9]?\}/.test(url) ? url : undefined;
+    return { name, base: template ? siteRoot(url) : url, template, escape: 'query' };
+  });
+  return { schema: SCHEMA, collections: { aliases: { entries } } };
+}
+
 export function merge(current, file, isBuiltin, now) {
   const lines = [];
+  const xs = fromXsearch(file);
+  if (xs) {
+    file = xs;
+    lines.push('read as an xsearch export: ' + xs.collections.aliases.entries.length + ' search engines');
+  }
   if (!file || typeof file !== 'object' || !Number.isInteger(file.schema) || file.schema < 1 ||
       !file.collections || typeof file.collections !== 'object') {
     throw new Error('not a control-center export file');

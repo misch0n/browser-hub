@@ -1,6 +1,7 @@
 import { h, rich, copyButton } from './dom.js';
 import { monthGrid } from './components.js';
 import { jsonLines } from '../core/format.js';
+import { oneValue, quote } from '../core/args.js';
 
 const MAX_TURNS = 200;
 
@@ -12,7 +13,10 @@ const MAX_TURNS = 200;
 //     └ ID  DUE        TASK             <- body, tables / lines / key-values
 //
 // The Out object below is the whole output API commands use.
-export function createTranscript(scrollEl, listEl) {
+//
+// opts.run(command) runs a command as if typed: used by links on ids and by
+// values edited in place, so every change shows up as the command it is.
+export function createTranscript(scrollEl, listEl, opts = {}) {
   const atBottom = () => scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 40;
   const scroll = () => { scrollEl.scrollTop = scrollEl.scrollHeight; };
 
@@ -21,6 +25,46 @@ export function createTranscript(scrollEl, listEl) {
     listEl.appendChild(el);
     while (listEl.childElementCount > MAX_TURNS) listEl.firstElementChild.remove();
     if (stick || el.classList.contains('turn')) scroll();
+  }
+
+  listEl.addEventListener('click', (e) => {
+    const link = e.target.closest('[data-run]');
+    if (link && opts.run) opts.run(link.getAttribute('data-run'));
+  });
+
+  // A field value that turns into a text box when tapped. Enter (or leaving
+  // the box with a changed value) runs `<command> <new value>`; Esc cancels.
+  function editable(content, edit) {
+    const btn = h('button', { type: 'button', class: 'editable', title: 'Edit · ' + edit.command }, rich(content));
+    btn.addEventListener('click', () => {
+      const input = h('input', {
+        type: 'text', class: 'edit-input', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off',
+        spellcheck: 'false', enterkeyhint: 'done', 'aria-label': edit.command,
+      });
+      input.value = edit.current;
+      btn.replaceWith(input);
+      input.focus();
+      input.select();
+      let done = false;
+      const finish = (save) => {
+        if (done) return;
+        done = true;
+        const v = input.value;
+        input.replaceWith(btn);
+        if (save && v !== edit.current && opts.run) {
+          // Quote only when the value wouldn't read back as typed.
+          opts.run(edit.command + ' ' + (oneValue(v) === v ? v : quote(v)));
+        } else if (opts.refocus) {
+          opts.refocus();
+        }
+      };
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+      });
+      input.addEventListener('blur', () => finish(true));
+    });
+    return btn;
   }
 
   function makeOut(turnEl) {
@@ -89,6 +133,13 @@ export function createTranscript(scrollEl, listEl) {
       },
       kv(pairs) {
         push(h('dl', { class: 'kv' }, ...pairs.flatMap(([k, v]) => [h('dt', { text: k }), h('dd', null, rich(v))])));
+      },
+      // Like kv, with [label, content, { command, current }?] rows: rows with
+      // an edit spec can be changed in place.
+      fields(rows) {
+        push(h('dl', { class: 'kv fields' }, ...rows.flatMap(([k, v, edit]) => [
+          h('dt', { text: k }), h('dd', null, edit ? editable(v, edit) : rich(v)),
+        ])));
       },
       code(text, lang) {
         const lines = lang === 'json' ? jsonLines(text) : text.split('\n').map((l) => [[l, '']]);

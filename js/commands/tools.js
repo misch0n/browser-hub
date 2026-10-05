@@ -1,4 +1,5 @@
 import { parseTime, plural } from '../core/util.js';
+import { oneValue } from '../core/args.js';
 import { evaluate, formatNumber } from '../lib/calc.js';
 import { convert, listUnits } from '../lib/units.js';
 import { uuid, b64encode, b64decode, prettyJson, parseEpochInput, fmtUTC, fmtLocal, relative } from '../lib/misc.js';
@@ -24,7 +25,7 @@ export default function register(add, { st, usage }) {
   add({
     name: 'tz', group: 'Tools', desc: 'time across your zones, with working-hours overlap',
     usage: ['tz [HH:MM]', 'tz ls [filter]', 'tz add <zone> [name]', 'tz name <zone> [name]', 'tz rm <zone>'],
-    examples: ['tz', 'tz 15:00', 'tz ls europe', 'tz add America/New_York NYC office', 'tz add tokyo', 'tz name tokyo Kenji'],
+    examples: ['tz', 'tz 15:00', 'tz ls europe', 'tz add America/New_York NYC office', 'tz add tokyo', 'tz name tokyo "Kenji\'s team"'],
     complete: (prev) => {
       if (prev.length === 0) return ['ls', 'add', 'name', 'rm'].map((v) => ({ value: v }));
       if (prev.length === 1 && prev[0] === 'add') return allZones().map((z) => ({ value: z }));
@@ -74,11 +75,11 @@ export default function register(add, { st, usage }) {
       }
 
       if (sub === 'add') {
-        const [zoneArg, ...nameWords] = arg.split(/\s+/);
+        const [zoneArg] = arg.split(/\s+/);
         if (!zoneArg) return usage(ctx, this);
         const zone = resolveZone(zoneArg);
         if (!zone) return unknown(zoneArg);
-        const name = nameWords.join(' ');
+        const name = oneValue(arg.slice(zoneArg.length)).trim();
         const err = nameError(name);
         if (err) return out.err(err);
         const isNew = zone !== local && !st().settings.zones.includes(zone);
@@ -91,7 +92,7 @@ export default function register(add, { st, usage }) {
       }
 
       if (sub === 'name') {
-        const [target, ...nameWords] = arg.split(/\s+/);
+        const [target] = arg.split(/\s+/);
         if (!target) return usage(ctx, this);
         const zone = findListed(target);
         if (!zone) {
@@ -99,7 +100,7 @@ export default function register(add, { st, usage }) {
           out.dim('Add it with a name: tz add ' + target + ' <name>');
           return;
         }
-        const name = nameWords.join(' ');
+        const name = oneValue(arg.slice(target.length)).trim();
         const err = nameError(name);
         if (err) return out.err(err);
         await ctx.data.mutate('settings', (d) => {

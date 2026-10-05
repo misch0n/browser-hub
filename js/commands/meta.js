@@ -111,7 +111,7 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
   });
 
   add({
-    name: 'import', group: 'Meta', desc: 'load a JSON export, skipping conflicts',
+    name: 'import', group: 'Meta', desc: 'load a JSON export (or an xsearch export), skipping conflicts',
     usage: ['import'],
     run(ctx) {
       const picked = ctx.pickFile('.json,application/json');

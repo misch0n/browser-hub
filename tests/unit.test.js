@@ -7,6 +7,7 @@ import * as U from '../js/core/util.js';
 import * as A from '../js/core/aliases.js';
 import { dispatch } from '../js/core/dispatch.js';
 import { edit, actionFor } from '../js/core/lineedit.js';
+import { tokenize, oneValue, quote } from '../js/core/args.js';
 import * as C from '../js/core/completion.js';
 import { createLocalStore } from '../js/core/store.js';
 import { createData, DEFAULTS } from '../js/core/data.js';
@@ -70,7 +71,11 @@ test('aliases: url validation', () => {
   assert.match(A.urlError('javascript:alert(1)', false), /http/);
   assert.match(A.urlError('data:text/html,hi', false), /http/);
   assert.match(A.urlError('https:example.com', false), /http/);
-  assert.match(A.urlError('https://x.com/ a', false), /whitespace/);
+  assert.equal(A.urlError('https://x.com/?q=a b "c"', false), null); // spaces and quotes are encoded on the way out
+  assert.match(A.urlError('https://x.com/\ta', false), /tabs/);
+  assert.match(A.urlError('https:// x.com/', false), /http/);
+  assert.equal(A.urlError('https://x.com/{1}/{2}', true), null);
+  assert.match(A.urlError('https://{1}.x.com/', true), /after the host/);
   assert.equal(A.urlError('https://x.com/?q={}', true), null);
   assert.match(A.urlError('https://x.com/', true), /\{\}/);
   assert.match(A.urlError('https://{}.evil.com/', true), /after the host/);
@@ -88,6 +93,34 @@ test('aliases: validateEntry and buildUrl', () => {
   assert.equal(A.buildUrl(p, 'org/repo').url, 'https://gh.com/org/repo');
   assert.equal(A.buildUrl(q, "$& $1").url, 'https://g.com/?q=%24%26%20%241');
   assert.match(A.buildUrl({ name: 'x', base: 'https://x.com/', escape: 'query' }, 'arg').note, /ignoring/);
+
+  // %s is stored as {}; numbered placeholders take single (quotable) arguments.
+  assert.equal(A.validateEntry({ name: 'w', base: 'https://w.org/', template: 'https://w.org/?s=%s' }, isBuiltin).entry.template, 'https://w.org/?s={}');
+  const j = { name: 'jira', base: 'https://j.com/', template: 'https://j.com/{1}/browse/{2}', escape: 'query' };
+  assert.equal(A.arity(j.template), 2);
+  assert.equal(A.buildUrl(j, 'ABC 12').url, 'https://j.com/ABC/browse/12');
+  assert.equal(A.buildUrl(j, '"A B" more words').url, 'https://j.com/A%20B/browse/more%20words'); // last one takes the rest
+  assert.match(A.buildUrl(j, 'ABC').error, /needs 2 arguments, got 1/);
+  // The JQL alias: quotes and spaces in the template, the phrase inside its quotes.
+  const jql = 'https://jira.example.net/issues/?jql=project="UBMVC" AND "Migrated From Bugzilla Id" ~ "%s"';
+  const mobile = A.validateEntry({ name: 'mobile', base: A.siteRoot(jql), template: jql }, isBuiltin).entry;
+  assert.equal(mobile.base, 'https://jira.example.net/');
+  const url = A.buildUrl(mobile, '12345').url;
+  assert.equal(url, 'https://jira.example.net/issues/?jql=project="UBMVC" AND "Migrated From Bugzilla Id" ~ "12345"');
+  assert.equal(new URL(url).href, 'https://jira.example.net/issues/?jql=project=%22UBMVC%22%20AND%20%22Migrated%20From%20Bugzilla%20Id%22%20~%20%2212345%22');
+});
+
+test('args: optional quotes', () => {
+  const t = (s) => tokenize(s).map((x) => (x.quoted ? 'Q:' : '') + x.text);
+  assert.deepEqual(t('  a  b c '), ['a', 'b', 'c']);
+  assert.deepEqual(t('t "done laundry" due:fri'), ['t', 'Q:done laundry', 'due:fri']);
+  assert.deepEqual(t("add 'Kenji's team'"), ['add', "Q:Kenji's team"]); // closes only before a space or the end
+  assert.deepEqual(t('project="UBMVC" x'), ['project="UBMVC"', 'x']); // quotes inside a word are literal
+  assert.deepEqual(t('"open ended'), ['"open', 'ended']); // unclosed: literal
+  assert.deepEqual(t('"a \\" b\\\\" c'), ['Q:a " b\\', 'c']);
+  assert.equal(oneValue('  "  spaced  " '), '  spaced  ');
+  assert.equal(oneValue('two "words"'), 'two "words"');
+  for (const v of ['plain', 'two words', 'say "hi"', 'it\'s "x"', 'back\\slash', '"lead', '']) assert.equal(oneValue(quote(v)), v);
 });
 
 test('dispatch: builtin, alias, engine, fallback', () => {
@@ -298,6 +331,8 @@ function recorder() {
       for (const r of rows) lines.push(Array.isArray(r) ? r.map(flat).join(' | ') : '## ' + flat(r.section));
     },
     kv: (pairs) => pairs.forEach(([k, v]) => lines.push(k + ': ' + flat(v))),
+    // Editable rows show the command a tap would run: `field: value  [n edit n1.text]`.
+    fields: (rows) => rows.forEach(([k, v, e]) => lines.push(k + ': ' + flat(v) + (e ? '  [' + e.command + ' = ' + e.current + ']' : ''))),
     code: (text) => lines.push(...text.split('\n')),
     value: (text) => lines.push('= ' + text),
     calendar: (spec) => lines.push('CAL ' + spec.year + '-' + spec.month + ' marks=' + spec.marks.sort((a, b) => a - b).join(',')),
@@ -388,6 +423,143 @@ test('notes: capture, list, edit round trip, remove; subcommand words never over
   assert.equal(missing.tone, 'err');
   assert.match((await app.run('n edit n1:'))[0], /needs some text/);
   assert.equal((await app.run('n'))[0], '# Usage · n');
+});
+
+test('editing fields: n / t / ev edit <id>.<field> <value>, show views are editable', async () => {
+  const app = await makeApp();
+  const st = () => app.data.state;
+  await app.run('n first draft');
+  // `name` is accepted for a note's text; the value is everything after the field.
+  const up = await app.run('n edit n1.name buy  oat milk');
+  assert.equal(up[0], '# Updated n1.text');
+  assert.ok(up.includes('text: buy  oat milk  [n edit n1.text = buy  oat milk]'));
+  assert.equal(up.tone, 'ok');
+  assert.equal(st().notes.items[0].text, 'buy  oat milk');
+  assert.deepEqual(await app.run('n edit n1.text "  padded  "'), (await app.run('n show n1')).map((l, i) => (i ? l : '# Updated n1.text')));
+  assert.equal(st().notes.items[0].text, 'padded'); // text is trimmed
+  assert.equal((await app.run('n edit n1.colour red'))[0], 'err: Notes have no field colour');
+  assert.equal((await app.run('n edit n9.text x'))[0], 'err: No note n9');
+  assert.equal((await app.run('n edit n1.text ""'))[0], 'err: text needs some text');
+  // No value: the command with the current value goes into the prompt.
+  await app.run('n edit n1.text');
+  assert.equal(app.ctx.inputSet, 'n edit n1.text padded');
+  // Not an id: still note text, as before.
+  assert.deepEqual(await app.run('n edit config.yaml for prod'), ['# Added note n2']);
+
+  await app.run('t buy flour due:tomorrow #home');
+  const show = await app.run('t show t1');
+  assert.deepEqual(show.slice(0, 5), ['# task t1', 'text: buy flour  [t edit t1.text = buy flour]', 'due: tomorrow  [t edit t1.due = 2026-10-06]',
+    'tags: #home  [t edit t1.tags = #home]', 'done: ○ open  [t edit t1.done = no]']);
+  assert.deepEqual(await app.run('t edit t1'), show); // edit with no field shows it
+  await app.run('t edit t1.due fri');
+  assert.equal(st().tasks.items[0].due, '2026-10-09');
+  await app.run('t edit t1.due none');
+  assert.equal(st().tasks.items[0].due, null);
+  await app.run('t edit t1.tags #Home, errands');
+  assert.deepEqual(st().tasks.items[0].tags, ['home', 'errands']);
+  await app.run('t edit t1.done yes');
+  assert.equal(st().tasks.items[0].done, true);
+  assert.ok(st().tasks.items[0].doneAt);
+  await app.run('t edit t1.done no');
+  assert.equal(st().tasks.items[0].doneAt, null);
+  assert.match((await app.run('t edit t1.due someday'))[0], /^err: due can't read the date 'someday'/);
+  assert.match((await app.run('t edit t1.tags a+b'))[0], /not a tag/);
+
+  await app.run('ev 2026-10-12 09:00 review');
+  await app.run('ev edit e1.time none');
+  assert.equal(st().events.items[0].time, null);
+  await app.run('ev edit e1.date tomorrow');
+  assert.equal(st().events.items[0].date, '2026-10-06');
+  await app.run('ev edit e1.title design review');
+  assert.equal(st().events.items[0].title, 'design review');
+  assert.match((await app.run('ev edit e1.time 25:00'))[0], /can't read the time/);
+  assert.equal((await app.run('ev show e1'))[0], '# event e1');
+
+  // Lists link each id to its show view.
+  const linked = await app.run('tasks all');
+  assert.ok(linked.some((l) => l.startsWith('t1 | ')));
+});
+
+test('quotes say what you mean: literal text, names with spaces', async () => {
+  const app = await makeApp();
+  const st = () => app.data.state;
+  assert.deepEqual(await app.run('n "rm the weeds"'), ['# Added note n1']);
+  assert.equal(st().notes.items[0].text, 'rm the weeds');
+  assert.deepEqual(await app.run('n "edit n1"'), ['# Added note n2']);
+  assert.equal(st().notes.items[1].text, 'edit n1');
+  await app.run('t "done laundry"');
+  assert.equal(st().tasks.items[0].text, 'done laundry');
+  await app.run('t "due:friday is a word" #home due:fri');
+  assert.deepEqual([st().tasks.items[1].text, st().tasks.items[1].due, st().tasks.items[1].tags], ['due:friday is a word', '2026-10-09', ['home']]);
+  await app.run('ev fri "19:30 is the title"');
+  assert.deepEqual([st().events.items[0].time, st().events.items[0].title], [null, '19:30 is the title']);
+  await app.run('ev fri 19:30 "quoted title"');
+  assert.equal(st().events.items[1].title, 'quoted title');
+  // Unquoted text is untouched, quotes and all.
+  await app.run('n she said "hi" twice');
+  assert.equal(st().notes.items[2].text, 'she said "hi" twice');
+});
+
+test('alias templates: spaces and quotes, numbered placeholders, editing', async () => {
+  const app = await makeApp();
+  const st = () => app.data.state;
+  const env = () => ({ isBuiltin: app.commands.isBuiltin, entries: st().aliases.entries, defaultEngine: st().aliases.defaultEngine });
+  const go = (s) => dispatch(s, env());
+  // The JQL alias, pasted as is: no quoting needed; \/ from JSON copies is read as /.
+  const def = 'alias mobile https:\\/\\/jira.example.net\\/issues\\/?jql=project="UBMVC" AND "Migrated From Bugzilla Id" ~ "%s"';
+  assert.equal((await app.run(def))[0], '# Added mobile  engine');
+  const mobile = st().aliases.entries.find((e) => e.name === 'mobile');
+  assert.equal(mobile.template, 'https://jira.example.net/issues/?jql=project="UBMVC" AND "Migrated From Bugzilla Id" ~ "{}"');
+  assert.equal(mobile.base, 'https://jira.example.net/');
+  assert.equal(go('mobile 12345').url, 'https://jira.example.net/issues/?jql=project="UBMVC" AND "Migrated From Bugzilla Id" ~ "12345"');
+  assert.equal(go('mobile').url, 'https://jira.example.net/');
+  // Quoted, with a base and a flag after it.
+  await app.run("alias q2 https://x.com/ 'https://x.com/s?q=a b {}' --force");
+  assert.equal(st().aliases.entries.find((e) => e.name === 'q2').template, 'https://x.com/s?q=a b {}');
+  // Numbered placeholders.
+  await app.run('alias jira https://jira.example.com/browse/{1}-{2}');
+  assert.equal(go('jira APP 42').url, 'https://jira.example.com/browse/APP-42');
+  assert.deepEqual(go('jira APP'), { kind: 'error', message: "'jira' needs 2 arguments, got 1: https://jira.example.com/browse/{1}-{2}" });
+  assert.match((await app.run('alias bad https://x.com/a b'))[0], /^# Added bad  alias/); // a base URL may have spaces too
+  assert.match((await app.run('alias bad2 https://{1}.x.com/'))[0], /after the host/);
+  assert.equal((await app.run('alias edit2 x'))[0].startsWith('err:'), true);
+
+  // alias edit <name>: the whole definition in the prompt, quoted where needed, plus editable fields.
+  const ed = await app.run('alias edit mobile');
+  assert.equal(ed[0], '# Editing mobile');
+  assert.equal(app.ctx.inputSet, 'alias set mobile https://jira.example.net/ \'https://jira.example.net/issues/?jql=project="UBMVC" AND "Migrated From Bugzilla Id" ~ "{}"\' --force');
+  assert.equal((await app.run(app.ctx.inputSet))[0], '# Updated mobile  engine'); // reads back unchanged
+  assert.equal(st().aliases.entries.find((e) => e.name === 'mobile').template, mobile.template);
+  // Field edits; a rename keeps the default engine pointing at it.
+  await app.run('alias edit g.name google');
+  assert.equal(st().aliases.defaultEngine, 'google');
+  assert.equal((await app.run('alias edit google.template none'))[0], "err: 'google' is the default engine and needs a template");
+  assert.equal((await app.run('alias edit ddg.name google'))[0], "err: alias 'google' already exists");
+  assert.match((await app.run('alias edit ddg.name t'))[0], /built-in/);
+  assert.match((await app.run('alias edit ddg.base javascript:alert(1)'))[0], /http/);
+  await app.run('alias edit ddg.template https://duckduckgo.com/?q=%s&ia=web');
+  assert.equal(st().aliases.entries.find((e) => e.name === 'ddg').template, 'https://duckduckgo.com/?q={}&ia=web');
+  const shown = await app.run('alias show ddg');
+  assert.ok(shown.includes('template: https://duckduckgo.com/?q={}&ia=web  [alias edit ddg.template = https://duckduckgo.com/?q={}&ia=web]'));
+});
+
+test('import reads an xsearch export as search engines', () => {
+  const current = {};
+  for (const k of Object.keys(DEFAULTS)) current[k] = DEFAULTS[k](() => new Date(MON));
+  const r = merge(current, {
+    mobile: 'https:\/\/jira.example.net\/issues\/?jql=project="UBMVC" AND "Migrated From Bugzilla Id" ~ "%s"',
+    Wiki: 'https://en.wikipedia.org/w/index.php?search=%s',
+    'two words': 'https://x.com/?q=%s',
+    home: 'https://example.com/',
+  }, isBuiltin, () => new Date(MON));
+  const names = r.collections.aliases.entries.map((e) => e.name);
+  assert.deepEqual(names, ['g', 'ddg', 'mobile', 'wiki', 'home']);
+  assert.equal(r.collections.aliases.entries[2].template, 'https://jira.example.net/issues/?jql=project="UBMVC" AND "Migrated From Bugzilla Id" ~ "{}"');
+  assert.equal(r.collections.aliases.entries[4].template, undefined);
+  assert.equal(r.counts.aliases, 3);
+  assert.match(r.lines[0], /xsearch export: 4 search engines/);
+  assert.ok(r.lines.some((l) => /skipped alias 'two words'/.test(l)));
+  assert.throws(() => merge(current, { a: 1 }, isBuiltin, () => new Date(MON)), /not a control-center export/);
 });
 
 test('tasks: add, list order and colour, done, rm; "t done laundry" is a task', async () => {
@@ -496,6 +668,7 @@ test('tools commands', async () => {
   assert.ok((await app.run('tz')).some((l) => /^Kenji in Nairobi \| \d\d:\d\d \| .* \| Africa\/Nairobi \|/.test(l)));
   assert.deepEqual(await app.run('tz name Africa/Nairobi Kenji'), ['# Named Africa/Nairobi as Kenji']);
   assert.deepEqual(await app.run('tz add nairobi Nairobi team'), ['# Named Africa/Nairobi as Nairobi team']);
+  assert.deepEqual(await app.run('tz name nairobi "Kenji\'s team"'), ['# Named Africa/Nairobi as Kenji\'s team']);
   assert.deepEqual(await app.run('tz name nairobi'), ['# Cleared the name of Africa/Nairobi']);
   assert.deepEqual(z().zoneNames, {});
   await app.run('tz add America/New_York NYC');

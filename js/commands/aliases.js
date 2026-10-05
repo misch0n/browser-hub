@@ -1,13 +1,37 @@
 import { cmp, plural } from '../core/util.js';
-import { validateEntry } from '../core/aliases.js';
+import { validateEntry, siteRoot, normalizeTemplate } from '../core/aliases.js';
+import { tokenize, quote } from '../core/args.js';
 
-// "https://www.google.com/search?q={}" -> "https://www.google.com/"
-function siteRoot(template) {
-  const m = /^(https?:\/\/[^/?#{}]+)/i.exec(template);
-  return m ? m[1] + '/' : template;
+// The URLs in an `alias` definition. A URL may contain spaces (a JQL query):
+// words after an unquoted URL that aren't URLs or options belong to it, kept
+// exactly as typed, quotes included. A quoted URL is taken as it is. `\/`, from JSON copies, is
+// read as `/`.
+// -> { name, urls: [string], force, path } or { error }
+function parseDefinition(rest) {
+  const toks = tokenize(rest);
+  let force = false, path = false;
+  let i = 0;
+  if (toks[0] && !toks[0].quoted && toks[0].text.toLowerCase() === 'set') i = 1;
+  const name = toks[i] ? toks[i].text : '';
+  const urls = [];
+  let open = null; // the unquoted URL still taking words: { start, end }
+  const close = () => { if (open) { urls.push(rest.slice(open.start, open.end)); open = null; } };
+  for (const t of toks.slice(i + 1)) {
+    if (!t.quoted && t.text === '--force') { force = true; close(); continue; }
+    if (!t.quoted && t.text === '--path') { path = true; close(); continue; }
+    if (!t.quoted && t.text.startsWith('--')) return { error: "Unknown option '" + t.text + "'" };
+    const isUrl = /^https?:/i.test(t.text);
+    // A quoted URL is complete as it is; any other quoted word is part of the
+    // URL being read (the "Migrated From Bugzilla Id" in a JQL query).
+    if (t.quoted && (isUrl || !open)) { close(); urls.push(t.text); continue; }
+    if ((isUrl && !t.quoted) || !open) { close(); open = { start: t.start, end: t.end }; continue; }
+    open.end = t.end;
+  }
+  close();
+  return { name, urls: urls.map((u) => normalizeTemplate(u.split('\\/').join('/'))), force, path };
 }
 
-export default function register(add, { st, usage, isBuiltin }) {
+export default function register(add, { st, usage, isBuiltin, records }) {
   const entries = () => st().aliases.entries;
   const engineNames = () => entries().filter((e) => e.template).map((e) => ({ value: e.name, label: 'engine' }));
   const aliasNames = () => entries().map((e) => ({ value: e.name, label: e.template ? 'engine' : 'alias' }));
@@ -18,6 +42,10 @@ export default function register(add, { st, usage, isBuiltin }) {
     if (isBuiltin(e.name)) f.push(['inactive: shadowed by built-in', 'warn']);
     return f.flatMap((s, i) => (i ? [[' ', ''], s] : [s]));
   };
+
+  // `alias set …` that recreates `e`.
+  const definition = (e) => ['alias set', e.name, quote(e.base), e.template ? quote(e.template) : null,
+    e.escape === 'path' ? '--path' : null, '--force'].filter(Boolean).join(' ');
 
   const details = (out, e) => out.kv([
     ['base', [[e.base, 'url']]],
@@ -32,16 +60,20 @@ export default function register(add, { st, usage, isBuiltin }) {
       'alias <name> <template> [--path] [--force]',
       'alias set <name> ... [--force]',
       'alias rm <name>', 'alias ls [filter]', 'alias show <name>',
+      'alias edit <name>', 'alias edit <name>.<field> <value>',
     ],
     examples: [
       'alias gh https://github.com/ https://github.com/{} --path',
       'alias yt https://www.youtube.com/results?search_query={}',
       'alias w https://en.wikipedia.org/w/index.php?search=%s',
       'alias mail https://mail.google.com/',
+      'alias jira https://jira.example.com/browse/{1}-{2}',
+      'alias bug https://jira.example.com/issues/?jql=project="APP" AND text ~ "%s"',
+      'alias edit gh.template https://github.com/search?q={}',
     ],
     complete: (prev) => {
-      if (prev.length === 0) return ['set', 'rm', 'ls', 'show'].map((v) => ({ value: v }));
-      if (prev.length === 1 && ['set', 'rm', 'show'].includes(prev[0])) return aliasNames();
+      if (prev.length === 0) return ['set', 'rm', 'ls', 'show', 'edit'].map((v) => ({ value: v }));
+      if (prev.length === 1 && ['set', 'rm', 'show', 'edit'].includes(prev[0])) return aliasNames();
       return [];
     },
     async run(ctx, rest) {
@@ -59,11 +91,22 @@ export default function register(add, { st, usage, isBuiltin }) {
         const engines = list.filter((e) => e.template).length;
         out.head([[plural(list.length, 'alias', 'aliases'), 'strong'], [' · ' + plural(engines, 'engine'), 'dim']]);
         out.table(['name', 'kind', 'opens', ''], list.map((e) => [
-          [[e.name, isBuiltin(e.name) ? 'faint' : 'accent']],
+          [[e.name, isBuiltin(e.name) ? 'faint' : 'accent', { run: 'alias show ' + e.name }]],
           [[e.template ? 'engine' : 'alias', e.template ? 'info' : 'dim']],
           [[e.template || e.base, 'url']],
           flags(e),
         ]));
+        return;
+      }
+      if (sub === 'edit') {
+        if (await records.edit(ctx, 'alias', rest.slice(4))) return;
+        if (words.length !== 2) return usage(ctx, this);
+        const e = entries().find((x) => x.name === words[1].toLowerCase());
+        if (!e) return out.err("No alias '" + words[1] + "'");
+        // The whole definition in the prompt, ready to change.
+        ctx.setInput(definition(e));
+        records.show(ctx, 'alias', e, [['Editing ', ''], [e.name, 'accent']]);
+        out.dim('The whole definition is in the prompt: change it and press Enter · Esc cancels');
         return;
       }
       if (sub === 'show' || sub === 'rm') {
@@ -72,9 +115,7 @@ export default function register(add, { st, usage, isBuiltin }) {
         const e = entries().find((x) => x.name === name);
         if (!e) return out.err("No alias '" + name + "'");
         if (sub === 'show') {
-          out.head([[e.name, 'accent'], [e.template ? '  engine' : '  alias', 'dim'], ['  ', ''], ...flags(e)]);
-          details(out, e);
-          return;
+          return records.show(ctx, 'alias', e, [[e.name, 'accent'], [e.template ? '  engine' : '  alias', 'dim'], ['  ', ''], ...flags(e)]);
         }
         if (name === doc.defaultEngine) {
           out.err("'" + name + "' is the default engine");
@@ -86,20 +127,13 @@ export default function register(add, { st, usage, isBuiltin }) {
       }
 
       // Define: `alias [set] <name> <base> [template] [--path] [--force]`
-      const positional = [];
-      let force = false, path = false;
-      for (const w of words) {
-        if (w === '--force') force = true;
-        else if (w === '--path') path = true;
-        else if (w.startsWith('--')) return out.err("Unknown option '" + w + "'");
-        else positional.push(w);
-      }
-      if (positional[0] && positional[0].toLowerCase() === 'set') positional.shift();
-      if (positional.length < 2 || positional.length > 3) return usage(ctx, this);
-      // `%s` is the placeholder browsers use; accept it as `{}`.
-      let [name, base, template] = positional.map((w, i) => (i ? w.split('%s').join('{}') : w));
-      // `alias <name> <template>`: a lone URL with `{}` is an engine; it opens its own site bare.
-      if (!template && base.includes('{}')) {
+      const def = parseDefinition(rest);
+      if (def.error) return out.err(def.error);
+      if (!def.name || def.urls.length < 1 || def.urls.length > 2) return usage(ctx, this);
+      const { name, force, path } = def;
+      let [base, template] = def.urls;
+      // `alias <name> <template>`: a lone URL with a placeholder is an engine; it opens its own site bare.
+      if (!template && /\{[1-9]?\}/.test(base)) {
         template = base;
         base = siteRoot(template);
       }

@@ -1,14 +1,23 @@
 import { parseId, truncate, firstLine, byIdNum, plural, todayISO } from '../core/util.js';
 import { dayLabel } from '../core/format.js';
+import { tokenize } from '../core/args.js';
 
-export default function register(add, { st, usage }) {
+async function capture(ctx, text) {
+  if (!text.trim()) return ctx.out.err('A note needs some text');
+  const id = await ctx.data.allocId('n');
+  const stamp = ctx.now().toISOString();
+  await ctx.data.mutate('notes', (d) => { d.items.push({ id, text, created: stamp, updated: stamp }); });
+  ctx.out.head([['Added note ', ''], [id, 'id', { run: 'n show ' + id }]], 'ok');
+}
+
+export default function register(add, { st, usage, records }) {
   add({
     name: 'n', group: 'Notes', desc: 'capture a note',
-    usage: ['n <text>', 'n edit <id>', 'n rm <id>'],
-    examples: ['n call the plumber about the boiler', 'n edit n3', 'n rm n3'],
+    usage: ['n <text>', 'n "<text>"', 'n show <id>', 'n edit <id>', 'n edit <id>.text <new text>', 'n rm <id>'],
+    examples: ['n call the plumber about the boiler', 'n "edit the slides"', 'n show n3', 'n edit n3.text call the plumber today', 'n rm n3'],
     complete: (prev) => {
-      if (prev.length === 0) return [{ value: 'edit' }, { value: 'rm' }];
-      if (prev.length === 1 && (prev[0] === 'edit' || prev[0] === 'rm')) {
+      if (prev.length === 0) return [{ value: 'show' }, { value: 'edit' }, { value: 'rm' }];
+      if (prev.length === 1 && (prev[0] === 'edit' || prev[0] === 'rm' || prev[0] === 'show')) {
         return st().notes.items.slice().sort(byIdNum).map((n) => ({ value: n.id, label: truncate(firstLine(n.text), 50) }));
       }
       return [];
@@ -21,17 +30,16 @@ export default function register(add, { st, usage }) {
       //   n edit <id>           load the note into the prompt
       //   n edit n<N>: <text>   save (the form the prompt is loaded with)
       //   n rm <id>
+      // One quoted argument is always note text: n "rm the weeds".
+      const quoted = tokenize(rest);
+      if (quoted.length === 1 && quoted[0].quoted) return capture(ctx, quoted[0].text);
       const words = rest.split(/\s+/);
       const sub = words[0].toLowerCase();
+      if (sub === 'edit' && await records.edit(ctx, 'note', rest.slice(4))) return;
+      if (sub === 'show' && words.length === 2 && parseId('n', words[1])) return records.showCmd(ctx, 'note', words[1]);
       const save = sub === 'edit' ? /^edit\s+n?(\d+):(?:\s+([\s\S]*))?$/i.exec(rest) : null;
       const target = (sub === 'edit' || sub === 'rm') && words.length === 2 ? parseId('n', words[1]) : null;
-      if (!save && !target) {
-        const id = await ctx.data.allocId('n');
-        const stamp = ctx.now().toISOString();
-        await ctx.data.mutate('notes', (d) => { d.items.push({ id, text: rest, created: stamp, updated: stamp }); });
-        out.head([['Added note ', ''], [id, 'id']], 'ok');
-        return;
-      }
+      if (!save && !target) return capture(ctx, rest);
       const id = save ? 'n' + +save[1] : target;
       const note = st().notes.items.find((n) => n.id === id);
       if (!note) return out.err('No note ' + id);
@@ -73,7 +81,7 @@ export default function register(add, { st, usage }) {
       const today = todayISO(ctx.now());
       out.head([[plural(list.length, 'note'), 'strong'], [f ? ' matching "' + rest + '"' : '', 'dim']]);
       out.table(['id', 'date', 'note'], list.map((n) => [
-        [[n.id, 'id']],
+        [[n.id, 'id', { run: 'n show ' + n.id }]],
         [[dayLabel(todayISO(new Date(n.created)), today), 'dim']], // local day, not the UTC one
         n.text,
       ]));

@@ -20,7 +20,7 @@ export function h(tag, attrs, ...children) {
 }
 
 // Rich content -> nodes. Accepts a string, a Node, a segment list
-// ([[text, cls], ...]) or a { swatch: themeId } colour preview.
+// ([[text, cls, { run }?], ...]) or a { swatch: themeId } colour preview.
 export function rich(content) {
   if (content === null || content === undefined) return document.createTextNode('');
   if (typeof content === 'string' || typeof content === 'number') return document.createTextNode(String(content));
@@ -30,9 +30,12 @@ export function rich(content) {
   for (const seg of content) {
     if (!seg) continue;
     if (seg.swatch) { frag.appendChild(swatch(seg.swatch)); continue; }
-    const [text, cls] = seg;
+    const [text, cls, action] = seg;
     if (!text) continue;
-    frag.appendChild(cls ? h('span', { class: cls.split(' ').map((c) => 't-' + c).join(' '), text }) : document.createTextNode(text));
+    const classes = cls ? cls.split(' ').map((c) => 't-' + c).join(' ') : '';
+    // [text, cls, { run }]: a link that runs a command (see transcript.js).
+    if (action && action.run) frag.appendChild(h('button', { type: 'button', class: 'seg-run ' + classes, 'data-run': action.run, title: action.run, text }));
+    else frag.appendChild(cls ? h('span', { class: classes, text }) : document.createTextNode(text));
   }
   return frag;
 }

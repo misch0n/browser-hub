@@ -18,6 +18,7 @@ function dispatch(input, env) {
   const entry = env.entries.find((e) => e.name === head);
   if (entry) {
     const r = buildUrl(entry, rest);
+    if (r.error) return { kind: 'error', message: r.error };
     // An entry with a template and a phrase is a search on that engine.
     if (entry.template && rest) return { kind: 'search', url: r.url, name: entry.name, query: rest, fallback: false };
     return { kind: 'redirect', url: r.url, note: r.note, name: entry.name };

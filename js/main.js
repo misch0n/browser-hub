@@ -24,7 +24,10 @@ const data = createData(store);
 const state = data.state;
 const now = () => new Date();
 
-const transcript = createTranscript($('transcript'), $('turns'));
+const transcript = createTranscript($('transcript'), $('turns'), {
+  run: (cmd) => { run(cmd); autoFocus(); },
+  refocus: () => autoFocus(),
+});
 const fileEl = $('file');
 
 // ---- commands -----------------------------------------------------------------

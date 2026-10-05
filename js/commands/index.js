@@ -6,6 +6,7 @@ import aliases from './aliases.js';
 import view from './view.js';
 import meta from './meta.js';
 import { usageSegs } from '../core/format.js';
+import { createRecords } from './records.js';
 
 // Built-in commands. Each def is
 //   { name, group, desc, usage: [...], examples?: [...], complete?(prevArgs), run(ctx, rest) }
@@ -31,7 +32,8 @@ export function createCommands(getCtx) {
     defs.push(def);
     byName.set(def.name, def);
   };
-  const helpers = { st, usage, isBuiltin, defs, byName };
+  const records = createRecords({ st, isBuiltin });
+  const helpers = { st, usage, isBuiltin, defs, byName, records };
   for (const register of [notes, tasks, calendar, tools, aliases, view, meta]) register(add, helpers);
 
   // Runs a built-in. Anything thrown is reported in the command's output.

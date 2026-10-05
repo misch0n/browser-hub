@@ -301,6 +301,40 @@ async function check(name, fn) {
     await send('t rm ' + (await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.find((t) => t.text === 'from a link').id)));
   });
 
+  await check('hybrid editing: ids link to their entry, values change in place as commands', async () => {
+    await send('t water the plants due:tomorrow #home');
+    const id = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.find((t) => t.text === 'water the plants').id);
+    await send('tasks');
+    await lastTurn().locator('.seg-run', { hasText: id }).click();
+    await page.waitForFunction(() => /^t show /.test([...document.querySelectorAll('.you-text')].pop().textContent));
+    assert.match(await lastText(), new RegExp('task ' + id));
+    // Tap the text, change it, Enter: runs the edit command, which shows in the transcript.
+    await lastTurn().locator('.fields .editable').first().click();
+    const box = lastTurn().locator('.edit-input');
+    assert.equal(await box.inputValue(), 'water the plants');
+    await box.fill('water the  garden');
+    await box.press('Enter');
+    await page.waitForFunction(() => /Updated/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.equal(await page.locator('.you-text').last().textContent(), 't edit ' + id + '.text water the  garden');
+    const task = () => page.evaluate((i) => JSON.parse(localStorage.getItem('cc:tasks')).items.find((t) => t.id === i), id);
+    assert.equal((await task()).text, 'water the  garden');
+    // Esc cancels: nothing runs.
+    const turns = await page.locator('.turn').count();
+    await lastTurn().locator('.fields .editable').nth(1).click();
+    await lastTurn().locator('.edit-input').fill('fri');
+    await lastTurn().locator('.edit-input').press('Escape');
+    assert.equal(await page.locator('.turn').count(), turns);
+    assert.equal(await lastTurn().locator('.edit-input').count(), 0);
+    // Values that need quotes get them.
+    await lastTurn().locator('.fields .editable').first().click();
+    await lastTurn().locator('.edit-input').fill('  lead ');
+    await lastTurn().locator('.edit-input').press('Enter');
+    await page.waitForFunction(() => /Updated/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.equal(await page.locator('.you-text').last().textContent(), 't edit ' + id + '.text "  lead "');
+    await send('t rm ' + id);
+    assert.equal(await focused(), 'prompt');
+  });
+
   await check('javascript: aliases are rejected', async () => {
     await send('alias evil javascript:alert(1)');
     assert.match(await lastText(), /only http: and https:/);

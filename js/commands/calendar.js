@@ -2,10 +2,11 @@ import { parseId, parseDate, parseTime, truncate, byIdNum, plural, pad2, todayIS
 import { MONTH_NAMES, dayLabel, shortDate } from '../core/format.js';
 import { agenda, eventDays, sortEvents } from '../core/agenda.js';
 import { parseICS } from '../lib/ics.js';
+import { oneValue } from '../core/args.js';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
-export default function register(add, { st, usage }) {
+export default function register(add, { st, usage, records }) {
   add({
     name: 'cal', group: 'Calendar', desc: 'month grid with event days marked',
     usage: ['cal [YYYY-MM]'],
@@ -25,7 +26,7 @@ export default function register(add, { st, usage }) {
       out.calendar({ year, month, today, marks: eventDays(st(), year, month) });
       if (events.length) {
         out.table(null, events.map((e) => [
-          [[e.id, 'id']], [[shortDate(e.date, today), 'date']], [[e.time || 'all day', e.time ? 'num' : 'faint']], e.title,
+          [[e.id, 'id', { run: 'ev show ' + e.id }]], [[shortDate(e.date, today), 'date']], [[e.time || 'all day', e.time ? 'num' : 'faint']], e.title,
         ]));
       }
     },
@@ -53,7 +54,7 @@ export default function register(add, { st, usage }) {
         [a.overdue.length ? ' · ' + a.overdue.length + ' overdue' : '', 'err']], a.overdue.length ? 'warn' : undefined);
       if (a.overdue.length) {
         out.section([['Overdue', 'err']]);
-        out.table(null, a.overdue.map((t) => [[[t.id, 'id']], [[dayLabel(t.due, today), 'err']], t.text]));
+        out.table(null, a.overdue.map((t) => [[[t.id, 'id', { run: 't show ' + t.id }]], [[dayLabel(t.due, today), 'err']], t.text]));
       }
       for (const d of a.days) {
         const label = dayLabel(d.date, today);
@@ -61,8 +62,8 @@ export default function register(add, { st, usage }) {
           ? [[label[0].toUpperCase() + label.slice(1), 'accent'], [' · ' + shortDate(d.date, today), 'dim']]
           : [[shortDate(d.date, today), 'date']]);
         out.table(null, [
-          ...d.events.map((e) => [[[e.id, 'id']], [[e.time || 'all day', e.time ? 'num' : 'faint']], e.title]),
-          ...d.tasks.map((t) => [[[t.id, 'id']], [['task due', 'warn']], t.text]),
+          ...d.events.map((e) => [[[e.id, 'id', { run: 'ev show ' + e.id }]], [[e.time || 'all day', e.time ? 'num' : 'faint']], e.title]),
+          ...d.tasks.map((t) => [[[t.id, 'id', { run: 't show ' + t.id }]], [['task due', 'warn']], t.text]),
         ]);
       }
     },
@@ -70,11 +71,11 @@ export default function register(add, { st, usage }) {
 
   add({
     name: 'ev', group: 'Calendar', desc: 'add or remove a calendar event',
-    usage: ['ev <date> [HH:MM] <title>', 'ev rm <id>'],
-    examples: ['ev fri 19:30 dinner at Mia\'s', 'ev 2026-12-24 Christmas Eve', 'ev rm e2'],
+    usage: ['ev <date> [HH:MM] <title>', 'ev rm <id>', 'ev show <id>', 'ev edit <id>.<field> <value>'],
+    examples: ['ev fri 19:30 dinner at Mia\'s', 'ev 2026-12-24 Christmas Eve', 'ev rm e2', 'ev edit e2.time 20:00', 'ev edit e2.date sat'],
     complete: (prev) => {
-      if (prev.length === 0) return [{ value: 'rm' }];
-      if (prev.length === 1 && prev[0] === 'rm') {
+      if (prev.length === 0) return ['rm', 'show', 'edit'].map((v) => ({ value: v }));
+      if (prev.length === 1 && ['rm', 'show', 'edit'].includes(prev[0])) {
         return st().events.items.slice().sort(byIdNum)
           .map((e) => ({ value: e.id, label: e.date + (e.time ? ' ' + e.time : '') + ' ' + truncate(e.title, 40) }));
       }
@@ -85,7 +86,10 @@ export default function register(add, { st, usage }) {
       const m = /^(\S+)(?:\s+([\s\S]*))?$/.exec(rest);
       if (!m) return usage(ctx, this);
       const today = todayISO(ctx.now());
-      if (m[1].toLowerCase() === 'rm') {
+      const sub = m[1].toLowerCase();
+      if (sub === 'edit' && await records.edit(ctx, 'event', m[2] || '')) return;
+      if ((sub === 'show' || sub === 'edit') && parseId('e', (m[2] || '').trim())) return records.showCmd(ctx, 'event', m[2].trim());
+      if (sub === 'rm') {
         const id = parseId('e', (m[2] || '').trim());
         if (!id) return usage(ctx, this);
         const ev = st().events.items.find((e) => e.id === id);
@@ -109,11 +113,12 @@ export default function register(add, { st, usage }) {
         if (!time) return out.err("Can't read the time '" + tm[1] + "' (use 24-hour HH:MM)");
         title = tm[2] || '';
       }
-      if (!title) return usage(ctx, this);
+      title = oneValue(title); // ev fri "19:30 is the title"
+      if (!title.trim()) return usage(ctx, this);
       if (title.length > 200) return out.err('The title is too long (200 characters max)');
       const id = await ctx.data.allocId('e');
       await ctx.data.mutate('events', (d) => { d.items.push({ id, date, time, title }); });
-      out.head([['Added event ', ''], [id, 'id']], 'ok');
+      out.head([['Added event ', ''], [id, 'id', { run: 'ev show ' + id }]], 'ok');
       out.line([[title, ''], ['  ', ''], [dayLabel(date, today), 'date'], [time ? ' ' + time : '', 'num']]);
     },
   });

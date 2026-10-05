@@ -195,6 +195,47 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .kv dt { color: var(--dim); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 
+/* links that run a command (ids in lists) */
+.seg-run {
+  font: inherit;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--faint);
+}
+.seg-run:hover { text-decoration-color: currentColor; }
+
+/* field values that can be edited in place */
+.editable {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  margin: 0 0 0 -0.6ch;
+  padding: 0 0.6ch;
+  background: none;
+  border: 1px dashed transparent;
+  border-radius: 4px;
+  cursor: text;
+}
+.editable:hover, .editable:focus-visible { border-color: var(--border); background: var(--bg-elev); }
+
+.edit-input {
+  font: inherit;
+  color: var(--strong);
+  width: min(60ch, 100%);
+  margin: 0 0 0 -0.6ch;
+  padding: 0 0.6ch;
+  background: var(--bg-elev);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  outline: none;
+}
+
 /* code and copyable values */
 .code-wrap { position: relative; margin: 4px 0 2px; }
 
@@ -653,7 +694,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
    font is under 16px. Keep the fields at 16px there (the ghost layer inherits
    the same size, so completion stays aligned) instead of disabling zoom. */
 @media (pointer: coarse) {
-  .prompt-box, #palette-input { font-size: 16px; }
+  .prompt-box, #palette-input, .edit-input { font-size: 16px; }
   body { touch-action: manipulation; } /* no double-tap zoom on buttons */
 }
 

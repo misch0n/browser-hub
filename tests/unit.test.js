@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import * as U from '../js/core/util.js';
 import * as A from '../js/core/aliases.js';
 import { dispatch } from '../js/core/dispatch.js';
+import { edit, actionFor } from '../js/core/lineedit.js';
 import * as C from '../js/core/completion.js';
 import { createLocalStore } from '../js/core/store.js';
 import { createData, DEFAULTS } from '../js/core/data.js';
@@ -107,6 +108,42 @@ test('dispatch: builtin, alias, engine, fallback', () => {
   assert.equal(d('ddg').kind, 'redirect');
   assert.equal(dispatch('x', { isBuiltin, entries: [], defaultEngine: 'g' }).kind, 'error');
   assert.equal(dispatch('help', { isBuiltin, entries: [{ name: 'help', base: 'https://x.com/' }], defaultEngine: 'g' }).kind, 'builtin');
+});
+
+test('line editing: readline keys', () => {
+  const e = (action, value, cursor, killed = '') => edit(action, value, cursor, killed);
+  const line = 'gh org/repo issues';
+  assert.deepEqual(e('start', line, 5), { value: line, cursor: 0, killed: '' });
+  assert.deepEqual(e('end', line, 5), { value: line, cursor: line.length, killed: '' });
+  assert.equal(e('start', line, 0), null); // already there
+  // Ctrl+W cuts back to whitespace, so a whole path goes; trailing spaces go with it.
+  assert.deepEqual(e('kill-big-word-back', line, 11), { value: 'gh  issues', cursor: 3, killed: 'org/repo' });
+  assert.deepEqual(e('kill-big-word-back', 'gh org  ', 8), { value: 'gh ', cursor: 3, killed: 'org  ' });
+  assert.equal(e('kill-big-word-back', 'x', 0), null);
+  // Alt+Backspace / Alt+B / Alt+F / Alt+D stop at punctuation.
+  assert.deepEqual(e('kill-word-back', line, 11), { value: 'gh org/ issues', cursor: 7, killed: 'repo' });
+  assert.equal(e('back-word', line, 11).cursor, 7);
+  assert.equal(e('forward-word', line, 3).cursor, 6);
+  assert.deepEqual(e('kill-word-forward', line, 6), { value: 'gh org issues', cursor: 6, killed: '/repo' });
+  assert.deepEqual(e('kill-start', line, 3), { value: 'org/repo issues', cursor: 0, killed: 'gh ' });
+  assert.deepEqual(e('kill-end', line, 11), { value: 'gh org/repo', cursor: 11, killed: ' issues' });
+  assert.deepEqual(e('yank', 'ab', 1, 'XY'), { value: 'aXYb', cursor: 3, killed: 'XY' });
+  assert.equal(e('yank', 'ab', 1, ''), null);
+  assert.deepEqual(e('delete-char', 'abc', 1), { value: 'ac', cursor: 1, killed: '' });
+  assert.equal(e('back-char', 'abc', 0), null);
+  assert.equal(e('forward-char', 'abc', 1).cursor, 2);
+  assert.equal(e('back-word', 'café olé', 8).cursor, 5); // letters beyond ASCII are word characters
+
+  const key = (o) => actionFor(Object.assign({ key: '', code: '', ctrlKey: false, altKey: false, metaKey: false, shiftKey: false }, o));
+  assert.equal(key({ key: 'a', ctrlKey: true }), 'start');
+  assert.equal(key({ key: 'E', ctrlKey: true }), 'end'); // caps lock
+  assert.equal(key({ key: 'w', ctrlKey: true }), 'kill-big-word-back');
+  assert.equal(key({ key: '∫', code: 'KeyB', altKey: true }), 'back-word'); // Option+B on a Mac
+  assert.equal(key({ key: 'Backspace', code: 'Backspace', altKey: true }), 'kill-word-back');
+  assert.equal(key({ key: 'a', metaKey: true }), null); // Cmd+A stays select-all
+  assert.equal(key({ key: 'c', ctrlKey: true }), null); // copy, paste, undo untouched
+  assert.equal(key({ key: 'a', ctrlKey: true, shiftKey: true }), null);
+  assert.equal(key({ key: 'b', ctrlKey: true, altKey: true }), null); // AltGr
 });
 
 test('completion: first token ranking, tab behaviour, case-insensitive arguments', () => {

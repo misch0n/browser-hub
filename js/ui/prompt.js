@@ -1,4 +1,5 @@
 import { complete, applyTab } from '../core/completion.js';
+import { edit, actionFor } from '../core/lineedit.js';
 
 // The input line: ghost-text completion, Tab, history, and a live hint that
 // says what Enter would do.
@@ -11,6 +12,7 @@ export function createPrompt(opts) {
   let histIdx = -1;
   let draft = '';
   let composing = false;
+  let killed = ''; // what Ctrl+Y pastes: the last text cut by Ctrl+W/U/K or Alt+D/Backspace
 
   function set(text) {
     input.value = text;
@@ -57,6 +59,19 @@ export function createPrompt(opts) {
     // Safari fires compositionend *before* the keydown of the Enter that
     // confirms an IME conversion; keyCode 229 marks that keydown.
     if (e.isComposing || composing || e.keyCode === 229) return;
+    const action = actionFor(e);
+    if (action) {
+      // Handled even when nothing changes, so Ctrl+A never selects the page
+      // and Ctrl+E / Ctrl+K never jump to the browser's search box.
+      e.preventDefault();
+      const r = edit(action, input.value, input.selectionStart, killed);
+      if (!r) return;
+      killed = r.killed;
+      if (r.value !== input.value) { histIdx = -1; input.value = r.value; }
+      input.setSelectionRange(r.cursor, r.cursor);
+      update();
+      return;
+    }
     switch (e.key) {
       case 'Enter': {
         e.preventDefault();

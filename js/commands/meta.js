@@ -12,6 +12,13 @@ export const SHORTCUTS = [
   ['/', 'command palette (on an empty prompt)'],
   ['?', 'these shortcuts (on an empty prompt)'],
   ['Esc', 'clear the prompt, close the palette or widget drawer'],
+  ['Ctrl+A / Ctrl+E', 'start / end of the line'],
+  ['Ctrl+B / Ctrl+F', 'back / forward one character'],
+  ['Alt+B / Alt+F', 'back / forward one word'],
+  ['Ctrl+W', 'cut the word before the cursor (Alt+Backspace where the browser keeps Ctrl+W)'],
+  ['Ctrl+U / Ctrl+K', 'cut to the start / end of the line'],
+  ['Alt+D / Ctrl+D', 'cut the next word / delete the next character'],
+  ['Ctrl+Y', 'paste the last cut text'],
 ];
 
 export default function register(add, { st, usage, isBuiltin, defs, byName }) {

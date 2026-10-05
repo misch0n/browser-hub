@@ -19,6 +19,10 @@ the default search engine.
 
 Keys: **Tab** completes (again to list), **→** accepts the grey suggestion,
 **↑/↓** history, **/** command palette, **?** shortcuts, **Esc** clears.
+The prompt has readline editing keys: Ctrl+A/E (start/end), Ctrl+W (cut
+word), Ctrl+U/K (cut to start/end), Ctrl+Y (paste), Alt+B/F (word back/forward).
+Press `?` on an empty prompt for the full list.
+
 On touch screens, tap outside the prompt box to put the keyboard away and tap
 the box to bring it back.
 

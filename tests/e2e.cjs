@@ -156,6 +156,30 @@ async function check(name, fn) {
     await prompt.fill('');
   });
 
+  await check('readline keys edit the prompt: Ctrl+A/E/W/U/K/Y, Alt+B', async () => {
+    await type('gh org/repo issues');
+    const caret = () => prompt.evaluate((el) => el.selectionStart);
+    await page.keyboard.press('Control+a');
+    assert.equal(await caret(), 0);
+    assert.equal(await page.evaluate(() => getSelection().toString()), ''); // not select-all
+    await page.keyboard.press('Control+e');
+    assert.equal(await caret(), 18);
+    await page.keyboard.press('Alt+b');
+    assert.equal(await caret(), 12);
+    await page.keyboard.press('Control+e');
+    await page.keyboard.press('Control+w');
+    assert.equal(await prompt.inputValue(), 'gh org/repo ');
+    assert.match(await page.locator('#hint').innerText(), /for “gh org\/repo”/); // hint follows the edit
+    await page.keyboard.press('Control+a');
+    await page.keyboard.press('Control+k');
+    assert.equal(await prompt.inputValue(), '');
+    await page.keyboard.press('Control+y');
+    assert.equal(await prompt.inputValue(), 'gh org/repo ');
+    await page.keyboard.press('Control+u');
+    assert.equal(await prompt.inputValue(), '');
+    assert.equal(await focused(), 'prompt');
+  });
+
   await check('history with arrows; Esc clears; ? shows shortcuts', async () => {
     await send('calc 1+1');
     await page.keyboard.press('ArrowUp');

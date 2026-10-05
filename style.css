@@ -568,7 +568,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .w-zone {
   display: grid;
-  grid-template-columns: 1.5ch minmax(0, 1fr) auto 3.5ch;
+  grid-template-columns: 1.5ch minmax(0, 1fr) auto auto;
   gap: 1ch;
   align-items: baseline;
 }

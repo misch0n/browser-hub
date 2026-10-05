@@ -27,7 +27,8 @@ the box to bring it back.
 
 **Widgets**: the right-hand panel shows live widgets (clock, agenda, tasks,
 calendar, time zones, notes, backup). `widgets` lists them, `widgets zones`
-toggles one, `widgets hide|show` toggles the panel. On narrow screens the
+toggles one, `widgets move zones top` (or `up|down|bottom|<n>`) and
+`widgets order zones clock` reorder them, `widgets hide|show` toggles the panel. On narrow screens the
 panel becomes a drawer opened from the `widgets` button under the prompt.
 
 All data lives in `localStorage` (keys `cc:*`), behind the store interface in

@@ -21,7 +21,7 @@ export const DEFAULTS = {
   notes: () => ({ items: [] }),
   tasks: () => ({ items: [] }),
   events: () => ({ items: [] }),
-  settings: () => ({ zones: [], theme: DEFAULT_THEME, widgets: DEFAULT_WIDGETS.slice(), panel: true }),
+  settings: () => ({ zones: [], zoneNames: {}, theme: DEFAULT_THEME, widgets: DEFAULT_WIDGETS.slice(), panel: true }),
   history: () => ({ items: [] }),
 };
 
@@ -142,7 +142,7 @@ export function createData(store, now) {
   function hasUserData() {
     const starterNames = starters().map((e) => e.name);
     return state.notes.items.length > 0 || state.tasks.items.length > 0 || state.events.items.length > 0 ||
-      state.settings.zones.length > 0 || state.aliases.entries.some((e) => !starterNames.includes(e.name));
+      state.settings.zones.length > 0 || Object.keys(state.settings.zoneNames).length > 0 || state.aliases.entries.some((e) => !starterNames.includes(e.name));
   }
 
   // Days since the last export (or since first use if never exported); null with no data.

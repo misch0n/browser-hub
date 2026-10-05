@@ -88,6 +88,17 @@ export function merge(current, file, isBuiltin, now) {
     const canon = canonicalZone(z);
     if (!out.settings.zones.includes(canon)) { out.settings.zones.push(canon); zonesAdded++; }
   }
+  // Clock names come along for zones that have none here yet.
+  const srcNames = src.settings && src.settings.zoneNames;
+  if (!out.settings.zoneNames || typeof out.settings.zoneNames !== 'object') out.settings.zoneNames = {};
+  if (srcNames && typeof srcNames === 'object' && !Array.isArray(srcNames)) {
+    for (const z of Object.keys(srcNames)) {
+      const name = srcNames[z];
+      if (typeof name !== 'string' || !name.trim() || name.length > 32 || z.length > 64 || !isValidZone(z)) continue;
+      const canon = canonicalZone(z);
+      if (!Object.prototype.hasOwnProperty.call(out.settings.zoneNames, canon)) out.settings.zoneNames[canon] = name.trim();
+    }
+  }
 
   const hist = items('history').filter((h) => typeof h === 'string' && h.length > 0 && h.length <= 2000);
   out.history.items.push(...hist);

@@ -4,7 +4,7 @@ import { WIDGETS, EXPORT_REMINDER_DAYS } from '../core/catalog.js';
 import { todayISO, toISO, pad2, truncate, firstLine, byIdNum, plural, daysBetween } from '../core/util.js';
 import { MONTH_NAMES, DAY_NAMES_LONG, dayLabel, shortDate, dueSeg, bytes } from '../core/format.js';
 import { agenda, eventDays, sortTasks } from '../core/agenda.js';
-import { localZone, zoneRows, workOverlap } from '../lib/zones.js';
+import { localZone, zoneRows, workOverlap, zoneLabel } from '../lib/zones.js';
 
 const empty = (text) => h('div', { class: 'w-empty', text });
 const row = (...cells) => h('div', { class: 'w-row' }, ...cells.map((c) => h('span', null, rich(c))));
@@ -102,14 +102,14 @@ const RENDERERS = {
       const zones = [local].concat(state.settings.zones.filter((z) => z !== local));
       const rows = zoneRows(now, zones);
       const box = h('div', { class: 'w-list' });
-      rows.forEach((r, i) => {
-        box.appendChild(h('div', { class: 'w-zone' },
+      rows.forEach((r) => {
+        box.appendChild(h('div', { class: 'w-zone', title: r.zone + ' · UTC' + r.offset },
           h('span', { class: 'w-dot ' + (r.working ? 't-ok' : 't-faint'), text: r.working ? '●' : '○' }),
-          h('span', { class: 'w-zone-name ' + (i === 0 ? 't-accent' : ''), text: r.zone.split('/').pop().replace(/_/g, ' ') }),
-          h('span', { class: 'w-zone-time t-num', text: r.time }),
-          h('span', { class: 'w-zone-day t-warn', text: r.day })));
+          h('span', { class: 'w-zone-name ' + (r.ref ? 't-accent' : ''), text: zoneLabel(r.zone, state.settings.zoneNames) }),
+          h('span', { class: 'w-zone-day t-warn', text: r.date }),
+          h('span', { class: 'w-zone-time t-num', text: r.time })));
       });
-      if (zones.length === 1) box.appendChild(empty('Add zones: tz add <IANA zone>'));
+      if (zones.length === 1) box.appendChild(empty('Add zones: tz add <zone> [name]'));
       else {
         const o = workOverlap(now, zones);
         box.appendChild(h('div', { class: 'w-sub' }, rich([['overlap ', 'faint'], [o.length ? o.join(', ') : 'none', o.length ? 'ok' : 'dim']])));
@@ -199,7 +199,7 @@ export function createWidgets(opts) {
     const c = context();
     enabled.forEach((id) => {
       if (!cards.has(id)) cards.set(id, card(id));
-      opts.listEl.appendChild(cards.get(id).el); // also restores catalogue order
+      opts.listEl.appendChild(cards.get(id).el); // also applies the stored order
       paint(id, c);
     });
     if (!enabled.length) {

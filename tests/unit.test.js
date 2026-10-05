@@ -163,10 +163,22 @@ test('misc: b64, json, epoch, uuid, relative', () => {
 test('zones: rows, offsets, overlap, zoned wall time', () => {
   const instant = new Date(Date.UTC(2026, 0, 15, 14, 30));
   const rows = Z.zoneRows(instant, ['UTC', 'Asia/Tokyo', 'America/Los_Angeles']);
-  assert.equal(rows[1].time, '23:30');
-  assert.equal(rows[1].offset, '+09:00');
-  assert.equal(rows[2].offset, '-08:00');
-  assert.equal(Z.zoneRows(new Date(Date.UTC(2026, 0, 15, 20)), ['UTC', 'Asia/Tokyo'])[1].day, '+1d');
+  // Earliest wall clock first; the reference zone keeps its `ref` mark wherever it lands.
+  assert.deepEqual(rows.map((r) => [r.zone, r.time, r.offset, r.ref]),
+    [['America/Los_Angeles', '06:30', '-08:00', false], ['UTC', '14:30', '+00:00', true], ['Asia/Tokyo', '23:30', '+09:00', false]]);
+  assert.deepEqual(rows.map((r) => r.date), ['', '', '']);
+  // A different calendar day shows the date; the same day shows nothing.
+  const late = Z.zoneRows(new Date(Date.UTC(2026, 0, 15, 20)), ['UTC', 'Asia/Tokyo', 'Pacific/Honolulu']);
+  assert.deepEqual(late.map((r) => [r.zone, r.date]), [['Pacific/Honolulu', ''], ['UTC', ''], ['Asia/Tokyo', 'Fri 16 Jan']]);
+  const early = Z.zoneRows(new Date(Date.UTC(2026, 0, 15, 3)), ['Asia/Tokyo', 'America/New_York']);
+  assert.deepEqual(early.map((r) => [r.zone, r.date]), [['America/New_York', 'Wed 14 Jan'], ['Asia/Tokyo', '']]);
+  assert.ok(Z.allZones().includes('Europe/Sofia') && Z.allZones().includes('UTC'));
+  assert.equal(Z.resolveZone('tokyo'), 'Asia/Tokyo');
+  assert.equal(Z.resolveZone('new york'), 'America/New_York');
+  assert.equal(Z.resolveZone('america/los_angeles'), 'America/Los_Angeles');
+  assert.equal(Z.resolveZone('Atlantis'), null);
+  assert.equal(Z.zoneLabel('America/New_York', {}), 'New York');
+  assert.equal(Z.zoneLabel('America/New_York', { 'America/New_York': 'NYC office' }), 'NYC office');
   assert.equal(Z.zonedToDate(2026, 10, 5, 9, 0, 0, 'America/New_York').toISOString(), '2026-10-05T13:00:00.000Z');
   assert.equal(Z.zonedToDate(2026, 1, 5, 9, 0, 0, 'America/New_York').toISOString(), '2026-01-05T14:00:00.000Z');
 });
@@ -435,11 +447,33 @@ test('tools commands', async () => {
   assert.deepEqual(j, ['# Valid JSON · 1 key (object)', '{', '  "a": 1', '}']);
   assert.deepEqual(await app.run('units 5 km to mi'), ['# 5 km = 3.106855961 mi']);
   assert.equal((await app.run('epoch 0'))[0], '# 0 seconds');
+  const z = () => app.data.state.settings;
   assert.deepEqual(await app.run('tz add europe/london'), ['# Added Europe/London']);
   const tz = await app.run('tz 14:30');
   assert.match(tz[0], /^# 14:30 local · overlap/);
-  assert.equal(tz[1], '| zone | time |  | utc | ');
+  assert.equal(tz[1], '| name | time |  | utc | zone | ');
   assert.deepEqual(await app.run('tz rm EUROPE/london'), ['# Removed Europe/London']);
+  // Custom names: on add, later with `tz name`, cleared with no name, dropped on rm.
+  assert.deepEqual(await app.run('tz add nairobi Kenji in Nairobi'), ['# Added Africa/Nairobi as Kenji in Nairobi']);
+  assert.deepEqual(z().zoneNames, { 'Africa/Nairobi': 'Kenji in Nairobi' });
+  assert.ok((await app.run('tz')).some((l) => /^Kenji in Nairobi \| \d\d:\d\d \| .* \| Africa\/Nairobi \|/.test(l)));
+  assert.deepEqual(await app.run('tz name Africa/Nairobi Kenji'), ['# Named Africa/Nairobi as Kenji']);
+  assert.deepEqual(await app.run('tz add nairobi Nairobi team'), ['# Named Africa/Nairobi as Nairobi team']);
+  assert.deepEqual(await app.run('tz name nairobi'), ['# Cleared the name of Africa/Nairobi']);
+  assert.deepEqual(z().zoneNames, {});
+  await app.run('tz add America/New_York NYC');
+  assert.deepEqual(await app.run('tz rm nyc'), ['# Removed America/New_York']);
+  assert.deepEqual(z().zoneNames, {});
+  assert.equal((await app.run('tz name paris Bob'))[0], "err: 'paris' is not in your list");
+  assert.equal((await app.run('tz add Atlantis'))[0], "err: Unknown time zone 'Atlantis'");
+  assert.match((await app.run('tz add nairobi ' + 'x'.repeat(33)))[0], /too long/);
+  // tz ls lists every zone the browser knows, filterable; listed ones are marked.
+  const all = await app.run('tz ls');
+  assert.match(all[0], /^# \d{3} time zones · earliest first$/);
+  const asia = await app.run('tz ls africa/nai');
+  assert.equal(asia[0], '# 1 time zone matching "africa/nai"');
+  assert.match(asia[2], /^Africa\/Nairobi \| \d\d:\d\d \| .* \| \+03:00 \| ● listed$/);
+  assert.equal((await app.run('tz ls zzz'))[0], '# No time zones match "zzz"');
 });
 
 test('theme and widgets commands', async () => {
@@ -456,7 +490,24 @@ test('theme and widgets commands', async () => {
   assert.deepEqual(app.data.state.settings.widgets, ['clock', 'agenda', 'tasks', 'zones']);
   await app.run('widgets clock off');
   await app.run('widgets calendar on');
-  assert.deepEqual(app.data.state.settings.widgets, ['agenda', 'tasks', 'calendar', 'zones']); // catalogue order
+  const ws = () => app.data.state.settings.widgets;
+  assert.deepEqual(ws(), ['agenda', 'tasks', 'zones', 'calendar']); // turned on -> bottom
+  // Reordering from the command line.
+  assert.deepEqual(await app.run('widgets move zones top'), ['# Moved zones to 1', 'dim: Order: 1. zones  2. agenda  3. tasks  4. calendar']);
+  await app.run('widgets move agenda down');
+  assert.deepEqual(ws(), ['zones', 'tasks', 'agenda', 'calendar']);
+  await app.run('widgets move calendar 2');
+  assert.deepEqual(ws(), ['zones', 'calendar', 'tasks', 'agenda']);
+  await app.run('widgets move zones bottom');
+  assert.deepEqual(ws(), ['calendar', 'tasks', 'agenda', 'zones']);
+  assert.equal((await app.run('widgets move calendar up'))[0], '# calendar is already first');
+  assert.equal((await app.run('widgets move clock top'))[0], 'err: clock is off');
+  assert.equal((await app.run('widgets move bogus top'))[0], "err: No widget 'bogus'");
+  await app.run('widgets order clock agenda');
+  assert.deepEqual(ws(), ['clock', 'agenda', 'calendar', 'tasks', 'zones']); // named first, clock turned on
+  assert.equal((await app.run('widgets order clock clock'))[0], 'err: Each widget can be named once');
+  const listed = await app.run('widgets');
+  assert.deepEqual(listed.slice(1, 3), ['1 | ● | clock | time and date', '2 | ● | agenda | overdue tasks, events and due tasks for the week']);
   assert.deepEqual(await app.run('widgets hide'), ['# Widget panel hidden']);
   assert.equal(app.data.state.settings.panel, false);
   await app.run('widgets notes');
@@ -485,6 +536,7 @@ test('export then import into empty storage brings everything back', async () =>
   await a.run('alias gh https://github.com/ https://github.com/{} --path');
   await a.run('engine default ddg');
   await a.run('tz add Asia/Tokyo');
+  await a.run('tz add Africa/Nairobi Kenji');
   await a.run('theme dracula');
   await a.run('widgets notes on');
   const ex = await a.run('export');
@@ -501,7 +553,8 @@ test('export then import into empty storage brings everything back', async () =>
   assert.equal(s.events.items[0].title, 'review');
   assert.deepEqual(s.aliases.entries.map((e) => e.name).sort(), ['ddg', 'g', 'gh']);
   assert.equal(s.aliases.defaultEngine, 'ddg');
-  assert.deepEqual(s.settings.zones, ['Asia/Tokyo']);
+  assert.deepEqual(s.settings.zones, ['Asia/Tokyo', 'Africa/Nairobi']);
+  assert.deepEqual(s.settings.zoneNames, { 'Africa/Nairobi': 'Kenji' });
   assert.equal(s.settings.theme, 'dracula');
   assert.deepEqual(s.settings.widgets, ['clock', 'agenda', 'tasks', 'notes']);
 });

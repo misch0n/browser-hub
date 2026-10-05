@@ -193,8 +193,9 @@ The calendar is local only. Reminders appear only as page output when the page i
 | Command | Does |
 | --- | --- |
 | `calc <expr>` | Arithmetic, evaluated by a small parser, never `eval` |
-| `tz [time]` | Current or given time across configured zones, with working-hours overlap |
-| `tz add <IANA zone>` / `tz rm <zone>` | Manage zones |
+| `tz [time]` | Current or given time across configured zones, earliest wall clock first, with working-hours overlap. A zone on a different calendar day than local shows its date |
+| `tz ls [filter]` | Every IANA zone the browser knows, with current time and offset; listed zones are marked |
+| `tz add <zone> [name]` / `tz name <zone> [name]` / `tz rm <zone>` | Manage zones. `<zone>` is an IANA name or a city (`tokyo`); a name labels the clock, and `tz name` with no name clears it |
 | `epoch [value]` | Unix time now, or convert to and from a date |
 | `uuid` | Generate a v4 UUID |
 | `b64 enc <text>` / `b64 dec <text>` | Base64 encode or decode |

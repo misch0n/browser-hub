@@ -1,4 +1,5 @@
-import { pad2 } from '../core/util.js';
+import { pad2, isValidZone, canonicalZone } from '../core/util.js';
+import { shortDate } from '../core/format.js';
 
 export const WORK_START = 9 * 60;
 export const WORK_END = 17 * 60;
@@ -55,20 +56,50 @@ export function zonedToDate(y, mo, d, h, mi, s, zone) {
 
 export const clock = (minutes) => pad2(Math.floor(minutes / 60)) + ':' + pad2(minutes % 60);
 
-// Rows for `instant` in each zone; zones[0] is the reference (local) zone.
+// Rows for `instant` in each zone, earliest wall clock first. zones[0] is the
+// reference (local) zone: `ref` marks its row, and `date` is filled in only for
+// zones whose calendar day differs from it ('Tue 6 Oct').
 export function zoneRows(instant, zones) {
   const base = partsIn(instant, zones[0]);
-  return zones.map((zone) => {
+  return zones.map((zone, i) => {
     const p = partsIn(instant, zone);
     const dayDiff = Math.round((Date.parse(p.date) - Date.parse(base.date)) / 86400000);
     return {
       zone,
+      ref: i === 0,
       time: clock(p.minutes),
       offset: offsetOf(instant, zone),
-      day: dayDiff === 0 ? '' : (dayDiff > 0 ? '+' : '') + dayDiff + 'd',
+      offsetMin: offsetMinutes(instant, zone),
+      dayDiff,
+      date: dayDiff === 0 ? '' : shortDate(p.date, base.date),
       working: p.minutes >= WORK_START && p.minutes < WORK_END,
     };
-  });
+  }).sort((a, b) => a.offsetMin - b.offsetMin); // stable: the local row leads its offset
+}
+
+// Every IANA zone this browser knows, plus UTC.
+let known = null;
+export function allZones() {
+  if (!known) {
+    const list = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+    known = list.includes('UTC') ? list.slice() : list.concat('UTC');
+  }
+  return known;
+}
+
+// 'Tokyo' -> 'Asia/Tokyo'. Accepts an IANA name in any case, or a city (the
+// last part of a zone name, spaces for underscores). Returns null if unknown.
+export function resolveZone(arg) {
+  if (!arg) return null;
+  if (isValidZone(arg)) return canonicalZone(arg);
+  const want = arg.trim().toLowerCase().replace(/\s+/g, '_');
+  return allZones().find((z) => z.split('/').pop().toLowerCase() === want) || null;
+}
+
+// What a zone is called on screen: the user's name for it, else its city.
+export function zoneLabel(zone, names) {
+  const own = names && Object.prototype.hasOwnProperty.call(names, zone) ? names[zone] : null;
+  return typeof own === 'string' && own ? own : zone.split('/').pop().replace(/_/g, ' ');
 }
 
 // Ranges of the local day (as 'HH:MM-HH:MM') when every zone is within 09:00-17:00.

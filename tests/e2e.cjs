@@ -384,6 +384,45 @@ async function check(name, fn) {
     await send('notes ' + id + ' rm');
   });
 
+  await check('visual history: kept across reloads, other devices tagged, session views, clear and undo', async () => {
+    await send('calc 6*7');
+    // What another device did, as sync would bring it in.
+    await page.evaluate(() => {
+      const log = JSON.parse(localStorage.getItem('cc:log'));
+      const last = log.entries.map((e) => e.at).sort().pop();
+      log.entries.push({ id: 'phone-1', at: new Date(Date.parse(last) + 5).toISOString(), device: 'phone', deviceName: 'iPhone · Safari',
+        input: 'n from the phone', ops: [['head', [['Added note ', ''], ['n99', 'id']], 'ok']] });
+      localStorage.setItem('cc:log', JSON.stringify(log));
+    });
+    await page.reload();
+    await page.waitForSelector('#prompt');
+    const texts = () => page.locator('.you-text').allInnerTexts();
+    assert.ok((await texts()).includes('calc 6*7')); // drawn again from history
+    const phoneTurn = page.locator('article.turn', { hasText: 'n from the phone' });
+    assert.equal(await phoneTurn.locator('.you-device').innerText(), 'iPhone · Safari');
+    assert.match(await phoneTurn.innerText(), /Added note n99/);
+    // Ordered by time: the phone's turn came just after calc 6*7.
+    const order = await texts();
+    assert.ok(order.indexOf('calc 6*7') < order.indexOf('n from the phone'));
+    await send('session show current');
+    assert.equal(await page.locator('article.turn', { hasText: 'n from the phone' }).count(), 0);
+    await send('session show all');
+    assert.equal(await page.locator('article.turn', { hasText: 'n from the phone' }).count(), 1);
+    // clear: this device's turns go, the phone's stay; undo brings ours back.
+    await send('clear');
+    assert.equal(await page.locator('article.turn', { hasText: 'calc 6*7' }).count(), 0);
+    assert.equal(await page.locator('article.turn', { hasText: 'n from the phone' }).count(), 1);
+    assert.match(await page.locator('#turns').innerText(), /Cleared this device's history · undo brings it back/);
+    await send('undo');
+    await page.waitForFunction(() => /calc 6\*7/.test(document.getElementById('turns').innerText));
+    await send('clear all');
+    assert.equal(await page.locator('article.turn[data-id]').count(), 0);
+    await page.reload();
+    await page.waitForSelector('#prompt');
+    assert.equal(await page.locator('article.turn', { hasText: 'n from the phone' }).count(), 0); // stays cleared
+    await send('undo');
+  });
+
   await check('find: grouped, ranked, highlighted; results link to their entry', async () => {
     await send('t order oat milk #shop');
     await send('n oat milk is cheaper at the market');
@@ -460,6 +499,15 @@ async function check(name, fn) {
     await b.waitForFunction(() => /Synced with/.test([...document.querySelectorAll('.turn')].pop().innerText));
     await send('sync now');
     await page.waitForFunction(() => document.getElementById('pinned').hidden, null, { timeout: 5000 });
+    // B's commands show up here too, tagged with B's device name; B's sync output doesn't (private).
+    await bsend('config edit device Phone B');
+    await bsend('t from device b');
+    await bsend('sync now');
+    await b.waitForFunction(() => /Synced with/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    await send('sync now');
+    await page.waitForFunction(() => [...document.querySelectorAll('article.turn')].some((t) => /t from device b/.test(t.innerText) && /Phone B/.test(t.innerText)), null, { timeout: 5000 });
+    assert.equal(await page.locator('article.turn .you-text', { hasText: 'sync now' }).count() >= 1, true);
+    assert.equal(await page.locator('article.turn[data-id] .you-text', { hasText: /^sync/ }).count(), 0);
     await other.close();
 
     // The token is revoked: sync pauses, says so once, and a new token resumes it.

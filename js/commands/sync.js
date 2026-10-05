@@ -12,7 +12,7 @@ const HOW = [
 
 export default function register(add, { usage }) {
   add({
-    name: 'sync', group: 'Sync', noUndo: true,
+    name: 'sync', group: 'Sync', noUndo: true, private: true, // its output (repo, token hint) stays out of the shared history
     desc: 'sync with a private GitHub repository; the token stays on this device',
     usage: ['sync', 'sync setup <owner/repo> [file]', 'sync now', 'sync token', 'sync off'],
     examples: ['sync setup me/browser-hub-data', 'sync now', 'sync token'],

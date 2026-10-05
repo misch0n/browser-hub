@@ -9,6 +9,7 @@ import { daySummary, summaryVisible, summaryRows, summaryCounts, tomorrowLine } 
 import { createCommands } from './commands/index.js';
 import { detectOS, keyLabel } from './core/keys.js';
 import { loadDevice } from './core/device.js';
+import { newEntryId, makeEntry, visible } from './core/log.js';
 import { createSync } from './sync.js';
 import { SYNCED } from './core/merge.js';
 import { createTranscript } from './ui/transcript.js';
@@ -62,7 +63,11 @@ const ctxBase = {
   device,
   setDeviceName(name) { device.name = name; store.setLocal('device', device); },
   setInput: (text) => { prompt.set(text); prompt.focus(); },
-  clearOutput: () => transcript.clear(),
+  // After `clear`: drop what isn't stored either, and say how to get it back.
+  clearOutput(at, message) {
+    transcript.clearUnsaved(at);
+    if (message) transcript.notice().head([[message, 'dim'], [' · ', 'faint'], ['undo', 'accent', { run: 'undo' }], [' brings it back', 'faint']]);
+  },
   pickFile(accept) {
     return new Promise((resolve) => {
       fileEl.value = '';
@@ -119,6 +124,21 @@ function syncSoon(ms) {
   if (sync.config) sync.schedule(ms);
 }
 
+// ---- shared visual history ------------------------------------------------------------
+// What every device ran, merged by time (core/log.js). The view is per device:
+// all devices (default), this one, or another one (session show …).
+
+let logView = store.getLocal('logView') || 'all';
+function renderLog() {
+  transcript.reconcile(visible(state.log, logView, device.id), (e) => ({ other: e.device !== device.id }));
+}
+ctxBase.logView = () => logView;
+ctxBase.setLogView = (v) => {
+  logView = v;
+  store.setLocal('logView', v);
+  renderLog();
+};
+
 let currentCtx = ctxBase;
 const commands = createCommands(() => currentCtx);
 const ctxFor = (out) => (currentCtx = Object.assign({}, ctxBase, { out }));
@@ -141,12 +161,18 @@ function run(raw) {
   if (!input) return Promise.resolve();
   // On a phone the drawer covers the output; get it out of the way of the result.
   if (root.classList.contains('drawer-open')) setDrawer(false);
-  const out = transcript.turn(input);
   const res = dispatch(input, dispatchEnv());
+  // Every command goes into the shared visual history once it has finished,
+  // tagged with this device, except private ones (sync).
+  const keep = !(res.kind === 'builtin' && commands.byName.get(res.name).private);
+  const at = now().toISOString();
+  const id = newEntryId(device.id, at);
+  const out = transcript.turn(input, { at, pending: keep ? id : null });
   const saved = data.addHistory(input);
+  const record = () => (keep ? data.appendLog(makeEntry({ id, at, device: device.id, deviceName: device.name, input, ops: out.ops })) : Promise.resolve());
 
-  if (res.kind === 'builtin') return commands.run(res.name, res.rest, ctxFor(out));
-  if (res.kind === 'error') { out.err(res.message); return Promise.resolve(); }
+  if (res.kind === 'builtin') return commands.run(res.name, res.rest, ctxFor(out)).then(record);
+  if (res.kind === 'error') { out.err(res.message); return record(); }
 
   let target;
   try {
@@ -165,7 +191,7 @@ function run(raw) {
   if (res.note) out.warn(res.note);
   out.dim(res.url);
   // History is written before leaving, so ↑ recalls the command after Back.
-  return saved.then(() => ctxBase.navigate(target.href));
+  return Promise.all([saved, record()]).then(() => ctxBase.navigate(target.href));
 }
 
 // ---- prompt -------------------------------------------------------------------
@@ -358,6 +384,7 @@ const widgets = createWidgets({
 });
 
 data.onChange((col) => {
+  if (col === null || col === 'log') renderLog();
   if (col === null || SYNCED.includes(col)) syncSoon(4000);
   if (col === null || col === 'settings' || col === 'aliases') applySettings();
   renderPinned();
@@ -448,6 +475,7 @@ async function start() {
     [['help', 'accent'], [' for commands · ', 'dim'], ['find', 'accent'], [' searches everything · ', 'dim'], ['/', 'accent'], [' palette · ', 'dim'],
       ['?', 'accent'], [' keys · anything else searches ', 'dim'], [state.aliases.defaultEngine, 'accent']],
   ]);
+  renderLog();
   renderPinned();
   setInterval(renderPinned, 60000); // a new day brings a new summary
   showSyncStatus(sync.status);
@@ -472,6 +500,7 @@ async function start() {
   }
 
   fromAddressBar();
+  transcript.scroll(); // the latest at the bottom, history above
   prompt.update();
   prompt.focus();
 }

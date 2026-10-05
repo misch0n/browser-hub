@@ -10,7 +10,7 @@
 
 import { canonical } from './merge.js';
 
-export const UNDOABLE = ['aliases', 'notes', 'tasks', 'events', 'settings'];
+export const UNDOABLE = ['aliases', 'notes', 'tasks', 'events', 'settings', 'log'];
 const LISTS = { notes: ['items', 'id'], tasks: ['items', 'id'], events: ['items', 'id'], aliases: ['entries', 'name'] };
 
 const same = (a, b) => canonical(a) === canonical(b);

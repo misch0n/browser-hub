@@ -12,7 +12,7 @@ import { SCHEMA } from './util.js';
 //                          per-device values (undo steps, sync settings and token): never
 //                          exported or synced; setLocal returns false when it can't save
 
-export const COLLECTIONS = ['meta', 'aliases', 'notes', 'tasks', 'events', 'settings', 'history'];
+export const COLLECTIONS = ['meta', 'aliases', 'notes', 'tasks', 'events', 'settings', 'history', 'log'];
 const PREFIX = 'cc:';
 const LOCAL = 'cc-device:';
 

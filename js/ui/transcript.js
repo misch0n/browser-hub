@@ -3,7 +3,12 @@ import { monthGrid } from './components.js';
 import { jsonLines } from '../core/format.js';
 import { oneValue, quote } from '../core/args.js';
 
-const MAX_TURNS = 200;
+const MAX_TURNS = 400;
+
+// The Out methods that draw something: recorded, so a turn can be stored in
+// the shared history and drawn again later, on any device.
+const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar'];
+const plain = (v) => JSON.parse(JSON.stringify(v === undefined ? null : v));
 
 // The scrolling conversation: each command is a turn with the echoed input
 // and a reply in the Claude CLI shape:
@@ -25,8 +30,15 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
   function append(el) {
     const stick = atBottom();
     listEl.appendChild(el);
-    while (listEl.childElementCount > MAX_TURNS) listEl.firstElementChild.remove();
+    while (listEl.childElementCount > MAX_TURNS) listEl.querySelector('.turn').remove();
     if (stick || el.classList.contains('turn')) scroll();
+  }
+
+  // The echoed input, with where and when it ran when that isn't here and now.
+  function echo(input, meta = {}) {
+    return h('div', { class: 'you', title: meta.at ? new Date(meta.at).toLocaleString() + (meta.deviceName ? ' · ' + meta.deviceName : '') : null },
+      h('span', { class: 'caret', 'aria-hidden': 'true', text: '›' }), h('span', { class: 'you-text', text: input }),
+      meta.other ? h('span', { class: 'you-device', text: meta.deviceName || 'another device' }) : null);
   }
 
   listEl.addEventListener('click', (e) => {
@@ -75,7 +87,7 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
     return btn;
   }
 
-  function makeOut(turnEl) {
+  function makeOut(turnEl, mode = {}) {
     let reply = null, main = null, body = null, headEl = null;
     let tone = null;
 
@@ -168,7 +180,7 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
       },
       // Marks `text` as this command's result for the copy button.
       copyable(text) {
-        if (opts.onCopyable && text) opts.onCopyable(String(text));
+        if (opts.onCopyable && text && !mode.replay) opts.onCopyable(String(text));
       },
       calendar(spec) {
         push(h('div', { class: 'cal-wrap' }, monthGrid(spec)));
@@ -177,22 +189,87 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
     return out;
   }
 
+  // An Out that also keeps what it drew, as plain data: out.ops.
+  function recording(out) {
+    const ops = [];
+    const rec = { ...out, ops };
+    for (const m of RECORDED) {
+      rec[m] = (...args) => {
+        let a = plain(args);
+        // An editor opened by `<thing> <id> edit` opens once, not on every replay.
+        if (m === 'fields') a = [a[0].map((r) => (r[2] && r[2].open ? [r[0], r[1], { ...r[2], open: false }] : r))];
+        ops.push([m, ...a]);
+        return out[m](...args);
+      };
+    }
+    return rec;
+  }
+
+  // Draws a stored history entry into a new turn element (not yet placed).
+  function entryEl(entry, meta) {
+    const el = h('article', { class: 'turn', 'data-id': entry.id, 'data-at': entry.at },
+      echo(entry.input, { ...meta, at: entry.at, deviceName: entry.deviceName }));
+    const out = makeOut(el, { replay: true });
+    for (const [m, ...args] of entry.ops || []) {
+      try { if (RECORDED.includes(m)) out[m](...args); } catch (e) { /* an entry from a newer version */ }
+    }
+    return el;
+  }
+
+  const byAt = (a, b) => {
+    const x = a.dataset.at || '', y = b.dataset.at || '';
+    return x < y ? -1 : x > y ? 1 : (a.dataset.id || '') < (b.dataset.id || '') ? -1 : 1;
+  };
+
   return {
-    // A turn for one submitted command: echoes the input and returns its Out.
-    turn(input) {
-      const el = h('article', { class: 'turn' },
-        h('div', { class: 'you' }, h('span', { class: 'caret', 'aria-hidden': 'true', text: '›' }), h('span', { class: 'you-text', text: input })));
+    // A turn for one submitted command: echoes the input and returns its Out,
+    // which records what it draws (out.ops) and knows its element (out.el).
+    turn(input, meta = {}) {
+      const el = h('article', { class: 'turn', 'data-at': meta.at || new Date().toISOString() }, echo(input));
+      // Becomes a stored entry (data-id) once its command has finished and been saved.
+      if (meta.pending) el.setAttribute('data-pending', meta.pending);
       append(el);
-      return makeOut(el);
+      const out = recording(makeOut(el));
+      out.el = el;
+      return out;
     },
-    // Output with no echoed input (startup notices, widget actions).
+    // Output with no echoed input (startup notices, widget actions); not kept.
     notice() {
-      const el = h('article', { class: 'turn notice' });
+      const el = h('article', { class: 'turn notice', 'data-at': new Date().toISOString() });
       append(el);
       return makeOut(el);
     },
+    // Shows exactly `entries` (stored history, oldest first) alongside what is
+    // on screen but not stored (notices, this tab's unsaved turns), in time
+    // order. meta(entry) -> { other } for the echo line.
+    reconcile(entries, meta) {
+      const stick = atBottom();
+      const want = new Set(entries.map((e) => e.id));
+      const have = new Map();
+      for (const el of [...listEl.querySelectorAll('article.turn[data-pending]')]) {
+        if (!want.has(el.dataset.pending)) continue;
+        el.setAttribute('data-id', el.dataset.pending);
+        el.removeAttribute('data-pending');
+      }
+      for (const el of [...listEl.querySelectorAll('article.turn[data-id]')]) {
+        if (want.has(el.dataset.id)) have.set(el.dataset.id, el);
+        else el.remove(); // cleared, or not in this view
+      }
+      for (const e of entries) if (!have.has(e.id)) have.set(e.id, entryEl(e, meta(e)));
+      const turns = [...have.values(), ...listEl.querySelectorAll('article.turn:not([data-id])')].sort(byAt);
+      const now = [...listEl.querySelectorAll('article.turn')];
+      if (turns.length !== now.length || turns.some((el, i) => el !== now[i])) for (const el of turns) listEl.appendChild(el);
+      if (stick) scroll();
+    },
+    // Removes what isn't stored (notices, unsaved turns) up to `at`.
+    clearUnsaved(at) {
+      for (const el of [...listEl.querySelectorAll('article.turn:not([data-id])')]) if ((el.dataset.at || '') <= at) el.remove();
+    },
+    // Always first: above the history, however it arrives.
     welcome(lines) {
-      append(h('section', { class: 'welcome' },
+      const old = listEl.querySelector('.welcome');
+      if (old) old.remove();
+      listEl.prepend(h('section', { class: 'welcome' },
         h('div', { class: 'welcome-title' }, h('span', { class: 't-accent', text: '✻ ' }), h('span', { class: 't-strong', text: 'Control Center' })),
         ...lines.map((l) => h('div', { class: 'welcome-line' }, rich(l)))));
     },

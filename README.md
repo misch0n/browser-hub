@@ -39,7 +39,7 @@ still work.
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
 | Sync | `sync` |
-| Meta | `help`, `keys`, `undo`, `redo`, `clear`, `history`, `export`, `import` |
+| Meta | `help`, `keys`, `config`, `session`, `undo`, `redo`, `clear`, `history`, `export`, `import` |
 
 Keys: **Tab** completes (again to list), **→** accepts the grey suggestion,
 **↑/↓** history, **/** command palette, **?** shortcuts, **Esc** clears.
@@ -97,6 +97,20 @@ Ids in the results open the entry.
 `2w` / `10d` / `3m`, or weekdays. `t done` moves the due date to the next
 occurrence (finishing late doesn't leave it overdue; finishing early skips the
 one done). `t edit t3.repeat none` makes it a normal task again.
+
+**History on every device**: the page keeps what you ran *and what it
+printed*, and with sync on, every device shows every device's history merged
+in time order; a command from another device carries its name (`iPhone · Safari`).
+Reload, or open the page on your phone, and it's all there.
+
+- `session` lists the devices (sessions) in the history; `session show current`
+  shows only this device, `session show all` every device (the default),
+  `session show <device>` one other device. The choice is per device.
+- `clear` (or `clear current`) clears this device's session, `clear all` every
+  device's, everywhere once synced; `undo` brings it back.
+- `config` sets your name (greeting) and this device's name (`config edit device Work laptop`).
+- Kept: the last 300 commands, within about 800 KB; very long output (`zones all`)
+  is kept as its heading only. `sync` output is never kept.
 
 **Undo**: `undo` takes back the last change (any command: an edit, a
 removal, a theme switch, a whole import), again for the one before; `redo`

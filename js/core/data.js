@@ -3,6 +3,7 @@ import { starters, SHIPPED_DEFAULT } from './aliases.js';
 import { DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js';
 import { UNDOABLE, diff, conflicts, apply } from './undo.js';
 import { sameDoc } from './merge.js';
+import { emptyLog, compact } from './log.js';
 
 export const HISTORY_CAP = 500;
 export const UNDO_MAX = 30;
@@ -28,6 +29,7 @@ export const DEFAULTS = {
   settings: () => ({ zones: [], zoneNames: {}, theme: DEFAULT_THEME, widgets: DEFAULT_WIDGETS.slice(), panel: true,
     summary: 'on', summaryDismissed: null, name: null }),
   history: () => ({ items: [] }),
+  log: () => emptyLog(),
 };
 
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -173,10 +175,10 @@ export function createData(store, now) {
   // Re-reads the collection from the store, applies fn(doc), saves. Reading
   // fresh each time means a second open tab's changes are never overwritten
   // by a stale copy (last write still wins per collection).
-  function mutate(col, fn) {
+  function mutate(col, fn, opts = {}) {
     return serial(async () => {
       const doc = await readDoc(col);
-      const before = tx && UNDOABLE.includes(col) ? clone(doc) : null;
+      const before = tx && opts.record !== false && UNDOABLE.includes(col) ? clone(doc) : null;
       const result = fn(doc);
       await store.put(col, doc);
       if (before) noteChange(col, before, doc);
@@ -235,6 +237,16 @@ export function createData(store, now) {
     return (await allocIds(prefix, 1))[0];
   }
 
+  // Adds one command, with its output, to the shared visual history (core/log.js).
+  // Never an undo step; old entries drop off past the size limits.
+  function appendLog(entry) {
+    return mutate('log', (d) => {
+      if (d.entries.some((e) => e.id === entry.id)) return;
+      d.entries.push(entry);
+      Object.assign(d, compact(d));
+    }, { record: false }).catch(() => { /* history is best-effort */ });
+  }
+
   // Updates the in-memory history immediately (so the up-arrow sees it) and
   // returns a promise for the persisted write.
   function addHistory(input) {
@@ -274,6 +286,6 @@ export function createData(store, now) {
   return {
     state, load, reload, mutate, allocId, allocIds, addHistory, hasUserData, exportAgeDays, markExported, onChange,
     transaction, noteChange, undo: (force) => step('undo', force), redo: (force) => step('redo', force), steps,
-    read, applySync,
+    read, applySync, appendLog,
   };
 }

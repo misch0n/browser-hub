@@ -128,6 +128,19 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .you .caret { color: var(--faint); }
 .you-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* where a command from another device ran */
+.you-device {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: 1ch;
+  padding: 0 0.7ch;
+  font-size: 0.78em;
+  line-height: 1.5;
+  color: var(--info);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  white-space: nowrap;
+}
 
 .reply {
   display: grid;

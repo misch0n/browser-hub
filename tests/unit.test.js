@@ -14,6 +14,7 @@ import * as R from '../js/core/repeat.js';
 import * as S from '../js/core/search.js';
 import * as Sum from '../js/core/summary.js';
 import * as Merge from '../js/core/merge.js';
+import * as Log from '../js/core/log.js';
 import { createSync } from '../js/sync.js';
 import { fakeGitHub } from './fake-github.mjs';
 import * as C from '../js/core/completion.js';
@@ -975,6 +976,95 @@ test('config: your name (synced) and this device (local); device names and ids',
   assert.equal((await app.run('config edit colour red'))[0], 'err: config has no field colour');
   assert.equal((await app.run('config edit device ""'))[0], 'err: A device needs a name');
   assert.match((await app.run('config edit'))[0], /^# Editing config/);
+});
+
+test('visual history: entries, views, clear marks, merging, limits', () => {
+  const e = (id, at, device, extra) => ({ id, at, device, deviceName: device === 'pc' ? 'Mac · Chrome' : 'iPhone · Safari', input: id, ops: [['head', id]], ...extra });
+  const log = { entries: [e('b', '2026-10-05T10:02:00Z', 'phone'), e('a', '2026-10-05T10:01:00Z', 'pc'), e('c', '2026-10-05T10:03:00Z', 'pc')], cleared: { all: null, devices: {} } };
+  assert.deepEqual(Log.visible(log, 'all', 'pc').map((x) => x.id), ['a', 'b', 'c']); // merged, by time
+  assert.deepEqual(Log.visible(log, 'current', 'pc').map((x) => x.id), ['a', 'c']);
+  assert.deepEqual(Log.visible(log, 'phone', 'pc').map((x) => x.id), ['b']);
+  assert.deepEqual(Log.sessions(log).map((x) => [x.device, x.count]), [['pc', 2], ['phone', 1]]);
+  // clear current hides one device's entries up to a time; clear all hides everything up to it.
+  const c1 = { ...log, cleared: { all: null, devices: { pc: '2026-10-05T10:01:30Z' } } };
+  assert.deepEqual(Log.visible(c1, 'all', 'pc').map((x) => x.id), ['b', 'c']);
+  const c2 = { ...log, cleared: { all: '2026-10-05T10:02:00Z', devices: {} } };
+  assert.deepEqual(Log.visible(c2, 'all', 'pc').map((x) => x.id), ['c']);
+  // Merge: every entry from both sides; marks three-way (an undone clear stays undone).
+  const base = { entries: [log.entries[1]], cleared: { all: null, devices: { pc: '2026-10-05T09:00:00Z' } } };
+  const local = { entries: [log.entries[1], log.entries[2]], cleared: { all: null, devices: {} } }; // undid its clear
+  const remote = { entries: [log.entries[1], log.entries[0]], cleared: { all: null, devices: { pc: '2026-10-05T09:00:00Z' } } };
+  const m = Log.mergeLog(base, local, remote);
+  assert.deepEqual(m.entries.map((x) => x.id), ['a', 'b', 'c']);
+  assert.deepEqual(m.cleared.devices, {});
+  const both = Log.mergeLog(null, { ...local, cleared: { all: '2026-10-05T10:00:00Z', devices: {} } }, { ...remote, cleared: { all: '2026-10-05T11:00:00Z', devices: {} } });
+  assert.equal(both.cleared.all, '2026-10-05T11:00:00Z'); // both cleared: the later one
+  // Limits: huge output is cut to its heading; oldest entries drop first.
+  const big = Log.makeEntry({ id: 'x', at: '2026-10-05T10:00:00Z', device: 'pc', deviceName: 'pc', input: 'zones all', ops: [['head', 'many'], ['dim', 'x'.repeat(30000)]] });
+  assert.deepEqual(big.ops, [['head', 'many'], ['dim', 'The output was too long to keep in history · run it again to see it']]);
+  const many = { entries: Array.from({ length: 320 }, (_, i) => e('n' + i, new Date(Date.UTC(2026, 9, 5, 0, i)).toISOString(), 'pc')), cleared: { all: null, devices: {} } };
+  const kept = Log.compact(many).entries;
+  assert.equal(kept.length, Log.MAX_ENTRIES);
+  assert.equal(kept[0].id, 'n20');
+  assert.match(Log.newEntryId('pc', '2026-10-05T10:00:00Z'), /^pc-[a-z0-9]+-[a-z0-9]+$/);
+});
+
+test('clear and session: per device, undoable, synced across devices', async () => {
+  const gh = fakeGitHub({ tokens: ['tok'], repos: { 'me/data': { private: true } } });
+  const device = async (name, minute) => {
+    const app = await makeApp();
+    app.ctx.device.name = name;
+    const sync = createSync({ data: app.data, store: app.store, now: () => new Date(MON), fetch: gh.fetch, device: name });
+    // What the page does after each command: keep it in the history.
+    const say = async (input, at) => {
+      await app.data.appendLog(Log.makeEntry({ id: Log.newEntryId(app.ctx.device.id, at), at, device: app.ctx.device.id, deviceName: name, input, ops: [['head', input]] }));
+    };
+    return { app, sync, say, minute };
+  };
+  const pc = await device('Mac · Chrome');
+  const phone = await device('iPhone · Safari');
+  await pc.say('tasks', '2026-10-05T10:01:00Z');
+  await phone.say('notes', '2026-10-05T10:02:00Z');
+  await pc.say('find milk', '2026-10-05T10:03:00Z');
+  await pc.sync.setup('me/data', null, 'tok');
+  await phone.sync.setup('me/data', null, 'tok');
+  await pc.sync.syncNow();
+  const inputs = (d, view = 'all') => Log.visible(d.app.data.state.log, view, d.app.ctx.device.id).map((x) => x.input);
+  assert.deepEqual(inputs(pc), ['tasks', 'notes', 'find milk']); // what the phone did, here too, in time order
+  assert.deepEqual(inputs(phone), ['tasks', 'notes', 'find milk']);
+  assert.deepEqual(inputs(pc, 'current'), ['tasks', 'find milk']);
+  // session lists them; session show switches the view (this device only).
+  const ls = await pc.app.run('session');
+  assert.match(ls[0], /^# 2 sessions · showing every device$/);
+  assert.ok(ls.some((l) => /^Mac · Chrome \| ● this device \| 2 \|/.test(l)));
+  assert.ok(ls.some((l) => /^iPhone · Safari \|  \| 1 \|/.test(l)));
+  let view = 'all';
+  pc.app.ctx.logView = () => view;
+  pc.app.ctx.setLogView = (v) => { view = v; };
+  assert.deepEqual(await pc.app.run('session show current'), ['# Showing this device']);
+  assert.equal(view, 'current');
+  await pc.app.run('session show iphone · safari');
+  assert.equal(view, phone.app.ctx.device.id);
+  assert.equal((await pc.app.run('session show nowhere'))[0], "err: No session 'nowhere' · session lists them");
+  // clear current: this device's entries, on every device once synced; undo brings them back.
+  let now = new Date('2026-10-05T10:05:00Z');
+  pc.app.ctx.now = () => now;
+  await pc.app.run('clear');
+  assert.deepEqual(inputs(pc), ['notes']);
+  await pc.sync.syncNow();
+  await phone.sync.syncNow();
+  assert.deepEqual(inputs(phone), ['notes']);
+  await pc.app.run('undo');
+  assert.deepEqual(inputs(pc), ['tasks', 'notes', 'find milk']);
+  await pc.sync.syncNow();
+  await phone.sync.syncNow();
+  assert.deepEqual(inputs(phone), ['tasks', 'notes', 'find milk']); // the undo reached the phone too
+  // clear all: everything, everywhere.
+  await phone.app.run('clear all');
+  await phone.sync.syncNow();
+  await pc.sync.syncNow();
+  assert.deepEqual(inputs(pc), []);
+  assert.equal((await pc.app.run('clear sometimes'))[0], '# Usage · clear');
 });
 
 test('quotes say what you mean: literal text, names with spaces', async () => {

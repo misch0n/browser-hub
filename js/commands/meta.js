@@ -4,6 +4,7 @@ import { merge } from '../core/importer.js';
 import { DEFAULTS } from '../core/data.js';
 import { SHORTCUT_GROUPS, keyLabel, isApple } from '../core/keys.js';
 import { describe } from '../core/undo.js';
+import { sessions } from '../core/log.js';
 import { relative } from '../lib/misc.js';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -126,9 +127,63 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
   add(stepCommand('redo'));
 
   add({
-    name: 'clear', group: 'Meta', desc: 'clear the output',
-    usage: ['clear'],
-    async run(ctx) { ctx.clearOutput(); },
+    name: 'clear', group: 'Meta', desc: 'clear the history: this device\'s session, or every device\'s',
+    usage: ['clear', 'clear current', 'clear all'],
+    examples: ['clear', 'clear all', 'undo'],
+    complete: (prev) => (prev.length === 0 ? [{ value: 'current', label: 'this device' }, { value: 'all', label: 'every device' }] : []),
+    async run(ctx, rest) {
+      const arg = rest.trim().toLowerCase() || 'current';
+      if (arg !== 'current' && arg !== 'all') return usage(ctx, this);
+      // Hides everything up to now, on every device once synced; undo brings it back.
+      const at = ctx.now().toISOString();
+      const dev = ctx.device ? ctx.device.id : 'this';
+      await ctx.data.mutate('log', (d) => {
+        if (arg === 'all') d.cleared.all = at;
+        else d.cleared.devices[dev] = at;
+      });
+      ctx.clearOutput(at, arg === 'all' ? 'Cleared the history of every device' : 'Cleared this device\'s history');
+    },
+  });
+
+  add({
+    name: 'session', group: 'Meta', noUndo: true, desc: 'the shared history by device: list sessions, or choose which to show',
+    usage: ['session', 'session show all', 'session show current', 'session show <device>'],
+    examples: ['session', 'session show current', 'session show all', 'session show iPhone · Safari'],
+    complete: (prev) => {
+      if (prev.length === 0) return [{ value: 'show' }];
+      if (prev.length === 1 && prev[0] === 'show') return [{ value: 'all', label: 'every device' }, { value: 'current', label: 'this device' }];
+      return [];
+    },
+    async run(ctx, rest) {
+      const { out } = ctx;
+      const words = rest.trim().split(/\s+/).filter(Boolean);
+      const list = sessions(st().log);
+      const here = ctx.device ? ctx.device.id : null;
+      const viewName = (v) => (v === 'all' ? 'every device' : v === 'current' ? 'this device' : (list.find((s) => s.device === v) || {}).name || v);
+      if (!words.length) {
+        const v = ctx.logView ? ctx.logView() : 'all';
+        out.head([[plural(list.length, 'session'), 'strong'], [' · showing ', 'dim'], [viewName(v), 'accent']]);
+        if (!list.length) return out.dim('Nothing in the history yet');
+        out.table(['device', '', 'commands', 'last'], list.map((s) => [
+          [[s.name || s.device, s.device === here ? 'accent' : 'strong', { run: 'session show ' + (s.device === here ? 'current' : s.device) }]],
+          [[s.device === here ? '● this device' : '', 'ok']],
+          [[String(s.count), 'num']],
+          [[relative(new Date(s.last), ctx.now()), 'dim']],
+        ]));
+        out.dim('session show all · session show current · session show <device> · clear current|all');
+        return;
+      }
+      if (words[0].toLowerCase() !== 'show' || words.length < 2) return usage(ctx, this);
+      const want = words.slice(1).join(' ').toLowerCase();
+      let v = want === 'all' ? 'all' : want === 'current' || want === 'this' ? 'current' : null;
+      if (!v) {
+        const s = list.find((x) => x.device.toLowerCase() === want || (x.name || '').toLowerCase() === want);
+        if (!s) return out.err("No session '" + words.slice(1).join(' ') + "' · session lists them");
+        v = s.device === here ? 'current' : s.device;
+      }
+      ctx.setLogView(v);
+      out.head([['Showing ', ''], [viewName(v), 'accent']], 'ok');
+    },
   });
 
   add({

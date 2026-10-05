@@ -14,7 +14,9 @@
 //
 // Pure: plain collection documents in, merged documents out.
 
-export const SYNCED = ['meta', 'aliases', 'notes', 'tasks', 'events', 'settings'];
+import { mergeLog } from './log.js';
+
+export const SYNCED = ['meta', 'aliases', 'notes', 'tasks', 'events', 'settings', 'log'];
 
 // JSON with object keys sorted, so equal data compares equal whatever the key order.
 export function canonical(v) {
@@ -133,6 +135,9 @@ export function merge3(base, local, remote) {
   col.aliases = { ...doc(R, 'aliases'), ...doc(L, 'aliases'), entries: aliases.merged, defaultEngine };
 
   col.settings = mergeSettings(base ? doc(B, 'settings') : null, doc(L, 'settings'), doc(R, 'settings'), noBase, out);
+
+  // The visual history: every entry from both sides, clear marks three-way.
+  if (L.log || R.log) col.log = mergeLog(base ? B.log : null, L.log, R.log);
 
   const lm = doc(L, 'meta'), rm = doc(R, 'meta');
   const stamps = (k) => [lm[k], rm[k]].filter((x) => typeof x === 'string').sort();

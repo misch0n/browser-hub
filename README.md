@@ -22,7 +22,16 @@ Keys: **Tab** completes (again to list), **→** accepts the grey suggestion,
 The prompt has readline editing keys: Ctrl+A/E (start/end), Ctrl+W (cut
 word), Ctrl+U/K (cut to start/end), Ctrl+Y (paste), Alt+B/F (word back/forward),
 and **Ctrl+R** searches history (Ctrl+R again for older, Enter runs, Tab edits).
-Press `?` on an empty prompt for the full list. A word one typo away from a
+Press `?` on an empty prompt (or run `keys`) for the full list, labelled for
+your computer: ⌃R and ⌥B on a Mac, Ctrl+R and Alt+B elsewhere. On a phone, the
+**keys** button under the prompt shows a row of Esc, Tab, arrows and Ctrl
+buttons (off until you turn it on; remembered per device).
+
+Every name is labelled with what it is, the same way in `help`, the `/`
+palette, Tab lists and the hint under the prompt: built-in commands by their
+group (`tools`, `notes` …), **your alias** (opens a page), **your engine**
+(searches), and settings (`theme`, `widget`). `help` lists your own engines and
+aliases after the built-in commands. A word one typo away from a
 command or alias gets a "did you mean" in the hint, and Tab fixes it. The
 **copy** button at the right of the prompt copies the latest result (a `calc`
 answer, a `uuid`, pretty JSON …).

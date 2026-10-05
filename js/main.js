@@ -4,14 +4,14 @@ import { dispatch } from './core/dispatch.js';
 import { didYouMean } from './core/completion.js';
 import { todayISO, plural } from './core/util.js';
 import { THEMES, WIDGETS, isTheme, EXPORT_REMINDER_DAYS } from './core/catalog.js';
-import { DAY_NAMES_LONG, MONTH_NAMES } from './core/format.js';
+import { DAY_NAMES_LONG, MONTH_NAMES, kindSeg } from './core/format.js';
 import { createCommands } from './commands/index.js';
-import { SHORTCUTS } from './commands/meta.js';
+import { detectOS, keyLabel } from './core/keys.js';
 import { createTranscript } from './ui/transcript.js';
 import { createPrompt } from './ui/prompt.js';
 import { createPalette } from './ui/palette.js';
 import { createWidgets } from './ui/widgets.js';
-import { rich, copyText } from './ui/dom.js';
+import { h, rich, copyText } from './ui/dom.js';
 
 const $ = (id) => document.getElementById(id);
 const root = document.documentElement;
@@ -53,6 +53,7 @@ const fileEl = $('file');
 
 const ctxBase = {
   data, store, now,
+  os: detectOS(navigator),
   setInput: (text) => { prompt.set(text); prompt.focus(); },
   clearOutput: () => transcript.clear(),
   pickFile(accept) {
@@ -148,12 +149,13 @@ function describe(v, ghost, hist, search) {
   const tab = ghost ? [['   tab', 'accent'], [' → ' + v.trim().split(/\s+/).pop() + ghost, 'faint']] : [];
   if (res.kind === 'builtin') {
     const def = commands.byName.get(res.name);
-    return [[res.name, 'accent'], [' · ' + def.desc, 'faint'], ...tab];
+    return [kindSeg(def.group), [' ', ''], [res.name, 'accent'], [' · ' + def.desc, 'faint'], ...tab];
   }
-  if (res.kind === 'redirect') return [['↵ open ', 'faint'], [res.url, 'url'], ...tab];
+  if (res.kind === 'redirect') return [kindSeg('alias'), [' ', ''], [res.name, 'accent'], ['  ↵ open ', 'faint'], [res.url, 'url'], ...tab];
   if (res.kind === 'search') {
     const fix = res.fallback ? didYouMean(v.trim().split(/\s+/)[0], completionEnv()) : null;
     return [
+      ...(res.fallback ? [] : [kindSeg('engine'), [' ', ''], [res.name, 'accent'], ['  ', '']]),
       ['↵ search ', 'faint'], [siteOf(res.url), 'accent'],
       ...(res.fallback ? [[' (default)', 'faint']] : []),
       [' for ', 'faint'], ['“' + res.query + '”', 'strong'], ...tab,
@@ -175,11 +177,7 @@ const prompt = createPrompt({
   },
   onSubmit: run,
   onPalette: () => palette.open(),
-  onShortcuts() {
-    const out = transcript.turn('?');
-    out.head([['Shortcuts', 'strong']]);
-    out.kv(SHORTCUTS.map(([k, v]) => [k, [[v, 'dim']]]));
-  },
+  onShortcuts: () => run('keys'),
   onEscape() {
     if (root.classList.contains('drawer-open')) { setDrawer(false); return true; }
     return false;
@@ -187,9 +185,37 @@ const prompt = createPrompt({
   onList(input, candidates) {
     const out = transcript.turn(input);
     out.head([[plural(candidates.length, 'completion'), 'strong'], [' · keep typing or press tab', 'dim']]);
-    out.table(null, candidates.map((c) => [[[c.value, 'accent']], [[c.label || '', 'dim']]]));
+    out.table(null, candidates.map((c) => [[[c.value, 'accent']], c.kind ? [kindSeg(c.kind)] : [], [[c.label || '', 'dim']]]));
   },
 });
+
+// ---- phone key bar ----------------------------------------------------------------
+// Touch keyboards have no Esc, Tab, arrows or Ctrl. The keys button under the
+// prompt (touch screens only) shows a row of them; the choice is kept on this
+// device only.
+
+const KEYBAR = [
+  ['esc', 'Escape', 'clear'], ['tab', 'Tab', 'complete'], ['↑', 'ArrowUp', 'older command'], ['↓', 'ArrowDown', 'newer command'],
+  ['→', 'ArrowRight', 'accept suggestion'], ['ctrl+r', 'ctrl+r', 'search history'], ['ctrl+w', 'ctrl+w', 'cut word'],
+  ['ctrl+u', 'ctrl+u', 'cut to start'], ['ctrl+a', 'ctrl+a', 'line start'], ['ctrl+e', 'ctrl+e', 'line end'],
+];
+const KEYBAR_PREF = 'browser-hub:keybar';
+const keybarEl = $('keybar');
+for (const [label, spec, title] of KEYBAR) {
+  const b = h('button', { type: 'button', class: 'kb', 'data-key': spec, title, 'aria-label': title, text: keyLabel(label, ctxBase.os) });
+  // Keep focus (and the on-screen keyboard) where it is.
+  b.addEventListener('pointerdown', (e) => e.preventDefault());
+  b.addEventListener('mousedown', (e) => e.preventDefault());
+  b.addEventListener('click', () => prompt.press(spec));
+  keybarEl.appendChild(b);
+}
+function setKeybar(on) {
+  keybarEl.hidden = !on;
+  $('keys-toggle').setAttribute('aria-pressed', String(on));
+  try { if (on) localStorage.setItem(KEYBAR_PREF, '1'); else localStorage.removeItem(KEYBAR_PREF); } catch (e) { /* not saved */ }
+}
+$('keys-toggle').addEventListener('click', () => setKeybar(keybarEl.hidden));
+try { setKeybar(touchQuery.matches && localStorage.getItem(KEYBAR_PREF) === '1'); } catch (e) { setKeybar(false); }
 
 // ---- palette ------------------------------------------------------------------
 
@@ -198,12 +224,13 @@ const palette = createPalette({
   input: $('palette-input'),
   list: $('palette-list'),
   source() {
-    const items = commands.defs.map((d) => ({ name: d.name, desc: d.desc, kind: d.group.toLowerCase(), insert: d.name + ' ' }));
-    for (const e of state.aliases.entries) {
-      if (!commands.isBuiltin(e.name)) items.push({ name: e.name, desc: e.template || e.base, kind: e.template ? 'engine' : 'alias', insert: e.name + ' ' });
-    }
-    for (const t of THEMES) items.push({ name: 'theme ' + t.id, desc: t.desc, kind: 'theme', run: true });
-    for (const w of WIDGETS) items.push({ name: 'widgets ' + w.id, desc: (state.settings.widgets.includes(w.id) ? 'hide: ' : 'show: ') + w.desc, kind: 'widget', run: true });
+    // `section` heads the group when nothing is typed; `kind` is the label on each row.
+    const items = commands.defs.map((d) => ({ name: d.name, desc: d.desc, kind: d.group, section: 'Built-in · ' + d.group, insert: d.name + ' ' }));
+    const mine = state.aliases.entries.filter((e) => !commands.isBuiltin(e.name)).sort((a, b) => (a.name < b.name ? -1 : 1));
+    for (const e of mine.filter((x) => x.template)) items.push({ name: e.name, desc: e.template, kind: 'engine', section: 'Your search engines', insert: e.name + ' ' });
+    for (const e of mine.filter((x) => !x.template)) items.push({ name: e.name, desc: e.base, kind: 'alias', section: 'Your aliases', insert: e.name + ' ' });
+    for (const t of THEMES) items.push({ name: 'theme ' + t.id, desc: t.desc, kind: 'theme', section: 'Themes', run: true });
+    for (const w of WIDGETS) items.push({ name: 'widgets ' + w.id, desc: (state.settings.widgets.includes(w.id) ? 'hide: ' : 'show: ') + w.desc, kind: 'widget', section: 'Widgets', run: true });
     return items;
   },
   onPick(item) {
@@ -269,7 +296,9 @@ document.addEventListener('click', (e) => {
   }
   if (touchQuery.matches) {
     // A tap anywhere outside the prompt box dismisses the keyboard; tapping
-    // the box (not just the text field) brings it back.
+    // the box (not just the text field) brings it back. The key bar and its
+    // toggle leave it as it is.
+    if (e.target.closest('#keybar, #keys-toggle')) return;
     if (e.target.closest('.prompt-box')) prompt.focus();
     else if (!e.target.closest('input, textarea, select')) prompt.blur();
     return;

@@ -192,7 +192,7 @@ async function check(name, fn) {
     await page.keyboard.press('Escape');
     assert.equal(await prompt.inputValue(), '');
     await page.keyboard.press('?');
-    assert.match(await lastText(), /Shortcuts[\s\S]*Tab/);
+    assert.match(await lastText(), /Keyboard shortcuts[\s\S]*Ctrl\+R/);
     assert.equal(await prompt.inputValue(), '');
   });
 
@@ -578,6 +578,66 @@ async function check(name, fn) {
     await tp.waitForTimeout(200);
     assert.notEqual(await active(), 'prompt');
     await touch.close();
+  });
+
+  await check('touch: key bar toggles, its keys act on the prompt without dropping the keyboard', async () => {
+    const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const tp = await touch.newPage();
+    await tp.goto(base);
+    await tp.waitForSelector('#prompt');
+    const active = () => tp.evaluate(() => document.activeElement && document.activeElement.id);
+    assert.equal(await tp.locator('#keybar').isVisible(), false); // off until asked for
+    assert.equal(await tp.locator('#keys-toggle').isVisible(), true);
+    await tp.locator('#keys-toggle').tap();
+    assert.equal(await tp.locator('#keybar').isVisible(), true);
+    await tp.locator('.prompt-glyph').tap();
+    await tp.locator('#prompt').fill('calc 2+2');
+    await tp.keyboard.press('Enter');
+    await tp.waitForFunction(() => /= 4/.test(document.getElementById('turns').innerText));
+    await tp.locator('#prompt').fill('gh org/repo');
+    await tp.locator('#keybar [data-key="ctrl+w"]').tap();
+    assert.equal(await tp.locator('#prompt').inputValue(), 'gh ');
+    assert.equal(await active(), 'prompt'); // the keyboard stays up
+    await tp.locator('#keybar [data-key="Escape"]').tap();
+    assert.equal(await tp.locator('#prompt').inputValue(), '');
+    await tp.locator('#keybar [data-key="ArrowUp"]').tap();
+    assert.equal(await tp.locator('#prompt').inputValue(), 'calc 2+2');
+    await tp.locator('#keybar [data-key="Escape"]').tap();
+    await tp.locator('#keybar [data-key="ctrl+r"]').tap();
+    assert.match(await tp.locator('#hint').innerText(), /history search/);
+    await tp.locator('#keybar [data-key="Escape"]').tap();
+    await tp.locator('#prompt').fill('cal');
+    await tp.locator('#keybar [data-key="Tab"]').tap();
+    assert.match(await tp.locator('#prompt').inputValue(), /^calc? ?/);
+    // Remembered on this device.
+    await tp.reload();
+    await tp.waitForSelector('#prompt');
+    assert.equal(await tp.locator('#keybar').isVisible(), true);
+    await tp.locator('#keys-toggle').tap();
+    assert.equal(await tp.locator('#keybar').isVisible(), false);
+    // No overflow at phone width with the bar on.
+    await tp.locator('#keys-toggle').tap();
+    assert.ok(await tp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    await touch.close();
+  });
+
+  await check('desktop: no key bar toggle; palette groups commands, engines and aliases', async () => {
+    assert.equal(await page.locator('#keys-toggle').isVisible(), false);
+    await prompt.fill('');
+    await page.keyboard.press('/');
+    const sections = await page.locator('#palette-list .p-section').allInnerTexts();
+    assert.ok(sections.some((t) => /BUILT-IN · TOOLS/i.test(t)), sections.join(','));
+    assert.ok(sections.some((t) => /YOUR SEARCH ENGINES/i.test(t)));
+    assert.ok(sections.some((t) => /THEMES/i.test(t)));
+    await page.locator('#palette-input').pressSequentially('ddg');
+    assert.equal(await page.locator('#palette-list .p-section').count(), 0); // ranked once you type
+    assert.match(await page.locator('#palette-list li.selected .p-kind').innerText(), /your engine/);
+    await page.keyboard.press('Escape');
+    await type('calc');
+    assert.match(await page.locator('#hint').innerText(), /^tools calc/);
+    await type('ddg x');
+    assert.match(await page.locator('#hint').innerText(), /^your engine ddg/);
+    await prompt.fill('');
   });
 
   await check('no console errors during the whole run', async () => {

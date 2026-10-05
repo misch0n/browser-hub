@@ -1,4 +1,5 @@
-import { h } from './dom.js';
+import { h, rich } from './dom.js';
+import { kindSeg } from '../core/format.js';
 
 // Subsequence match: consecutive and word-start hits score higher.
 export function fuzzy(q, s) {
@@ -13,7 +14,9 @@ export function fuzzy(q, s) {
   return qi === q.length ? score - s.length * 0.01 : -1;
 }
 
-// opts: { root, input, list, source() -> [{ name, desc, kind, insert }], onPick(item), onClose() }
+// opts: { root, input, list, source() -> [{ name, desc, kind, section, insert | run }], onPick(item), onClose() }
+// With nothing typed the list is grouped under section headings, in source
+// order; once you type, it is ranked by match, each row labelled with its kind.
 export function createPalette(opts) {
   const { root, input, list } = opts;
   let items = [];
@@ -28,16 +31,21 @@ export function createPalette(opts) {
         return { it, score: n >= 0 ? n + 10 : d * 0.3, ok: !q || n >= 0 || d >= 0 };
       })
       .filter((x) => x.ok)
-      .sort((a, b) => b.score - a.score || (a.it.name < b.it.name ? -1 : 1))
+      .sort((a, b) => (q ? b.score - a.score || (a.it.name < b.it.name ? -1 : 1) : 0))
       .map((x) => x.it);
     sel = Math.min(sel, Math.max(0, items.length - 1));
     list.textContent = '';
     if (!items.length) list.appendChild(h('li', { class: 'empty', text: 'No matches' }));
+    let section = null;
     items.forEach((it, i) => {
+      if (!q && it.section !== section) {
+        section = it.section;
+        list.appendChild(h('li', { class: 'p-section', role: 'presentation', text: section }));
+      }
       const li = h('li', { class: i === sel ? 'selected' : '', role: 'option', 'aria-selected': i === sel ? 'true' : 'false' },
         h('span', { class: 'p-name', text: it.name }),
         h('span', { class: 'p-desc', text: it.desc }),
-        h('span', { class: 'p-kind', text: it.kind }));
+        h('span', { class: 'p-kind' }, rich([kindSeg(it.kind)])));
       li.addEventListener('mousedown', (ev) => { ev.preventDefault(); pick(i); });
       list.appendChild(li);
     });

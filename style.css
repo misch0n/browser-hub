@@ -196,6 +196,37 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .kv dt { color: var(--dim); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 
+/* what a name is: built-in command (by group), your alias or engine, a setting */
+.t-k-cmd, .t-k-alias, .t-k-engine, .t-k-set {
+  display: inline-block;
+  padding: 0 0.7ch;
+  font-size: 0.8em;
+  line-height: 1.5;
+  white-space: nowrap;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.t-k-cmd { color: var(--dim); }
+.t-k-alias { color: var(--url); }
+.t-k-engine { color: var(--accent); }
+.t-k-set { color: var(--faint); border-style: dashed; }
+
+/* key caps: ⌃R, Ctrl+R */
+.t-kbd {
+  display: inline-block;
+  min-width: 2.2ch;
+  padding: 0 0.6ch;
+  font-size: 0.92em;
+  line-height: 1.45;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--strong);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+
 /* links that run a command (ids in lists) */
 .seg-run {
   font: inherit;
@@ -363,6 +394,35 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .prompt-box:focus-within { border-color: var(--dim); }
 
+/* phone key bar: Esc, Tab, arrows, Ctrl keys, above the prompt */
+#keybar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 0 6px;
+  scrollbar-width: none;
+}
+#keybar[hidden] { display: none; }
+#keybar .kb {
+  flex-shrink: 0;
+  min-width: 40px;
+  height: 34px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--strong);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  touch-action: manipulation;
+}
+#keybar .kb:active { background: var(--bg-hl); }
+
+/* the key bar is for touch screens; the toggle only shows there */
+#keys-toggle { display: none; }
+@media (pointer: coarse) { #keys-toggle { display: inline-block; } }
+
 /* copies the latest result; appears once there is one */
 #copy-last {
   flex-shrink: 0;
@@ -426,7 +486,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 #hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-right { display: flex; align-items: center; gap: 2ch; flex-shrink: 0; }
 
-#panel-toggle {
+#panel-toggle, #keys-toggle {
   color: var(--dim);
   background: none;
   border: 1px solid var(--border);
@@ -435,7 +495,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   cursor: pointer;
 }
 
-#panel-toggle:hover, #panel-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+#panel-toggle:hover, #panel-toggle[aria-pressed="true"],
+#keys-toggle:hover, #keys-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 
 /* ---- command palette ------------------------------------------------------------------- */
 
@@ -482,10 +543,20 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 
 #palette-list li.selected { background: var(--bg-hl); }
+#palette-list li.p-section {
+  display: block;
+  cursor: default;
+  padding: 8px 1ch 2px;
+  color: var(--faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+#palette-list li.p-section:first-child { padding-top: 2px; }
 #palette-list li.empty { display: block; color: var(--faint); cursor: default; }
 .p-name { color: var(--accent); white-space: nowrap; }
 .p-desc { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.p-kind { color: var(--faint); font-size: 11px; }
+.p-kind { font-size: 11px; white-space: nowrap; }
 
 /* ---- widget panel ------------------------------------------------------------------------ */
 
@@ -702,8 +773,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 @media (max-width: 520px) {
   .tbl { font-size: 12px; }
   .tbl td, .tbl th { padding-right: 1.5ch; }
-  #palette-list li { grid-template-columns: max-content minmax(0, 1fr); }
-  .p-kind { display: none; }
+  #palette-list li { gap: 1.2ch; }
 }
 
 /* Touch devices: iOS Safari zooms the page into any focused text field whose

@@ -1,26 +1,11 @@
 import { todayISO, plural } from '../core/util.js';
-import { usageSegs, bytes } from '../core/format.js';
+import { usageSegs, bytes, kindSeg } from '../core/format.js';
 import { merge } from '../core/importer.js';
 import { DEFAULTS } from '../core/data.js';
+import { SHORTCUT_GROUPS, keyLabel, isApple } from '../core/keys.js';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
-export const SHORTCUTS = [
-  ['Enter', 'run the command'],
-  ['Tab', 'complete; press again to list candidates'],
-  ['↑ ↓', 'walk command history'],
-  ['/', 'command palette (on an empty prompt)'],
-  ['?', 'these shortcuts (on an empty prompt)'],
-  ['Esc', 'clear the prompt, close the palette or widget drawer'],
-  ['Ctrl+A / Ctrl+E', 'start / end of the line'],
-  ['Ctrl+B / Ctrl+F', 'back / forward one character'],
-  ['Alt+B / Alt+F', 'back / forward one word'],
-  ['Ctrl+W', 'cut the word before the cursor (Alt+Backspace where the browser keeps Ctrl+W)'],
-  ['Ctrl+U / Ctrl+K', 'cut to the start / end of the line'],
-  ['Alt+D / Ctrl+D', 'cut the next word / delete the next character'],
-  ['Ctrl+Y', 'paste the last cut text'],
-  ['Ctrl+R', 'search history: type to filter, Ctrl+R again for older, Enter runs, Tab edits, Esc cancels'],
-];
 
 export default function register(add, { st, usage, isBuiltin, defs, byName }) {
   add({
@@ -41,18 +26,52 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
         }
         return;
       }
-      out.head([['Commands', 'strong'], [' · ' + defs.length + ' built-in', 'dim']]);
+      const doc = st().aliases;
+      const mine = doc.entries.filter((e) => !isBuiltin(e.name));
+      const engines = mine.filter((e) => e.template).sort((a, b) => (a.name < b.name ? -1 : 1));
+      const aliases = mine.filter((e) => !e.template).sort((a, b) => (a.name < b.name ? -1 : 1));
+      out.head([['Help', 'strong'], [' · ' + defs.length + ' built-in commands · ' + plural(engines.length, 'engine') + ' and ' +
+        plural(aliases.length, 'alias', 'aliases') + ' of yours', 'dim']]);
       // One table, so descriptions line up across groups.
       const rows = [];
       let group = null;
       for (const d of defs) {
-        if (d.group !== group) { group = d.group; rows.push({ section: group }); }
+        if (d.group !== group) { group = d.group; rows.push({ section: [['Built-in · ', 'faint'], [group, '']] }); }
         rows.push([usageSegs(d.usage[0]), [[d.desc, 'dim']]]);
       }
+      rows.push({ section: [['Your search engines  ', ''], kindSeg('engine')] });
+      if (!engines.length) rows.push([[['none yet', 'faint']], [['alias <name> <url with {}>', 'dim']]]);
+      for (const e of engines) {
+        rows.push([[[e.name, 'accent', { run: 'alias show ' + e.name }], [' <text>', 'faint']],
+          [[e.template, 'url'], [e.name === doc.defaultEngine ? '  ★ default' : '', 'accent']]]);
+      }
+      rows.push({ section: [['Your aliases  ', ''], kindSeg('alias')] });
+      if (!aliases.length) rows.push([[['none yet', 'faint']], [['alias <name> <url>', 'dim']]]);
+      for (const e of aliases) rows.push([[[e.name, 'accent', { run: 'alias show ' + e.name }]], [[e.base, 'url']]]);
       out.table(null, rows);
       out.section('Everything else');
-      out.line([['Unknown input is searched with ', 'dim'], [st().aliases.defaultEngine, 'accent'],
-        [' · help <command> for details · ? for shortcuts', 'dim']]);
+      out.line([['Anything else is searched with ', 'dim'], [doc.defaultEngine, 'accent'],
+        [' · help <command> for details · keys (or ?) for shortcuts', 'dim']]);
+    },
+  });
+
+  add({
+    name: 'keys', group: 'Meta', desc: 'keyboard shortcuts, labelled for this computer',
+    usage: ['keys'],
+    async run(ctx) {
+      const { out } = ctx;
+      const os = ctx.os || 'other';
+      out.head([['Keyboard shortcuts', 'strong'], [' · ' + (isApple(os) ? 'Mac keys: ⌃ Control, ⌥ Option' : 'Ctrl and Alt'), 'dim']]);
+      const rows = [];
+      for (const g of SHORTCUT_GROUPS) {
+        rows.push({ section: g.name });
+        for (const it of g.items) {
+          const caps = it.keys.flatMap((k, i) => (i ? [[' ', ''], [keyLabel(k, os), 'kbd']] : [[keyLabel(k, os), 'kbd']]));
+          rows.push([caps, [[!isApple(os) && it.pc ? it.pc : it.desc, 'dim']]]);
+        }
+      }
+      out.table(null, rows);
+      out.dim('On a phone, the keys button under the prompt shows buttons for the most useful ones');
     },
   });
 

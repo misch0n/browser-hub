@@ -73,3 +73,14 @@ export function bytes(n) {
   if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
   return (n / 1048576).toFixed(1) + ' MB';
 }
+
+// What a name is, as a short coloured label, the same everywhere (help, the
+// palette, Tab lists, the hint): built-in commands by their group, the
+// user's own aliases and engines, and settings.
+const GROUP_LABELS = { 'Aliases & engines': 'links' };
+export function kindSeg(kind) {
+  if (kind === 'alias') return ['your alias', 'k-alias'];
+  if (kind === 'engine') return ['your engine', 'k-engine'];
+  if (kind === 'theme' || kind === 'widget') return [kind, 'k-set'];
+  return [GROUP_LABELS[kind] || String(kind).toLowerCase(), 'k-cmd'];
+}

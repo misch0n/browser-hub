@@ -167,6 +167,15 @@ export function createPrompt(opts) {
   document.addEventListener('selectionchange', () => { if (document.activeElement === input) update(); });
 
   return {
+    // Acts as if `spec` were pressed in the prompt: 'Escape', 'Tab', 'ArrowUp',
+    // 'ctrl+r' … (the phone key bar).
+    press(spec) {
+      const m = /^ctrl\+(.)$/i.exec(spec);
+      input.dispatchEvent(new KeyboardEvent('keydown', {
+        key: m ? m[1].toLowerCase() : spec, code: m ? 'Key' + m[1].toUpperCase() : spec,
+        ctrlKey: !!m, bubbles: true, cancelable: true,
+      }));
+    },
     set,
     update,
     reset() { histIdx = -1; search = null; set(''); },

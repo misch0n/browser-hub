@@ -25,6 +25,8 @@
           <ul id="palette-list" role="listbox"></ul>
         </div>
 
+        <div id="keybar" hidden role="toolbar" aria-label="Prompt keys"></div>
+
         <div class="prompt-box">
           <span class="prompt-glyph" aria-hidden="true">&gt;</span>
           <div id="field">
@@ -38,6 +40,7 @@
           <span id="hint" aria-live="off"></span>
           <span class="status-right">
             <span class="status-engine-wrap" title="Default search engine">engine <span id="status-engine" class="t-accent"></span></span>
+            <button id="keys-toggle" type="button" aria-controls="keybar" aria-pressed="false" title="Show or hide key buttons">keys</button>
             <button id="panel-toggle" type="button" aria-controls="panel" title="Show or hide widgets">widgets</button>
           </span>
         </div>

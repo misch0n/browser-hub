@@ -17,10 +17,10 @@ function useCounts(history) {
 function firstTokenCandidates(env) {
   const uses = useCounts(env.history || []);
   const builtinNames = new Set(env.defs.map((d) => d.name));
-  const all = env.defs.map((d) => ({ value: d.name, label: d.desc, group: 0 }));
+  const all = env.defs.map((d) => ({ value: d.name, label: d.desc, kind: d.group, group: 0 }));
   for (const e of env.entries) {
     if (builtinNames.has(e.name)) continue; // shadowed: inactive
-    all.push({ value: e.name, label: e.template ? 'engine' : 'alias', group: 1 });
+    all.push({ value: e.name, label: e.template || e.base, kind: e.template ? 'engine' : 'alias', group: 1 });
   }
   return all.sort((a, b) =>
     a.group - b.group ||

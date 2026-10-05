@@ -8,6 +8,7 @@ import * as A from '../js/core/aliases.js';
 import { dispatch } from '../js/core/dispatch.js';
 import { edit, actionFor, historySearch } from '../js/core/lineedit.js';
 import { tokenize, oneValue, quote } from '../js/core/args.js';
+import * as K from '../js/core/keys.js';
 import * as C from '../js/core/completion.js';
 import { createLocalStore } from '../js/core/store.js';
 import { createData, DEFAULTS } from '../js/core/data.js';
@@ -195,6 +196,22 @@ test('did you mean: one typo away, Tab fixes it', () => {
   assert.deepEqual(C.applyTab('tsks', env), { input: 'tasks ' });
   assert.deepEqual(C.applyTab('moblie 123', env), { input: 'mobile 123' });
   assert.deepEqual(C.applyTab('vitosha weather', env), {});
+});
+
+test('keys: OS detection and labels', () => {
+  assert.equal(K.detectOS({ platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' }), 'mac');
+  assert.equal(K.detectOS({ platform: 'MacIntel', maxTouchPoints: 5, userAgent: 'Macintosh' }), 'ios'); // iPadOS
+  assert.equal(K.detectOS({ platform: 'iPhone', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' }), 'ios');
+  assert.equal(K.detectOS({ userAgentData: { platform: 'Windows' }, platform: 'Win32' }), 'windows');
+  assert.equal(K.detectOS({ platform: 'Linux armv8l', userAgent: 'Mozilla/5.0 (Linux; Android 14)' }), 'android');
+  assert.equal(K.detectOS({ platform: 'Linux x86_64', userAgent: 'X11; Linux x86_64' }), 'linux');
+  assert.equal(K.detectOS({}), 'other');
+  assert.equal(K.keyLabel('ctrl+r', 'mac'), '⌃R');
+  assert.equal(K.keyLabel('alt+backspace', 'mac'), '⌥⌫');
+  assert.equal(K.keyLabel('ctrl+r', 'windows'), 'Ctrl+R');
+  assert.equal(K.keyLabel('alt+backspace', 'linux'), 'Alt+Backspace');
+  assert.equal(K.keyLabel('/', 'mac'), '/');
+  assert.equal(K.keyLabel('esc', 'windows'), 'Esc');
 });
 
 test('history search (Ctrl+R)', () => {
@@ -778,8 +795,27 @@ test('theme and widgets commands', async () => {
 test('help, history', async () => {
   const app = await makeApp();
   const help = await app.run('help');
-  assert.match(help[0], /^# Commands · \d+ built-in$/);
-  assert.ok(help.includes('## View'));
+  assert.match(help[0], /^# Help · \d+ built-in commands · 2 engines and 0 aliases of yours$/);
+  // Built-in groups, then the user's own engines and aliases, each labelled.
+  assert.ok(help.includes('## Built-in · View'));
+  assert.ok(help.includes('## Built-in · Aliases & engines'));
+  assert.ok(help.includes('## Your search engines  your engine'));
+  assert.ok(help.some((l) => /^g <text> \| https:\/\/www\.google\.com\/search\?q=\{\}  ★ default$/.test(l)));
+  assert.ok(help.includes('## Your aliases  your alias'));
+  assert.ok(help.includes('none yet | alias <name> <url>'));
+  await app.run('alias mail https://mail.example.com/');
+  assert.ok((await app.run('help')).includes('mail | https://mail.example.com/'));
+  // keys: labelled for the platform.
+  app.ctx.os = 'mac';
+  const mac = await app.run('keys');
+  assert.match(mac[0], /Mac keys/);
+  assert.ok(mac.includes('⌃R | search history: type to filter, again for older, Enter runs, Tab edits, Esc cancels'));
+  assert.ok(mac.includes('⌃W ⌥⌫ | cut the word before the cursor'));
+  app.ctx.os = 'windows';
+  const win = await app.run('keys');
+  assert.ok(win.includes('Ctrl+R | search history: type to filter, again for older, Enter runs, Tab edits, Esc cancels'));
+  assert.ok(win.some((l) => l.startsWith('Ctrl+W Alt+Backspace | cut the word before the cursor (the browser keeps Ctrl+W')));
+  assert.ok(win.includes('## Edit the line'));
   const ht = await app.run('help t');
   assert.deepEqual(ht.slice(0, 3), ['# t · add a task', '## Usage', 't <text> [due:<date>] [#tag]']);
   assert.ok(ht.includes('## Examples'));

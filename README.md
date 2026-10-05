@@ -47,6 +47,13 @@ its fields editable in place (ids in lists link to it): tap a value, change it,
 press Enter, and the page runs the matching `edit` command, so the transcript
 and history show exactly what changed.
 
+**Undo**: `undo` takes back the last change (any command: an edit, a
+removal, a theme switch, a whole import), again for the one before; `redo`
+puts it back, `undo ls` lists the steps. Removals offer an undo link right in
+their output. Undo works item by item, so it isn't blocked by unrelated
+changes since; if the same item was changed again (say in another tab), it
+says so and `undo force` overrides. Steps are kept per device (the last 30).
+
 **Quotes** are optional. Plain words work; quotes say what you mean when it
 matters: `n "rm the weeds"` is a note, not a removal, `t "due:friday"` is task
 text, `tz add tokyo "Kenji's team"` names a clock. A quote only counts at the

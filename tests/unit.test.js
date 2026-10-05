@@ -465,7 +465,7 @@ test('notes: capture, list, edit round trip, remove; subcommand words never over
   assert.equal(app.data.state.notes.items.find((n) => n.id === 'n2').text, 'second note');
   assert.deepEqual(await app.run('n rm the weeds'), ['# Added note n4']);
   const rm = await app.run('n rm n2');
-  assert.deepEqual(rm, ['# Removed note n2', 'second note']);
+  assert.deepEqual(rm, ['# Removed note n2', 'second note', '↶ undo brings it back']);
   assert.equal(rm.tone, 'ok');
   const missing = await app.run('n rm n99');
   assert.deepEqual(missing, ['err: No note n99']);
@@ -527,6 +527,66 @@ test('editing fields: n / t / ev edit <id>.<field> <value>, show views are edita
   // Lists link each id to its show view.
   const linked = await app.run('tasks all');
   assert.ok(linked.some((l) => l.startsWith('t1 | ')));
+});
+
+test('undo and redo: per item, across commands, refusing to clobber newer changes', async () => {
+  const app = await makeApp();
+  const st = () => app.data.state;
+  const texts = () => st().tasks.items.map((t) => t.id + ':' + t.text + (t.done ? ':done' : ''));
+  await app.run('t one');
+  await app.run('t two');
+  await app.run('t done t1');
+  assert.deepEqual(texts(), ['t1:one:done', 't2:two']);
+  assert.deepEqual(await app.run('undo'), ['# Undid t done t1', 'dim: task t1 changed', 'redo puts it back · 2 more steps to undo']);
+  assert.deepEqual(texts(), ['t1:one', 't2:two']);
+  assert.equal((await app.run('redo'))[0], '# Redid t done t1');
+  assert.deepEqual(texts(), ['t1:one:done', 't2:two']);
+  await app.run('undo');
+  // A removal comes back in place, with its id.
+  await app.run('t rm t1');
+  assert.deepEqual(texts(), ['t2:two']);
+  await app.run('undo');
+  assert.deepEqual(texts(), ['t1:one', 't2:two']);
+  // A new command clears redo.
+  await app.run('t three');
+  assert.equal((await app.run('redo'))[0], '# Nothing to redo');
+  // Unrelated changes since don't block undo; changes to the same item do.
+  await app.run('t edit t2.text second');
+  await app.run('n a note'); // different collection
+  await app.run('t edit t1.text first'); // a different task
+  await app.run('undo'); // undoes t1's edit
+  await app.run('undo'); // undoes the note
+  assert.deepEqual(st().notes.items, []);
+  await app.data.mutate('tasks', (d) => { d.items.find((t) => t.id === 't2').text = 'changed elsewhere'; }); // e.g. another tab
+  const c = await app.run('undo');
+  assert.equal(c[0], "err: Can't undo 't edit t2.text second': changed since: tasks t2");
+  assert.equal(st().tasks.items.find((t) => t.id === 't2').text, 'changed elsewhere');
+  await app.run('undo force');
+  assert.equal(st().tasks.items.find((t) => t.id === 't2').text, 'two');
+  // Settings and aliases too; ids are never reused after an undone add.
+  await app.run('theme nord');
+  await app.run('undo');
+  assert.equal(st().settings.theme, 'auto');
+  await app.run('alias rm ddg');
+  await app.run('undo');
+  assert.ok(st().aliases.entries.some((e) => e.name === 'ddg'));
+  await app.run('t four');
+  const four = st().tasks.items.find((t) => t.text === 'four').id;
+  await app.run('undo');
+  await app.run('t five');
+  assert.notEqual(st().tasks.items.find((t) => t.text === 'five').id, four);
+  // Read-only commands make no steps; ls lists them newest first.
+  const before = app.data.steps().undo.length;
+  await app.run('tasks');
+  await app.run('calc 1+1');
+  assert.equal(app.data.steps().undo.length, before);
+  const ls = await app.run('undo ls');
+  assert.match(ls[0], /^# \d+ steps to undo, newest first$/);
+  assert.match(ls[1], /^1 \| t five \| task t\d+ added \| /);
+  // Undo steps live on the device, not in the synced/exported data.
+  const exported = await app.store.exportAll();
+  assert.deepEqual(Object.keys(exported.collections).filter((k) => !['meta', 'aliases', 'notes', 'tasks', 'events', 'settings', 'history'].includes(k)), []);
+  assert.ok(app.storage.getItem('cc-device:undo'));
 });
 
 test('quotes say what you mean: literal text, names with spaces', async () => {
@@ -653,7 +713,7 @@ test('calendar: ev, cal, agenda', async () => {
   assert.ok(ag.includes('## Wed 7 Oct'));
   assert.ok(!ag.some((l) => /dentist/.test(l)));
   assert.ok((await app.run('agenda 60')).some((l) => /dentist/.test(l)));
-  assert.deepEqual(await app.run('ev rm e1'), ['# Removed event e1', 'standup']);
+  assert.deepEqual(await app.run('ev rm e1'), ['# Removed event e1', 'standup', '↶ undo brings it back']);
 });
 
 test('ics import through the command: dedupe and warnings', async () => {
@@ -853,6 +913,10 @@ test('export then import into empty storage brings everything back', async () =>
   assert.deepEqual(s.settings.zoneNames, { 'Africa/Nairobi': 'Kenji' });
   assert.equal(s.settings.theme, 'dracula');
   assert.deepEqual(s.settings.widgets, ['clock', 'agenda', 'tasks', 'notes']);
+  // The whole import is one undo step.
+  assert.equal((await b.run('undo'))[0], '# Undid import');
+  const u = b.data.state;
+  assert.deepEqual([u.notes.items.length, u.tasks.items.length, u.events.items.length, u.settings.theme, u.aliases.defaultEngine], [0, 0, 0, 'auto', 'g']);
 });
 
 test('import: conflicts reported, bad entries rejected, schema checked, never overwrites', async () => {

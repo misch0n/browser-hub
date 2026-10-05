@@ -8,9 +8,13 @@ import { SCHEMA } from './util.js';
 //   importAll(data)        -> Promise<void>  (replaces the given collections)
 //   usage()                -> Promise<bytes used by this app, or null>
 //   subscribe(fn)          -> unsubscribe    (fn(collection) when another tab writes; null = everything)
+//   getLocal(name) / setLocal(name, value) / removeLocal(name)
+//                          per-device values (undo steps, sync settings and token): never
+//                          exported or synced; setLocal returns false when it can't save
 
 export const COLLECTIONS = ['meta', 'aliases', 'notes', 'tasks', 'events', 'settings', 'history'];
 const PREFIX = 'cc:';
+const LOCAL = 'cc-device:';
 
 function isQuotaError(e) {
   return !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
@@ -94,6 +98,28 @@ export function createLocalStore(storage) {
         if (k && k.startsWith(PREFIX)) chars += k.length + (storage.getItem(k) || '').length;
       }
       return chars * 2; // UTF-16
+    },
+
+    getLocal(name) {
+      try {
+        const raw = storage.getItem(LOCAL + name);
+        return raw === null ? null : JSON.parse(raw);
+      } catch (e) {
+        return null;
+      }
+    },
+
+    setLocal(name, value) {
+      try {
+        storage.setItem(LOCAL + name, JSON.stringify(value));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+
+    removeLocal(name) {
+      try { storage.removeItem(LOCAL + name); } catch (e) { /* nothing to remove */ }
     },
 
     subscribe(fn) {

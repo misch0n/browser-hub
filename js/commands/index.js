@@ -7,9 +7,10 @@ import view from './view.js';
 import meta from './meta.js';
 import { usageSegs } from '../core/format.js';
 import { createRecords } from './records.js';
+import { removes } from '../core/undo.js';
 
 // Built-in commands. Each def is
-//   { name, group, desc, usage: [...], examples?: [...], complete?(prevArgs), run(ctx, rest) }
+//   { name, group, desc, usage: [...], examples?: [...], complete?(prevArgs), run(ctx, rest), noUndo? }
 // and talks to the page only through ctx:
 //   ctx.out     structured output for this command (see ui/transcript.js); table rows
 //               are arrays of cells, or { section } for a full-width group heading
@@ -36,10 +37,18 @@ export function createCommands(getCtx) {
   const helpers = { st, usage, isBuiltin, defs, byName, records };
   for (const register of [notes, tasks, calendar, tools, aliases, view, meta]) register(add, helpers);
 
-  // Runs a built-in. Anything thrown is reported in the command's output.
+  // Runs a built-in as one undoable step (unless it is undo/redo itself).
+  // Anything thrown is reported in the command's output. A step that removed
+  // something offers undo right there.
   async function run(name, rest, ctx) {
+    const def = byName.get(name);
     try {
-      await byName.get(name).run(ctx, rest);
+      if (def.noUndo || !ctx.data.transaction) {
+        await def.run(ctx, rest);
+        return;
+      }
+      const { patches } = await ctx.data.transaction(name + (rest ? ' ' + rest : ''), () => def.run(ctx, rest));
+      if (removes(patches)) ctx.out.line([['↶ ', 'faint'], ['undo', 'accent', { run: 'undo' }], [' brings it back', 'faint']]);
     } catch (e) {
       ctx.out.err(e && e.message ? e.message : String(e));
     }

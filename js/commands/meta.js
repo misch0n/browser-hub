@@ -3,6 +3,8 @@ import { usageSegs, bytes, kindSeg } from '../core/format.js';
 import { merge } from '../core/importer.js';
 import { DEFAULTS } from '../core/data.js';
 import { SHORTCUT_GROUPS, keyLabel, isApple } from '../core/keys.js';
+import { describe } from '../core/undo.js';
+import { relative } from '../lib/misc.js';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
@@ -74,6 +76,43 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
       out.dim('On a phone, the keys button under the prompt shows buttons for the most useful ones');
     },
   });
+
+  // undo / redo: the same command, two directions.
+  const stepCommand = (dir) => ({
+    name: dir, group: 'Meta', noUndo: true,
+    desc: dir === 'undo' ? 'undo the last change (again for the one before)' : 'redo what undo took back',
+    usage: [dir, dir + ' ls', dir + ' force'],
+    examples: dir === 'undo' ? ['undo', 'undo ls'] : ['redo'],
+    complete: (prev) => (prev.length === 0 ? [{ value: 'ls' }, { value: 'force' }] : []),
+    async run(ctx, rest) {
+      const { out } = ctx;
+      const arg = rest.trim().toLowerCase();
+      if (arg === 'ls' || arg === 'list') {
+        const list = ctx.data.steps()[dir].slice().reverse();
+        if (!list.length) return out.head('Nothing to ' + dir, 'dim');
+        out.head([[plural(list.length, 'step'), 'strong'], [' to ' + dir + ', newest first', 'dim']]);
+        out.table(null, list.map((x, i) => [[[String(i + 1), 'num']], [[x.label, i ? '' : 'strong']], [[describe(x.patches), 'dim']],
+          [[relative(new Date(x.at), ctx.now()), 'faint']]]));
+        return;
+      }
+      if (arg && arg !== 'force') return usage(ctx, this);
+      const r = await ctx.data[dir](arg === 'force');
+      if (r.empty) return out.head('Nothing to ' + dir, 'dim');
+      if (r.conflict) {
+        out.err("Can't " + dir + " '" + r.step.label + "': changed since: " + r.conflict.join(', '));
+        out.dim(dir + ' force puts those back anyway, overwriting the newer change');
+        return;
+      }
+      out.head([[dir === 'undo' ? 'Undid ' : 'Redid ', ''], [r.step.label, 'strong']], 'ok');
+      out.dim(describe(r.step.patches));
+      const more = ctx.data.steps();
+      out.line([[dir === 'undo' ? 'redo' : 'undo', 'accent', { run: dir === 'undo' ? 'redo' : 'undo' }],
+        [dir === 'undo' ? ' puts it back' : ' takes it back again', 'faint'],
+        [more[dir].length ? ' · ' + plural(more[dir].length, 'more step') + ' to ' + dir : '', 'faint']]);
+    },
+  });
+  add(stepCommand('undo'));
+  add(stepCommand('redo'));
 
   add({
     name: 'clear', group: 'Meta', desc: 'clear the output',
@@ -161,6 +200,8 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
           return out.err('Import failed, nothing was changed: ' + e.message);
         }
         await ctx.data.load();
+        // One undo step for the whole import.
+        for (const c of Object.keys(r.collections)) ctx.data.noteChange(c, current[c], st()[c]);
         const total = r.counts.notes + r.counts.tasks + r.counts.events + r.counts.aliases + r.counts.zones;
         out.head([['Imported ', ''], [file.name, 'strong']], r.lines.some((l) => l.startsWith('skipped')) || r.invalid ? 'warn' : total ? 'ok' : 'dim');
         out.kv(Object.keys(r.counts).map((k) => [k, [[String(r.counts[k]), r.counts[k] ? 'num' : 'faint']]]));

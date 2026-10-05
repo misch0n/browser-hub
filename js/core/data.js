@@ -1,8 +1,11 @@
 import { SCHEMA } from './util.js';
 import { starters, SHIPPED_DEFAULT } from './aliases.js';
 import { DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js';
+import { UNDOABLE, diff, conflicts, apply } from './undo.js';
 
 export const HISTORY_CAP = 500;
+export const UNDO_MAX = 30;
+const UNDO_BYTES = 1500000; // keep the undo steps well inside localStorage's ~5 MB
 
 // Schema migrations: MIGRATIONS[n] upgrades the stored collections from
 // schema n to n + 1. `collections` maps name -> document and is edited in place.
@@ -63,14 +66,89 @@ export function createData(store, now) {
     return shape(DEFAULTS[col](now), await store.get(col));
   }
 
+  // ---- undo ----
+  // A command runs inside a transaction: each collection it changes is
+  // remembered as it was before, and when it ends the differences become one
+  // undo step (core/undo.js). Steps are kept per device, shared by its tabs.
+  let tx = null;
+  let memSteps = { undo: [], redo: [] };
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+  const loadSteps = () => (store.getLocal ? store.getLocal('undo') : memSteps) || { undo: [], redo: [] };
+  function saveSteps(s) {
+    s.undo = s.undo.slice(-UNDO_MAX);
+    s.redo = s.redo.slice(-UNDO_MAX);
+    while (s.undo.length > 1 && JSON.stringify(s).length > UNDO_BYTES) s.undo.shift();
+    if (!store.setLocal) { memSteps = s; return; }
+    if (!store.setLocal('undo', s)) { s.undo = s.undo.slice(-3); s.redo = []; store.setLocal('undo', s); }
+  }
+
+  function noteChange(col, before, after) {
+    if (!tx || !UNDOABLE.includes(col)) return;
+    if (!(col in tx.before)) tx.before[col] = clone(before);
+    tx.after[col] = clone(after);
+  }
+
+  // Runs fn() as one undoable step labelled `label` (the command as typed).
+  // fn is called synchronously, so a file picker it opens still counts as
+  // user-initiated. Resolves to { result, patches }.
+  async function transaction(label, fn) {
+    const t = { label, before: {}, after: {} };
+    tx = t;
+    let result;
+    try {
+      result = await fn();
+    } finally {
+      if (tx === t) tx = null;
+    }
+    await serial(async () => {}); // let queued writes land
+    const patches = Object.keys(t.before).map((c) => diff(c, t.before[c], t.after[c])).filter(Boolean);
+    if (patches.length) {
+      const s = loadSteps();
+      s.undo.push({ label, at: now().toISOString(), patches });
+      s.redo = [];
+      saveSteps(s);
+    }
+    return { result, patches };
+  }
+
+  // Undo (dir 'undo') or redo the latest step. Refuses, and keeps the step,
+  // when something it touched has changed since, unless force is set.
+  // -> { empty } | { conflict: ['tasks t3', …], step } | { step }
+  function step(dir, force) {
+    return serial(async () => {
+      const s = loadSteps();
+      const st = s[dir][s[dir].length - 1];
+      if (!st) return { empty: true };
+      const [from, to] = dir === 'undo' ? ['after', 'before'] : ['before', 'after'];
+      const docs = {};
+      for (const p of st.patches) docs[p.col] = await readDoc(p.col);
+      const bad = st.patches.flatMap((p) => conflicts(docs[p.col], p, from).map((k) => p.col + ' ' + k));
+      if (bad.length && !force) return { conflict: bad, step: st };
+      for (const p of st.patches) apply(docs[p.col], p, to);
+      for (const p of st.patches) {
+        await store.put(p.col, docs[p.col]);
+        state[p.col] = docs[p.col];
+        emit(p.col);
+      }
+      s[dir].pop();
+      s[dir === 'undo' ? 'redo' : 'undo'].push(st);
+      saveSteps(s);
+      return { step: st };
+    });
+  }
+
+  const steps = () => loadSteps();
+
   // Re-reads the collection from the store, applies fn(doc), saves. Reading
   // fresh each time means a second open tab's changes are never overwritten
   // by a stale copy (last write still wins per collection).
   function mutate(col, fn) {
     return serial(async () => {
       const doc = await readDoc(col);
+      const before = tx && UNDOABLE.includes(col) ? clone(doc) : null;
       const result = fn(doc);
       await store.put(col, doc);
+      if (before) noteChange(col, before, doc);
       state[col] = doc;
       emit(col);
       return result;
@@ -162,5 +240,8 @@ export function createData(store, now) {
     return () => listeners.delete(fn);
   }
 
-  return { state, load, reload, mutate, allocId, allocIds, addHistory, hasUserData, exportAgeDays, markExported, onChange };
+  return {
+    state, load, reload, mutate, allocId, allocIds, addHistory, hasUserData, exportAgeDays, markExported, onChange,
+    transaction, noteChange, undo: (force) => step('undo', force), redo: (force) => step('redo', force), steps,
+  };
 }

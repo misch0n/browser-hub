@@ -336,6 +336,22 @@ async function check(name, fn) {
     assert.equal(await focused(), 'prompt');
   });
 
+  await check('undo: a removal offers undo, which brings it back; redo takes it away again', async () => {
+    await send('n keep me safe');
+    const id = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:notes')).items.find((n) => n.text === 'keep me safe').id);
+    await send('n rm ' + id);
+    const has = () => page.evaluate((i) => JSON.parse(localStorage.getItem('cc:notes')).items.some((n) => n.id === i), id);
+    assert.equal(await has(), false);
+    await lastTurn().locator('.seg-run', { hasText: 'undo' }).click();
+    await page.waitForFunction(() => /Undid/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.equal(await has(), true);
+    await send('redo');
+    assert.equal(await has(), false);
+    await send('undo');
+    assert.equal(await has(), true);
+    await send('n rm ' + id);
+  });
+
   await check('javascript: aliases are rejected', async () => {
     await send('alias evil javascript:alert(1)');
     assert.match(await lastText(), /only http: and https:/);

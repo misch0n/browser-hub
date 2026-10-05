@@ -2094,3 +2094,55 @@ test('snippets and later: the shared grammar, names, read state, undo, find, exp
     assert.equal(x.data.state.later.items[0].url, 'https://example.com/x');
   }
 });
+
+test('bounce: the address packed into the link, signed with your synced key, damage and forgery caught', async () => {
+  const B = await import('../js/lib/bounce.js');
+  const base = 'https://misch0n.github.io/browser-hub/';
+  const key = B.newBounceKey();
+  for (const u of ['https://example.com/a/rather/long/path?with=query&and=query&and=query&utm_source=x', 'http://a.example/ü?x=ж', 'example.com']) {
+    const t = B.bounceTarget(u);
+    const link = await B.makeBounce(base, t, key);
+    assert.ok(link.startsWith(base + '?go='));
+    assert.match(link, /^[\w:/.?=-]+$/); // nothing that needs escaping
+    assert.deepEqual(await B.readBounce(B.goParam(link, base), [key]), { url: t, signed: true });
+    assert.deepEqual(await B.readBounce(B.goParam(link, base), [B.newBounceKey()]), { url: t, signed: false }); // someone else's
+  }
+  // Long repetitive addresses are compressed (S), short ones are not (s).
+  assert.equal((await B.pack('https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'))[0], 'S');
+  assert.equal((await B.pack('https://example.com/'))[0], 's');
+  assert.equal((await B.pack('http://example.com/'))[0], 'h');
+  // Forged: a changed payload with the old signature is not signed; a damaged one fails.
+  const link = await B.makeBounce(base, 'https://example.com/', key);
+  const go = B.goParam(link, base);
+  const forged = (await B.pack('https://evil.example/')) + go.slice(go.lastIndexOf('.'));
+  assert.deepEqual(await B.readBounce(forged, [key]), { url: 'https://evil.example/', signed: false });
+  await assert.rejects(B.readBounce('x!!', [key]), /not a bounce link/);
+  await assert.rejects(B.readBounce('S' + 'AAAA', [key]));
+  // Never anything but a web address.
+  for (const bad of ['javascript:alert(1)', 'data:text/html,hi', 'file:///etc/passwd', 'not a url', 'localhostx', 'https://x.example/' + 'a'.repeat(2000)]) {
+    assert.equal(B.bounceTarget(bad), null, bad);
+  }
+  const js = 's' + Buffer.from('alert(1)').toString('base64url');
+  await assert.rejects(B.readBounce('j' + js.slice(1)), /not a bounce link/);
+  assert.equal(B.goParam('https://elsewhere.example/?go=abc', base), null); // another page's link
+
+  // The command: a key is made once and synced; bounce <bounce link> says where it goes.
+  const app = await makeApp();
+  app.ctx.pageURL = base;
+  const made = await app.run('bounce example.com/some/page');
+  assert.match(made[0], /^# Bounce link to example\.com · \d+ characters$/);
+  assert.equal(app.data.state.settings.bounceKeys.length, 1);
+  const bl = made[1].slice(2);
+  assert.ok(bl.startsWith(base + '?go=s'));
+  await app.run('bounce example.org');
+  assert.equal(app.data.state.settings.bounceKeys.length, 1); // reused
+  assert.equal(app.data.steps().undo.length, 0); // the key isn't an undo step
+  assert.deepEqual((await app.run('bounce ' + bl)).slice(0, 3), ['# Goes to example.com', '= https://example.com/some/page', 'dim: Made with your key: it bounces straight away on your devices']);
+  assert.equal((await app.run('bounce ' + base + '?go=x!!'))[0], 'err: This bounce link is damaged: not a bounce link');
+  assert.equal((await app.run('bounce javascript:alert(1)'))[0], "err: 'javascript:alert(1)' is not a web address (https://…, at most 2,000 characters)");
+
+  // Keys made on two devices offline are both kept by sync, so both devices' links verify everywhere.
+  const m = Merge.merge3({ settings: { bounceKeys: [] } }, { settings: { bounceKeys: ['a'] } }, { settings: { bounceKeys: ['b'] } });
+  assert.deepEqual(m.collections.settings.bounceKeys, ['a', 'b']);
+  assert.deepEqual(m.conflicts, []);
+});

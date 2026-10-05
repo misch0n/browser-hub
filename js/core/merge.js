@@ -3,7 +3,7 @@
 // Each change made on either side since `base` is kept:
 //
 //   - per item for notes, tasks, events, snippets and links (by id) and aliases (by name);
-//   - per key for settings (zones as a set, clock names per zone);
+//   - per key for settings (zones as a set, clock names per zone, bounce keys kept from both);
 //   - an item changed on both sides keeps this device's version and is
 //     reported as a conflict; an item deleted on one side and changed on the
 //     other is kept;
@@ -78,6 +78,9 @@ function mergeSettings(b, l, r, noBase, out) {
       const bz = toMap(bv), lz = toMap(lv), rz = toMap(rv);
       const all = [...new Set([...(lv || []), ...(rv || [])])];
       m.zones = all.filter((z) => pick(bz[z], lz[z], rz[z], 'local').v === true);
+    } else if (k === 'bounceKeys') {
+      // Keys are never taken away: a link made with either still verifies.
+      m.bounceKeys = [...new Set([...(lv || []), ...(rv || [])])].filter((x) => typeof x === 'string');
     } else if (k === 'zoneNames') {
       const names = {};
       for (const z of new Set([...Object.keys(lv || {}), ...Object.keys(rv || {})])) {

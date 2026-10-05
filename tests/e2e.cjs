@@ -396,6 +396,35 @@ async function check(name, fn) {
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('cc:later')).items[0].read), true);
   });
 
+  await check('bounce: your link goes straight there; elsewhere it shows the target and waits; damaged ones say so', async () => {
+    await send('bounce example.com/bounced?x=1');
+    const link = await lastTurn().locator('.value-text').textContent();
+    assert.ok(link.startsWith(base + '?go='));
+    // This device made it: straight to the target, and Back skips the bounce page.
+    await page.goto(link);
+    await page.waitForURL('https://example.com/bounced?x=1');
+    assert.equal(external.at(-1), 'https://example.com/bounced?x=1');
+    await page.goBack();
+    await page.waitForSelector('#prompt');
+    assert.equal(new URL(page.url()).search, '');
+    // Someone else's browser: no key, so it shows where it goes and waits for a tap.
+    const stranger = await browser.newContext();
+    await routeAll(stranger);
+    const s = await stranger.newPage();
+    await s.goto(link);
+    await s.waitForSelector('.bounce-continue');
+    assert.match(await s.locator('.turn.notice').last().innerText(), /This link goes to example\.com[\s\S]*https:\/\/example\.com\/bounced\?x=1/);
+    assert.equal(new URL(s.url()).search, ''); // the ?go= is gone from the address bar
+    await s.waitForTimeout(500);
+    assert.ok(!s.url().startsWith('https://example.com')); // no automatic jump
+    await s.locator('.bounce-continue').click();
+    await s.waitForURL('https://example.com/bounced?x=1');
+    // Damaged.
+    await s.goto(base + '?go=x!!');
+    await s.waitForFunction(() => /This bounce link is damaged/.test(document.getElementById('turns').innerText));
+    await stranger.close();
+  });
+
   await check('address bar: ?q= opens aliases and searches; built-ins are only pre-filled', async () => {
     assert.match(await page.locator('link[rel=search]').getAttribute('href'), /^opensearch\.xml/);
     const xml = fs.readFileSync(path.join(root, 'opensearch.xml'), 'utf8'); // the built copy

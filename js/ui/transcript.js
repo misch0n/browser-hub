@@ -295,7 +295,9 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
     notice() {
       const el = h('article', { class: 'turn notice', 'data-at': new Date().toISOString() });
       append(el);
-      return makeOut(el);
+      const out = makeOut(el);
+      out.el = el;
+      return out;
     },
     // Shows exactly `entries` (stored history, oldest first) alongside what is
     // on screen but not stored (notices, this tab's unsaved turns), in time

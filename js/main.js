@@ -11,6 +11,7 @@ import { detectOS, keyLabel } from './core/keys.js';
 import { loadDevice } from './core/device.js';
 import { newEntryId, makeEntry, visible } from './core/log.js';
 import { createSync } from './sync.js';
+import { readBounce } from './lib/bounce.js';
 import { SYNCED } from './core/merge.js';
 import { sweepClip } from './commands/clip.js';
 import { isLive, timeLeft } from './core/clip.js';
@@ -64,6 +65,7 @@ const ctxBase = {
   data, store, now,
   os: detectOS(navigator),
   device,
+  pageURL: location.origin + location.pathname, // what bounce links point at
   setDeviceName(name) { device.name = name; store.setLocal('device', device); },
   setInput: (text) => { prompt.set(text); prompt.focus(); },
   // After `clear`: drop what isn't stored either, and say how to get it back.
@@ -530,10 +532,39 @@ async function start() {
     for (const [kind, text] of notices) out[kind](text);
   }
 
-  fromAddressBar();
+  if (!(await fromBounceLink())) fromAddressBar();
   transcript.scroll(); // the latest at the bottom, history above
   prompt.update();
   prompt.focus();
+}
+
+// `?go=<payload>.<signature>`: a bounce link (lib/bounce.js). Made with one of
+// your keys: off to the target straight away. Anyone else's (or a forged one):
+// the page shows where it leads and waits for a tap.
+async function fromBounceLink() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('go')) return false;
+  history.replaceState(null, '', location.pathname + location.hash);
+  let r;
+  try {
+    r = await readBounce(params.get('go'), state.settings.bounceKeys);
+  } catch (e) {
+    transcript.notice().err('This bounce link is damaged: ' + e.message);
+    return true;
+  }
+  const host = new URL(r.url).host;
+  if (r.signed) {
+    transcript.notice().head([['Bouncing to ', ''], [host, 'url']], 'info');
+    ctxBase.leave(r.url);
+    return true;
+  }
+  const out = transcript.notice();
+  out.head([['This link goes to ', ''], [host, 'strong']], 'warn');
+  out.line([[r.url, 'url']]);
+  out.el.querySelector('.body').appendChild(h('div', { class: 'bounce-go' },
+    h('a', { class: 'bounce-continue', href: r.url, rel: 'noopener noreferrer', text: 'Continue to ' + host + ' →' })));
+  out.dim("It wasn't made on one of your devices, so it waits for you: continue only if you trust where it goes");
+  return true;
 }
 
 // `?q=<input>`: the page as a browser search engine. Aliases, engines and

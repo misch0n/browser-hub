@@ -43,7 +43,7 @@ still work.
 | Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `pw` |
 | Text | `count`, `case` |
 | Developer | `cidr`, `hash`, `jwt`, `url`, `regex`, `diff`, `cron`, `color` |
-| Share | `clip` |
+| Share | `clip`, `bounce` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
 | Sync | `sync` |
@@ -232,6 +232,15 @@ whether the address is inside).
 **QR codes**: `qr <text>` draws one for a link or any text, made on the page
 (nothing is sent anywhere), always dark on white so phones can scan it in any
 theme. Error correction is raised as far as the size allows.
+
+**Bounce links**: `bounce <url>` gives a link to this page that sends whoever
+opens it on to the address. The address travels inside the link (packed, and
+compressed when that helps), so nothing is stored and it works for anyone;
+it is longer than the address, not shorter. The link is signed with a key in
+your synced settings: on your devices it bounces straight away, while anyone
+else's browser (or a link not made with your key) shows where it goes and
+waits for a tap, so the page can't be used to send people somewhere they didn't
+choose. `bounce <bounce link>` tells you where one leads.
 
 **Shared clip**: `clip <text>` hands one piece of text to your other devices
 (`clip` there shows it, with a copy button; a device that gets a new clip

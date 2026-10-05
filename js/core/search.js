@@ -92,24 +92,24 @@ export function documents(state, defs, isBuiltin) {
   const docs = [];
   for (const t of state.tasks.items) {
     docs.push({
-      category: 'tasks', key: t.id, title: t.text, run: 't show ' + t.id, rank: t.done ? 0.6 : 1,
+      category: 'tasks', key: t.id, title: t.text, run: 'tasks ' + t.id, rank: t.done ? 0.6 : 1,
       fields: [{ name: 'text', text: t.text, weight: 1 }, { name: 'tags', text: t.tags.map((x) => '#' + x).join(' '), weight: 0.8 },
         { name: 'id', text: t.id, weight: 0.6 }],
       task: t,
     });
   }
   for (const n of state.notes.items) {
-    docs.push({ category: 'notes', key: n.id, title: n.text, run: 'n show ' + n.id, rank: 1,
+    docs.push({ category: 'notes', key: n.id, title: n.text, run: 'notes ' + n.id, rank: 1,
       fields: [{ name: 'text', text: n.text, weight: 1 }, { name: 'id', text: n.id, weight: 0.6 }], note: n });
   }
   for (const e of state.events.items) {
-    docs.push({ category: 'events', key: e.id, title: e.title, run: 'ev show ' + e.id, rank: 1,
+    docs.push({ category: 'events', key: e.id, title: e.title, run: 'events ' + e.id, rank: 1,
       fields: [{ name: 'title', text: e.title, weight: 1 }, { name: 'date', text: e.date + (e.time ? ' ' + e.time : ''), weight: 0.7 },
         { name: 'id', text: e.id, weight: 0.6 }], event: e });
   }
   for (const a of state.aliases.entries) {
     if (isBuiltin && isBuiltin(a.name)) continue;
-    docs.push({ category: 'links', key: a.name, title: a.name, run: 'alias show ' + a.name, rank: 1,
+    docs.push({ category: 'links', key: a.name, title: a.name, run: 'aliases ' + a.name, rank: 1,
       fields: [{ name: 'name', text: a.name, weight: 1.2 }, { name: 'url', text: a.template || a.base, weight: 0.6 }], alias: a });
   }
   for (const d of defs) {

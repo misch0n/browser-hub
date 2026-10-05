@@ -66,6 +66,8 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
       });
       input.addEventListener('blur', () => finish(true));
     });
+    // `<thing> <id> edit`: start editing the first field straight away.
+    if (edit.open) setTimeout(() => { if (btn.isConnected) btn.click(); }, 0);
     return btn;
   }
 

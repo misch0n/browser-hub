@@ -1,6 +1,7 @@
 import { cmp, plural } from '../core/util.js';
 import { validateEntry, siteRoot, normalizeTemplate } from '../core/aliases.js';
-import { tokenize, quote } from '../core/args.js';
+import { tokenize } from '../core/args.js';
+import { kindSeg, usageSegs } from '../core/format.js';
 
 // The URLs in an `alias` definition. A URL may contain spaces (a JQL query):
 // words after an unquoted URL that aren't URLs or options belong to it, kept
@@ -31,10 +32,9 @@ function parseDefinition(rest) {
   return { name, urls: urls.map((u) => normalizeTemplate(u.split('\\/').join('/'))), force, path };
 }
 
-export default function register(add, { st, usage, isBuiltin, records }) {
+export default function register(add, { st, isBuiltin, records }) {
   const entries = () => st().aliases.entries;
   const engineNames = () => entries().filter((e) => e.template).map((e) => ({ value: e.name, label: 'engine' }));
-  const aliasNames = () => entries().map((e) => ({ value: e.name, label: e.template ? 'engine' : 'alias' }));
 
   const flags = (e) => {
     const f = [];
@@ -43,120 +43,108 @@ export default function register(add, { st, usage, isBuiltin, records }) {
     return f.flatMap((s, i) => (i ? [[' ', ''], s] : [s]));
   };
 
-  // `alias set …` that recreates `e`.
-  const definition = (e) => ['alias set', e.name, quote(e.base), e.template ? quote(e.template) : null,
-    e.escape === 'path' ? '--path' : null, '--force'].filter(Boolean).join(' ');
-
   const details = (out, e) => out.kv([
     ['base', [[e.base, 'url']]],
     ['template', e.template ? [[e.template, 'url']] : [['none', 'faint']]],
     ['escape', [[e.escape, 'dim']]],
   ]);
 
+  function listAliases(ctx, rest) {
+    const { out } = ctx;
+    const f = rest.trim().toLowerCase();
+    const list = entries().filter((e) => !f || e.name.includes(f) || e.base.toLowerCase().includes(f) || (e.template || '').toLowerCase().includes(f))
+      .sort((a, b) => cmp(a.name, b.name));
+    if (!list.length) return out.head('No aliases' + (f ? ' match "' + f + '"' : ''), 'dim');
+    const engines = list.filter((e) => e.template).length;
+    out.head([[plural(list.length, 'alias', 'aliases'), 'strong'], [' · ' + plural(engines, 'engine'), 'dim']]);
+    out.table(['name', 'kind', 'opens', ''], list.map((e) => [
+      [[e.name, isBuiltin(e.name) ? 'faint' : 'accent', { run: 'aliases ' + e.name }]],
+      [kindSeg(e.template ? 'engine' : 'alias')],
+      [[e.template || e.base, 'url']],
+      flags(e),
+    ]));
+  }
+
+  // aliases add <name> <base> [template] [--path] [--force]
+  async function addAlias(ctx, rest) {
+    const { out } = ctx;
+    const def = parseDefinition(rest);
+    if (def.error) return out.err(def.error);
+    if (!def.name || def.urls.length < 1 || def.urls.length > 2) {
+      out.head([['Usage', ''], [' · aliases add', 'dim']], 'err');
+      out.table(null, [[usageSegs('aliases add <name> <url>')], [usageSegs('aliases add <name> <url with {}> [--path]')],
+        [usageSegs('aliases add <name> <base> <template> [--path] [--force]')]]);
+      return;
+    }
+    const { name, force, path } = def;
+    let [base, template] = def.urls;
+    // A lone URL with a placeholder is an engine; it opens its own site bare.
+    if (!template && /\{[1-9]?\}/.test(base)) {
+      template = base;
+      base = siteRoot(template);
+    }
+    if (path && !template) return out.err('--path only applies to aliases with a template');
+    const v = validateEntry({ name, base, template, escape: path ? 'path' : 'query' }, isBuiltin);
+    if (v.error) return out.err(v.error);
+    const entry = v.entry;
+    const existing = entries().find((e) => e.name === entry.name);
+    if (existing && !force) {
+      out.err("Alias '" + entry.name + "' already exists");
+      details(out, existing);
+      out.dim('Change it with: aliases ' + entry.name + ' edit · or add --force to replace it');
+      return;
+    }
+    if (existing && entry.name === st().aliases.defaultEngine && !entry.template) {
+      return out.err("'" + entry.name + "' is the default engine and needs a template");
+    }
+    await ctx.data.mutate('aliases', (d) => {
+      const i = d.entries.findIndex((e) => e.name === entry.name);
+      if (i >= 0) d.entries[i] = entry; else d.entries.push(entry);
+    });
+    out.head([[existing ? 'Updated ' : 'Added ', ''], [entry.name, 'accent', { run: 'aliases ' + entry.name }], [entry.template ? '  engine' : '  alias', 'dim']], 'ok');
+    details(out, entry);
+  }
+
+  async function makeDefault(ctx, e) {
+    const { out } = ctx;
+    if (!e.template) return out.err("'" + e.name + "' has no template, so it can't be a search engine");
+    if (isBuiltin(e.name)) return out.err("'" + e.name + "' is shadowed by a built-in command");
+    await ctx.data.mutate('aliases', (d) => { d.defaultEngine = e.name; });
+    out.head([['Default engine is now ', ''], [e.name, 'accent']], 'ok');
+  }
+
+  const spec = {
+    list: listAliases, add: addAlias, verbs: { default: makeDefault },
+    addArgs: '<name> <url> [template] [--path] [--force]', filter: '[filter]',
+  };
+  const show = (ctx, e) => records.show(ctx, 'alias', e, { head: [[e.name, 'accent'], [e.template ? '  engine' : '  alias', 'dim'], ['  ', ''], ...flags(e)] });
+  const routeSpec = (short) => ({ ...spec, short, show });
+
   add({
-    name: 'alias', group: 'Aliases & engines', desc: 'define URL aliases and search engines',
-    usage: [
-      'alias <name> <base> [template] [--path] [--force]',
-      'alias <name> <template> [--path] [--force]',
-      'alias set <name> ... [--force]',
-      'alias rm <name>', 'alias ls [filter]', 'alias show <name>',
-      'alias edit <name>', 'alias edit <name>.<field> <value>',
-    ],
+    name: 'aliases', group: 'Aliases & engines', desc: 'list, add, show, edit and remove your aliases and search engines',
+    usage: records.usageFor('alias', spec),
     examples: [
-      'alias gh https://github.com/ https://github.com/{} --path',
-      'alias yt https://www.youtube.com/results?search_query={}',
-      'alias w https://en.wikipedia.org/w/index.php?search=%s',
-      'alias mail https://mail.google.com/',
-      'alias jira https://jira.example.com/browse/{1}-{2}',
-      'alias bug https://jira.example.com/issues/?jql=project="APP" AND text ~ "%s"',
-      'alias edit gh.template https://github.com/search?q={}',
+      'aliases', 'aliases add gh https://github.com/ https://github.com/{} --path', 'aliases add yt https://www.youtube.com/results?search_query={}',
+      'aliases add jira https://jira.example.com/browse/{1}-{2}', 'aliases add bug https://jira.example.com/issues/?jql=project="APP" AND text ~ "%s"',
+      'aliases gh', 'aliases gh edit', 'aliases gh edit template https://github.com/search?q={}', 'aliases ddg default', 'aliases gh rm',
     ],
-    complete: (prev) => {
-      if (prev.length === 0) return ['set', 'rm', 'ls', 'show', 'edit'].map((v) => ({ value: v }));
-      if (prev.length === 1 && ['set', 'rm', 'show', 'edit'].includes(prev[0])) return aliasNames();
-      return [];
-    },
-    async run(ctx, rest) {
-      const { out } = ctx;
-      if (!rest) return usage(ctx, this);
-      const words = rest.split(/\s+/);
-      const sub = words[0].toLowerCase();
-      const doc = st().aliases;
+    complete: (prev) => records.complete('alias', prev, { verbs: spec.verbs }),
+    run: (ctx, rest) => records.route(ctx, 'alias', rest, routeSpec(false)),
+  });
 
-      if (sub === 'ls') {
-        const f = (words[1] || '').toLowerCase();
-        const list = entries().filter((e) => !f || e.name.includes(f) || e.base.toLowerCase().includes(f))
-          .sort((a, b) => cmp(a.name, b.name));
-        if (!list.length) return out.head('No aliases' + (f ? ' match "' + f + '"' : ''), 'dim');
-        const engines = list.filter((e) => e.template).length;
-        out.head([[plural(list.length, 'alias', 'aliases'), 'strong'], [' · ' + plural(engines, 'engine'), 'dim']]);
-        out.table(['name', 'kind', 'opens', ''], list.map((e) => [
-          [[e.name, isBuiltin(e.name) ? 'faint' : 'accent', { run: 'alias show ' + e.name }]],
-          [[e.template ? 'engine' : 'alias', e.template ? 'info' : 'dim']],
-          [[e.template || e.base, 'url']],
-          flags(e),
-        ]));
-        return;
-      }
-      if (sub === 'edit') {
-        if (await records.edit(ctx, 'alias', rest.slice(4))) return;
-        if (words.length !== 2) return usage(ctx, this);
-        const e = entries().find((x) => x.name === words[1].toLowerCase());
-        if (!e) return out.err("No alias '" + words[1] + "'");
-        // The whole definition in the prompt, ready to change.
-        ctx.setInput(definition(e));
-        records.show(ctx, 'alias', e, [['Editing ', ''], [e.name, 'accent']]);
-        out.dim('The whole definition is in the prompt: change it and press Enter · Esc cancels');
-        return;
-      }
-      if (sub === 'show' || sub === 'rm') {
-        if (words.length !== 2) return usage(ctx, this);
-        const name = words[1].toLowerCase();
-        const e = entries().find((x) => x.name === name);
-        if (!e) return out.err("No alias '" + name + "'");
-        if (sub === 'show') {
-          return records.show(ctx, 'alias', e, [[e.name, 'accent'], [e.template ? '  engine' : '  alias', 'dim'], ['  ', ''], ...flags(e)]);
-        }
-        if (name === doc.defaultEngine) {
-          out.err("'" + name + "' is the default engine");
-          out.dim('Choose another first: engine default <name>');
-          return;
-        }
-        await ctx.data.mutate('aliases', (d) => { d.entries = d.entries.filter((x) => x.name !== name); });
-        return out.head([['Removed ', ''], [name, 'accent']], 'ok');
-      }
-
-      // Define: `alias [set] <name> <base> [template] [--path] [--force]`
-      const def = parseDefinition(rest);
-      if (def.error) return out.err(def.error);
-      if (!def.name || def.urls.length < 1 || def.urls.length > 2) return usage(ctx, this);
-      const { name, force, path } = def;
-      let [base, template] = def.urls;
-      // `alias <name> <template>`: a lone URL with a placeholder is an engine; it opens its own site bare.
-      if (!template && /\{[1-9]?\}/.test(base)) {
-        template = base;
-        base = siteRoot(template);
-      }
-      if (path && !template) return out.err('--path only applies to aliases with a template');
-      const v = validateEntry({ name, base, template, escape: path ? 'path' : 'query' }, isBuiltin);
-      if (v.error) return out.err(v.error);
-      const entry = v.entry;
-      const existing = entries().find((e) => e.name === entry.name);
-      if (existing && !force) {
-        out.err("Alias '" + entry.name + "' already exists");
-        details(out, existing);
-        out.dim('Add --force to overwrite it');
-        return;
-      }
-      if (existing && entry.name === doc.defaultEngine && !entry.template) {
-        return out.err("'" + entry.name + "' is the default engine and needs a template");
-      }
-      await ctx.data.mutate('aliases', (d) => {
-        const i = d.entries.findIndex((e) => e.name === entry.name);
-        if (i >= 0) d.entries[i] = entry; else d.entries.push(entry);
-      });
-      out.head([[existing ? 'Updated ' : 'Added ', ''], [entry.name, 'accent'], [entry.template ? '  engine' : '  alias', 'dim']], 'ok');
-      details(out, entry);
+  add({
+    name: 'alias', group: 'Aliases & engines', desc: 'short for aliases; alias <name> <url> adds one',
+    usage: ['alias <name> <url>', 'alias <name> <url with {} or %s> [--path]', 'alias <name> <base> <template> [--path] [--force]',
+      'alias <name> [edit [<field> [<value>]] | default | rm]'],
+    examples: ['alias gh https://github.com/ https://github.com/{} --path', 'alias w https://en.wikipedia.org/w/index.php?search=%s', 'alias gh edit template https://github.com/{}'],
+    complete: (prev) => records.complete('alias', prev, { verbs: spec.verbs }),
+    run(ctx, rest) {
+      const words = rest.trim().split(/\s+/);
+      const sub = (words[0] || '').toLowerCase();
+      // Older forms: alias ls [filter], alias set …
+      if (sub === 'ls') return listAliases(ctx, rest.trim().slice(2));
+      if (sub === 'set') return addAlias(ctx, rest);
+      return records.route(ctx, 'alias', records.legacy('alias', rest, ['default']) ?? rest, routeSpec(true));
     },
   });
 
@@ -173,20 +161,16 @@ export default function register(add, { st, usage, isBuiltin, records }) {
       const doc = st().aliases;
       if (!rest) {
         const e = entries().find((x) => x.name === doc.defaultEngine);
-        out.head([['Default engine ', ''], [doc.defaultEngine, 'accent']]);
+        out.head([['Default engine ', ''], [doc.defaultEngine, 'accent', { run: 'aliases ' + doc.defaultEngine }]]);
         if (e) out.line([[e.template, 'url']]);
-        out.dim('Anything that is not a command or alias is searched here');
+        out.dim('Anything that is not a command or alias is searched here · change it with: aliases <name> default');
         return;
       }
       const m = /^default\s+(\S+)$/i.exec(rest);
-      if (!m) return usage(ctx, this);
-      const name = m[1].toLowerCase();
-      const e = entries().find((x) => x.name === name);
-      if (!e) return out.err("No alias '" + name + "'");
-      if (!e.template) return out.err("'" + name + "' has no template, so it can't be a search engine");
-      if (isBuiltin(name)) return out.err("'" + name + "' is shadowed by a built-in command");
-      await ctx.data.mutate('aliases', (d) => { d.defaultEngine = name; });
-      out.head([['Default engine is now ', ''], [name, 'accent']], 'ok');
+      if (!m) return out.err('engine default <name>  (or: aliases <name> default)');
+      const e = entries().find((x) => x.name === m[1].toLowerCase());
+      if (!e) return out.err("No alias '" + m[1] + "'");
+      return makeDefault(ctx, e);
     },
   });
 }

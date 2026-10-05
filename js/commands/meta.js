@@ -34,6 +34,17 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
       const aliases = mine.filter((e) => !e.template).sort((a, b) => (a.name < b.name ? -1 : 1));
       out.head([['Help', 'strong'], [' · ' + defs.length + ' built-in commands · ' + plural(engines.length, 'engine') + ' and ' +
         plural(aliases.length, 'alias', 'aliases') + ' of yours', 'dim']]);
+      // The one shape every kept thing follows.
+      out.section('Notes, tasks, events and aliases all work the same way');
+      out.table(null, [
+        [usageSegs('tasks'), [['list them', 'dim']]],
+        [usageSegs('tasks add <text>'), [['add one', 'dim']]],
+        [usageSegs('tasks <id>'), [['show one (ids in any list link here)', 'dim']]],
+        [usageSegs('tasks <id> edit'), [['edit it in place', 'dim']]],
+        [usageSegs('tasks <id> edit <field> <value>'), [['change one field', 'dim']]],
+        [usageSegs('tasks <id> rm'), [['remove it (undo brings it back)', 'dim']]],
+      ], { stack: true });
+      out.dim('Short names do the same, and add from plain text: t buy milk, n call mum, ev fri 19:00 dinner, alias gh https://github.com/');
       // One table, so descriptions line up across groups.
       const rows = [];
       let group = null;
@@ -44,12 +55,12 @@ export default function register(add, { st, usage, isBuiltin, defs, byName }) {
       rows.push({ section: [['Your search engines  ', ''], kindSeg('engine')] });
       if (!engines.length) rows.push([[['none yet', 'faint']], [['alias <name> <url with {}>', 'dim']]]);
       for (const e of engines) {
-        rows.push([[[e.name, 'accent', { run: 'alias show ' + e.name }], [' <text>', 'faint']],
+        rows.push([[[e.name, 'accent', { run: 'aliases ' + e.name }], [' <text>', 'faint']],
           [[e.template, 'url'], [e.name === doc.defaultEngine ? '  ★ default' : '', 'accent']]]);
       }
       rows.push({ section: [['Your aliases  ', ''], kindSeg('alias')] });
       if (!aliases.length) rows.push([[['none yet', 'faint']], [['alias <name> <url>', 'dim']]]);
-      for (const e of aliases) rows.push([[[e.name, 'accent', { run: 'alias show ' + e.name }]], [[e.base, 'url']]]);
+      for (const e of aliases) rows.push([[[e.name, 'accent', { run: 'aliases ' + e.name }]], [[e.base, 'url']]]);
       out.table(null, rows, { stack: true });
       out.section('Everything else');
       out.line([['Anything else is searched with ', 'dim'], [doc.defaultEngine, 'accent'],

@@ -7,15 +7,35 @@ in [docs/PLAN.md](docs/PLAN.md).
 Type `help` at the prompt. Anything that isn't a command or alias is sent to
 the default search engine.
 
+Notes, tasks, events and aliases all work the same way:
+
+```
+tasks                          list them                 (tasks all, tasks #home)
+tasks add <text>               add one
+tasks t3                       show one; ids in any list link here
+tasks t3 edit                  edit it in place
+tasks t3 edit due fri          change one field          (edit due alone: current value in the prompt)
+tasks t3 rm                    remove it                 (undo brings it back)
+tasks t3 done                  actions of its own        (aliases: gh default)
+```
+
+Swap `tasks` for `notes`, `events` or `aliases` (where the id is the name:
+`aliases gh edit template …`). Each has a short name that does exactly the
+same, and also adds from plain text: `t buy milk`, `n call mum`,
+`ev fri 19:00 dinner`, `alias gh https://github.com/`. The older orders
+(`t done t3`, `n rm n2`, `t edit t3.due fri`) still work.
+
 | Area | Commands |
 | --- | --- |
-| Notes | `n`, `notes`, `n show`, `n edit`, `n rm` |
-| Tasks | `t`, `tasks`, `t show`, `t edit`, `t done`, `t rm` |
-| Calendar | `cal`, `agenda`, `ev`, `ev show`, `ev edit`, `ics import` |
+| Find | `find` |
+| Notes | `notes` (`n`) |
+| Tasks | `tasks` (`t`) |
+| Calendar | `events` (`ev`), `cal`, `agenda`, `today`, `ics import` |
 | Tools | `calc`, `tz`, `epoch`, `uuid`, `b64`, `json`, `units` |
-| Aliases & engines | `alias`, `engine` |
+| Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
-| Meta | `help`, `clear`, `history`, `export`, `import` |
+| Sync | `sync` |
+| Meta | `help`, `keys`, `undo`, `redo`, `clear`, `history`, `export`, `import` |
 
 Keys: **Tab** completes (again to list), **→** accepts the grey suggestion,
 **↑/↓** history, **/** command palette, **?** shortcuts, **Esc** clears.
@@ -39,13 +59,13 @@ answer, a `uuid`, pretty JSON …).
 `tz 15:00 tokyo` shows 15:00 Tokyo time across your zones (any zone, by city,
 IANA name or your name for it).
 
-**Editing**: every note, task, event and alias can be changed field by field,
-from the command line or by tapping. `n edit n1.text new words`,
-`t edit t3.due fri`, `t edit t3.tags #home #errands`, `ev edit e2.time none`,
-`alias edit gh.template https://github.com/{}`. `show` prints an entry with
-its fields editable in place (ids in lists link to it): tap a value, change it,
-press Enter, and the page runs the matching `edit` command, so the transcript
-and history show exactly what changed.
+**Editing**: every field of a note, task, event or alias can be changed from
+the command line (`tasks t3 edit due fri`, `aliases gh edit template https://github.com/{}`)
+or by tapping it: `tasks t3` shows the entry with its values tappable, and
+`tasks t3 edit` opens the first one straight away. A tapped edit runs the
+matching `edit` command, so the transcript and history show exactly what
+changed. Field names have friendly synonyms (`name` for a task's or note's
+text, `title` for an event's).
 
 **Daily summary**: a card pinned at the top shows today's overdue tasks,
 events and due tasks (ids link to them) and a line about tomorrow. It stays

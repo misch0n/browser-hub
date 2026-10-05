@@ -324,7 +324,7 @@ async function check(name, fn) {
     const id = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.find((t) => t.text === 'water the plants').id);
     await send('tasks');
     await lastTurn().locator('.seg-run', { hasText: id }).click();
-    await page.waitForFunction(() => /^t show /.test([...document.querySelectorAll('.you-text')].pop().textContent));
+    await page.waitForFunction(() => /^tasks t\d+$/.test([...document.querySelectorAll('.you-text')].pop().textContent));
     assert.match(await lastText(), new RegExp('task ' + id));
     // Tap the text, change it, Enter: runs the edit command, which shows in the transcript.
     await lastTurn().locator('.fields .editable').first().click();
@@ -333,7 +333,7 @@ async function check(name, fn) {
     await box.fill('water the  garden');
     await box.press('Enter');
     await page.waitForFunction(() => /Updated/.test([...document.querySelectorAll('.turn')].pop().innerText));
-    assert.equal(await page.locator('.you-text').last().textContent(), 't edit ' + id + '.text water the  garden');
+    assert.equal(await page.locator('.you-text').last().textContent(), 'tasks ' + id + ' edit text water the  garden');
     const task = () => page.evaluate((i) => JSON.parse(localStorage.getItem('cc:tasks')).items.find((t) => t.id === i), id);
     assert.equal((await task()).text, 'water the  garden');
     // Esc cancels: nothing runs.
@@ -348,8 +348,13 @@ async function check(name, fn) {
     await lastTurn().locator('.edit-input').fill('  lead ');
     await lastTurn().locator('.edit-input').press('Enter');
     await page.waitForFunction(() => /Updated/.test([...document.querySelectorAll('.turn')].pop().innerText));
-    assert.equal(await page.locator('.you-text').last().textContent(), 't edit ' + id + '.text "  lead "');
-    await send('t rm ' + id);
+    assert.equal(await page.locator('.you-text').last().textContent(), 'tasks ' + id + ' edit text "  lead "');
+    // tasks <id> edit: edit in place, the first field already open.
+    await send('tasks ' + id + ' edit');
+    await page.waitForSelector('.turn:last-child .edit-input');
+    assert.equal(await lastTurn().locator('.edit-input').inputValue(), 'lead'); // text is stored trimmed
+    await page.keyboard.press('Escape');
+    await send('tasks ' + id + ' rm');
     assert.equal(await focused(), 'prompt');
   });
 
@@ -377,7 +382,7 @@ async function check(name, fn) {
     assert.ok(sections.some((t) => /^Tasks/.test(t)) && sections.some((t) => /^Notes/.test(t)), 'sections: ' + sections.join('|'));
     assert.ok(await lastTurn().locator('.t-hl').count() >= 4);
     await lastTurn().locator('.seg-run.t-id').first().click();
-    await page.waitForFunction(() => /^(t|n) show /.test([...document.querySelectorAll('.you-text')].pop().textContent));
+    await page.waitForFunction(() => /^(tasks|notes) [tn]\d+$/.test([...document.querySelectorAll('.you-text')].pop().textContent));
     await send('find /^order\\s/');
     assert.match(await lastText(), /regular expression[\s\S]*order oat milk/);
     await send('find qqqzzz');
@@ -390,7 +395,7 @@ async function check(name, fn) {
     assert.equal(await page.locator('#pinned').isVisible(), true);
     assert.match(await page.locator('#pinned').innerText(), /Today[\s\S]*pinned summary task/);
     await page.locator('#pinned .seg-run.t-id').last().click();
-    await page.waitForFunction(() => /^t show /.test([...document.querySelectorAll('.you-text')].pop().textContent));
+    await page.waitForFunction(() => /^tasks t\d+$/.test([...document.querySelectorAll('.you-text')].pop().textContent));
     await page.locator('#pinned .pin-close').click();
     await page.waitForFunction(() => document.getElementById('pinned').hidden);
     assert.equal(await page.locator('.you-text').last().textContent(), 'today dismiss');

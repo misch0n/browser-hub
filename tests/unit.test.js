@@ -458,79 +458,99 @@ test('data: mutations are serialised', async () => {
 test('notes: capture, list, edit round trip, remove; subcommand words never overwrite (review #1)', async () => {
   const app = await makeApp();
   assert.deepEqual(await app.run('n buy  oat milk'), ['# Added note n1']);
-  await app.run('n second note');
+  assert.deepEqual(await app.run('notes add second note'), ['# Added note n2']);
   assert.equal(app.data.state.notes.items[0].text, 'buy  oat milk');
   const list = await app.run('notes');
   assert.deepEqual(list.slice(0, 3), ['# 2 notes', '| id | date | note', 'n2 | today | second note']);
-  assert.deepEqual(await app.run('n edit n1'), ['# Editing n1', 'dim: Change the text and press Enter to save · Esc cancels']);
-  assert.equal(app.ctx.inputSet, 'n edit n1: buy  oat milk');
-  assert.deepEqual(await app.run('n edit n1: buy almond milk'), ['# Updated note n1']);
+  assert.deepEqual(await app.run('n'), list); // the short name alone lists, like the noun
+  assert.deepEqual((await app.run('notes oat')).slice(0, 1), ['# 1 note matching "oat"']);
+  // The older prompt-edit form still saves.
+  assert.match((await app.run('n edit n1: buy almond milk'))[0], /^# Updated notes n1 text/);
   assert.equal(app.data.state.notes.items[0].text, 'buy almond milk');
-  // "n edit 2 slides before friday" is a new note, not an overwrite of n2
+  // Words that only look like commands are note text.
   assert.deepEqual(await app.run('n edit 2 slides before friday'), ['# Added note n3']);
   assert.equal(app.data.state.notes.items.find((n) => n.id === 'n2').text, 'second note');
   assert.deepEqual(await app.run('n rm the weeds'), ['# Added note n4']);
-  const rm = await app.run('n rm n2');
+  assert.deepEqual(await app.run('n n1 has a typo in it'), ['# Added note n5']); // an id, but no action after it
+  const rm = await app.run('notes n2 rm');
   assert.deepEqual(rm, ['# Removed note n2', 'second note', '↶ undo brings it back']);
   assert.equal(rm.tone, 'ok');
-  const missing = await app.run('n rm n99');
+  const missing = await app.run('notes n99 rm');
   assert.deepEqual(missing, ['err: No note n99']);
   assert.equal(missing.tone, 'err');
   assert.match((await app.run('n edit n1:'))[0], /needs some text/);
-  assert.equal((await app.run('n'))[0], '# Usage · n');
 });
 
-test('editing fields: n / t / ev edit <id>.<field> <value>, show views are editable', async () => {
+test('one grammar: <things> | <things> add | <things> <id> | <id> edit [field [value]] | <id> rm', async () => {
   const app = await makeApp();
   const st = () => app.data.state;
-  await app.run('n first draft');
-  // `name` is accepted for a note's text; the value is everything after the field.
-  const up = await app.run('n edit n1.name buy  oat milk');
-  assert.equal(up[0], '# Updated n1.text');
-  assert.ok(up.includes('text: buy  oat milk  [n edit n1.text = buy  oat milk]'));
+  await app.run('notes add first draft');
+  // Field by name, value as typed; `name` is accepted for a note's text.
+  const up = await app.run('notes n1 edit name buy  oat milk');
+  assert.equal(up[0], '# Updated notes n1 text');
+  assert.ok(up.includes('text: buy  oat milk  [notes n1 edit text = buy  oat milk]'));
   assert.equal(up.tone, 'ok');
   assert.equal(st().notes.items[0].text, 'buy  oat milk');
-  assert.deepEqual(await app.run('n edit n1.text "  padded  "'), (await app.run('n show n1')).map((l, i) => (i ? l : '# Updated n1.text')));
-  assert.equal(st().notes.items[0].text, 'padded'); // text is trimmed
-  assert.equal((await app.run('n edit n1.colour red'))[0], 'err: Notes have no field colour');
-  assert.equal((await app.run('n edit n9.text x'))[0], 'err: No note n9');
-  assert.equal((await app.run('n edit n1.text ""'))[0], 'err: text needs some text');
-  // No value: the command with the current value goes into the prompt.
-  await app.run('n edit n1.text');
-  assert.equal(app.ctx.inputSet, 'n edit n1.text padded');
-  // Not an id: still note text, as before.
-  assert.deepEqual(await app.run('n edit config.yaml for prod'), ['# Added note n2']);
+  await app.run('notes n1 edit text "  padded  "');
+  assert.equal(st().notes.items[0].text, 'padded'); // one quoted argument: quotes off; text is trimmed
+  assert.equal((await app.run('notes n1 edit colour red'))[0], 'err: Notes have no field colour');
+  assert.equal((await app.run('notes n9'))[0], 'err: No note n9');
+  assert.equal((await app.run('notes n1 edit text ""'))[0], 'err: text needs some text');
+  assert.equal((await app.run('notes n1 frobnicate'))[0], 'err: notes n1: no action frobnicate');
+  // edit <field> with no value: the command and the current value go into the prompt.
+  await app.run('notes n1 edit text');
+  assert.equal(app.ctx.inputSet, 'notes n1 edit text padded');
+  assert.equal((await app.run('notes 1'))[0], '# note n1'); // the noun also takes a bare number
 
-  await app.run('t buy flour due:tomorrow #home');
-  const show = await app.run('t show t1');
-  assert.deepEqual(show.slice(0, 6), ['# task t1', 'text: buy flour  [t edit t1.text = buy flour]', 'due: tomorrow  [t edit t1.due = 2026-10-06]',
-    'tags: #home  [t edit t1.tags = #home]', 'repeat: none  [t edit t1.repeat = none]', 'done: ○ open  [t edit t1.done = no]']);
-  assert.deepEqual(await app.run('t edit t1'), show); // edit with no field shows it
-  await app.run('t edit t1.due fri');
+  await app.run('tasks add buy flour due:tomorrow #home');
+  const show = await app.run('tasks t1');
+  assert.deepEqual(show.slice(0, 6), ['# task t1', 'text: buy flour  [tasks t1 edit text = buy flour]', 'due: tomorrow  [tasks t1 edit due = 2026-10-06]',
+    'tags: #home  [tasks t1 edit tags = #home]', 'repeat: none  [tasks t1 edit repeat = none]', 'done: ○ open  [tasks t1 edit done = no]']);
+  assert.deepEqual(await app.run('t t1'), show); // the short name is the same command
+  // edit alone: edit in place (the same view, a field open, a different heading).
+  const editing = await app.run('tasks t1 edit');
+  assert.equal(editing[0], '# Editing tasks t1 · tap any value, Enter saves, Esc leaves it');
+  assert.deepEqual(editing.slice(1, 6), show.slice(1, 6));
+  await app.run('tasks t1 edit due fri');
   assert.equal(st().tasks.items[0].due, '2026-10-09');
-  await app.run('t edit t1.due none');
+  await app.run('tasks t1 edit due none');
   assert.equal(st().tasks.items[0].due, null);
-  await app.run('t edit t1.tags #Home, errands');
+  await app.run('tasks t1 edit tags #Home, errands');
   assert.deepEqual(st().tasks.items[0].tags, ['home', 'errands']);
-  await app.run('t edit t1.done yes');
+  await app.run('tasks t1 edit name buy rye flour');
+  assert.equal(st().tasks.items[0].text, 'buy rye flour');
+  await app.run('tasks t1 done');
   assert.equal(st().tasks.items[0].done, true);
-  assert.ok(st().tasks.items[0].doneAt);
-  await app.run('t edit t1.done no');
+  await app.run('tasks t1 edit done no');
   assert.equal(st().tasks.items[0].doneAt, null);
-  assert.match((await app.run('t edit t1.due someday'))[0], /^err: due can't read the date 'someday'/);
-  assert.match((await app.run('t edit t1.tags a+b'))[0], /not a tag/);
+  assert.match((await app.run('tasks t1 edit due someday'))[0], /^err: due can't read the date 'someday'/);
+  assert.match((await app.run('tasks t1 edit tags a+b'))[0], /not a tag/);
+  assert.match((await app.run('tasks lunch'))[0], /'lunch' is not a task id, add, all or #tag/);
 
-  await app.run('ev 2026-10-12 09:00 review');
-  await app.run('ev edit e1.time none');
+  await app.run('events add 2026-10-12 09:00 review');
+  await app.run('events e1 edit time none');
   assert.equal(st().events.items[0].time, null);
-  await app.run('ev edit e1.date tomorrow');
+  await app.run('events e1 edit date tomorrow');
   assert.equal(st().events.items[0].date, '2026-10-06');
-  await app.run('ev edit e1.title design review');
+  await app.run('ev e1 edit title design review');
   assert.equal(st().events.items[0].title, 'design review');
-  assert.match((await app.run('ev edit e1.time 25:00'))[0], /can't read the time/);
-  assert.equal((await app.run('ev show e1'))[0], '# event e1');
+  assert.match((await app.run('events e1 edit time 25:00'))[0], /can't read the time/);
+  assert.equal((await app.run('events e1'))[0], '# event e1');
+  assert.deepEqual((await app.run('events')).slice(0, 2), ['# 1 upcoming event', '| id | date | time | event']);
+  assert.match((await app.run('events e1 rm'))[0], /Removed event e1/);
 
-  // Lists link each id to its show view.
+  // Older forms keep working.
+  await app.run('t legacy one');
+  const id = st().tasks.items.find((t) => t.text === 'legacy one').id;
+  await app.run('t edit ' + id + '.due fri');
+  assert.equal(st().tasks.items.find((t) => t.id === id).due, '2026-10-09');
+  assert.equal((await app.run('t show ' + id))[0], '# task ' + id);
+  await app.run('t done ' + id);
+  assert.equal(st().tasks.items.find((t) => t.id === id).done, true);
+  await app.run('t rm ' + id.slice(1)); // bare number in the old two-word form
+  assert.equal(st().tasks.items.some((t) => t.id === id), false);
+
+  // Lists link each id to its entry, by the noun.
   const linked = await app.run('tasks all');
   assert.ok(linked.some((l) => l.startsWith('t1 | ')));
 });
@@ -931,11 +951,12 @@ test('alias templates: spaces and quotes, numbered placeholders, editing', async
   assert.match((await app.run('alias bad2 https://{1}.x.com/'))[0], /after the host/);
   assert.equal((await app.run('alias edit2 x'))[0].startsWith('err:'), true);
 
-  // alias edit <name>: the whole definition in the prompt, quoted where needed, plus editable fields.
-  const ed = await app.run('alias edit mobile');
-  assert.equal(ed[0], '# Editing mobile');
-  assert.equal(app.ctx.inputSet, 'alias set mobile https://jira.example.net/ \'https://jira.example.net/issues/?jql=project="UBMVC" AND "Migrated From Bugzilla Id" ~ "{}"\' --force');
-  assert.equal((await app.run(app.ctx.inputSet))[0], '# Updated mobile  engine'); // reads back unchanged
+  // aliases <name> edit: in place, like everything else; the template field takes the URL as typed.
+  const ed = await app.run('aliases mobile edit');
+  assert.equal(ed[0], '# Editing aliases mobile · tap any value, Enter saves, Esc leaves it');
+  assert.ok(ed.includes('template: ' + mobile.template + '  [aliases mobile edit template = ' + mobile.template + ']'));
+  assert.equal((await app.run('alias edit mobile'))[0], ed[0]); // the older order too
+  assert.equal((await app.run('aliases mobile edit template ' + mobile.template))[0], '# Updated aliases mobile template'); // reads back unchanged
   assert.equal(st().aliases.entries.find((e) => e.name === 'mobile').template, mobile.template);
   // Field edits; a rename keeps the default engine pointing at it.
   await app.run('alias edit g.name google');
@@ -947,7 +968,7 @@ test('alias templates: spaces and quotes, numbered placeholders, editing', async
   await app.run('alias edit ddg.template https://duckduckgo.com/?q=%s&ia=web');
   assert.equal(st().aliases.entries.find((e) => e.name === 'ddg').template, 'https://duckduckgo.com/?q={}&ia=web');
   const shown = await app.run('alias show ddg');
-  assert.ok(shown.includes('template: https://duckduckgo.com/?q={}&ia=web  [alias edit ddg.template = https://duckduckgo.com/?q={}&ia=web]'));
+  assert.ok(shown.includes('template: https://duckduckgo.com/?q={}&ia=web  [aliases ddg edit template = https://duckduckgo.com/?q={}&ia=web]'));
 });
 
 test('import reads an xsearch export as search engines', () => {
@@ -987,7 +1008,7 @@ test('tasks: add, list order and colour, done, rm; "t done laundry" is a task', 
   assert.deepEqual(await app.run('t done laundry'), ['# Added task t5', 'done laundry']);
   assert.deepEqual(await app.run('t done t99'), ['err: No task t99']);
   assert.match((await app.run('t x due:nonsense'))[0], /Can't read the date/);
-  assert.equal((await app.run('t due:today #x'))[0], '# Usage · t');
+  assert.equal((await app.run('t due:today #x'))[0], '# Usage · tasks add');
 });
 
 test('calendar: ev, cal, agenda', async () => {
@@ -1051,7 +1072,12 @@ test('alias and engine commands', async () => {
   await app.run('alias rm w');
   const ls = await app.run('alias ls');
   assert.equal(ls[0], '# 3 aliases · 2 engines');
-  assert.ok(ls.some((l) => /^ddg \| engine \| .* \| ★ default$/.test(l)));
+  assert.ok(ls.some((l) => /^ddg \| your engine \| .* \| ★ default$/.test(l)));
+  assert.deepEqual(await app.run('aliases'), ls); // the noun lists the same
+  assert.match((await app.run('aliases gh'))[0], /^# gh  alias/);
+  assert.deepEqual(await app.run('aliases ddg default'), ['# Default engine is now ddg']);
+  assert.match((await app.run('aliases add gh2 https://github.com/'))[0], /^# Added gh2  alias/);
+  assert.match((await app.run('aliases gh2 rm'))[0], /^# Removed gh2/);
 });
 
 test('tools commands', async () => {
@@ -1175,7 +1201,15 @@ test('help, history', async () => {
   assert.ok(win.some((l) => l.startsWith('Ctrl+W Alt+Backspace | cut the word before the cursor (the browser keeps Ctrl+W')));
   assert.ok(win.includes('## Edit the line'));
   const ht = await app.run('help t');
-  assert.deepEqual(ht.slice(0, 3), ['# t · add a task', '## Usage', 't <text> [due:<date>] [every:<rule>] [#tag]']);
+  assert.deepEqual(ht.slice(0, 3), ['# t · short for tasks; t <text> adds a task', '## Usage', 't <text> [due:<date>] [every:<rule>] [#tag]']);
+  // Every kept thing documents the same shape.
+  for (const [noun, id] of [['notes', '<id>'], ['tasks', '<id>'], ['events', '<id>'], ['aliases', '<name>']]) {
+    const u = (await app.run('help ' + noun)).filter((l) => l.startsWith(noun));
+    assert.ok(u.some((l) => l.startsWith(noun + ' add ')), noun);
+    assert.ok(u.includes(noun + ' ' + id), noun);
+    assert.ok(u.includes(noun + ' ' + id + ' edit [<field> [<value>]]'), noun);
+    assert.ok(u.includes(noun + ' ' + id + ' rm'), noun);
+  }
   assert.ok(ht.includes('## Examples'));
   await app.data.addHistory('calc 1');
   await app.data.addHistory('vitosha weather');

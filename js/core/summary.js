@@ -24,13 +24,13 @@ export const summaryVisible = (settings, today) => settings.summary !== 'off' &&
 export function summaryRows(sum) {
   const rows = [];
   for (const t of sum.overdue) {
-    rows.push([[dayLabel(t.due, sum.today), 'err'], ['  ', ''], [t.id, 'id', { run: 't show ' + t.id }], ['  ' + t.text, '']]);
+    rows.push([[dayLabel(t.due, sum.today), 'err'], ['  ', ''], [t.id, 'id', { run: 'tasks ' + t.id }], ['  ' + t.text, '']]);
   }
   for (const e of sum.events) {
-    rows.push([[e.time || 'all day', e.time ? 'num' : 'faint'], ['  ', ''], [e.id, 'id', { run: 'ev show ' + e.id }], ['  ' + e.title, '']]);
+    rows.push([[e.time || 'all day', e.time ? 'num' : 'faint'], ['  ', ''], [e.id, 'id', { run: 'events ' + e.id }], ['  ' + e.title, '']]);
   }
   for (const t of sum.due) {
-    rows.push([['due today', 'warn'], ['  ', ''], [t.id, 'id', { run: 't show ' + t.id }], ['  ' + t.text, ''], [t.repeat ? '  ↻' : '', 'faint']]);
+    rows.push([['due today', 'warn'], ['  ', ''], [t.id, 'id', { run: 'tasks ' + t.id }], ['  ' + t.text, ''], [t.repeat ? '  ↻' : '', 'faint']]);
   }
   return rows;
 }

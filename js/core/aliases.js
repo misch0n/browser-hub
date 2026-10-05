@@ -9,7 +9,7 @@ import { tokenize } from './args.js';
 const PLACEHOLDER = /\{([1-9]?)\}/g;
 
 const SHIPPED_DEFAULT = 'g';
-const RESERVED = ['set', 'rm', 'ls', 'show', 'edit']; // `alias` subcommands
+const RESERVED = ['add', 'set', 'rm', 'ls', 'show', 'edit', 'default', 'all']; // words the alias commands use
 
 function starters() {
   return [

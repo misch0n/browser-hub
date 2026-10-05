@@ -2,13 +2,32 @@ import { KINDS, fieldName, parseFieldEdit, findRecord, applyField } from '../cor
 import { parseId, todayISO } from '../core/util.js';
 import { dueSeg, tagSegs, dayLabel, shortDate } from '../core/format.js';
 import { repeatLabel } from '../core/repeat.js';
+import { oneValue } from '../core/args.js';
 
-// Printing one record with editable fields, and the `<cmd> edit <key>.<field>
-// <value>` command behind them. Tapping a value in the output fills in and
-// runs that same command, so the transcript and history show exactly what
-// changed: the page and the command line are two ways to type one thing.
+// One grammar for everything you keep: notes, tasks, events and aliases.
+//
+//   tasks                          list them
+//   tasks add <text>               add one
+//   tasks t3                       show one, fields tappable
+//   tasks t3 edit                  edit it in place
+//   tasks t3 edit due fri          change one field (edit due: the current value in the prompt)
+//   tasks t3 rm                    remove it
+//   tasks t3 done                  verbs of its own (tasks: done)
+//
+// Each also has a short name that does the same, and adds when given plain
+// text: t, n, ev, alias (t buy milk = tasks add buy milk). Tapping a value in
+// the output runs the matching `edit` command, so the transcript and history
+// show exactly what changed.
+
+export const NOUNS = {
+  note: { noun: 'notes', short: 'n', one: 'note' },
+  task: { noun: 'tasks', short: 't', one: 'task' },
+  event: { noun: 'events', short: 'ev', one: 'event' },
+  alias: { noun: 'aliases', short: 'alias', one: 'alias' },
+};
 
 const keyOf = (kind, item) => (kind === 'alias' ? item.name : item.id);
+export const refOf = (kind, item) => NOUNS[kind].noun + ' ' + keyOf(kind, item);
 
 function display(kind, field, item, today) {
   const none = [['none', 'faint']];
@@ -40,52 +59,45 @@ function extras(kind, item, today) {
 }
 
 export function createRecords({ st, isBuiltin }) {
-  function show(ctx, kind, item, headSegs) {
+  const label = (kind) => KINDS[kind].label;
+  const fieldsOf = (kind) => Object.keys(KINDS[kind].fields);
+  const verbsOf = (kind, own) => ['edit', ...Object.keys(own || {}), 'rm'];
+
+  // Prints one entry with its fields; opts: { head, open: field to start editing in place }.
+  function show(ctx, kind, item, opts = {}) {
     const { out } = ctx;
     const k = KINDS[kind];
-    const key = keyOf(kind, item);
+    const ref = refOf(kind, item);
     const today = todayISO(ctx.now());
-    out.head(headSegs || [[k.label + ' ', 'dim'], [key, kind === 'alias' ? 'accent' : 'id']]);
+    out.head(opts.head || [[label(kind) + ' ', 'dim'], [keyOf(kind, item), kind === 'alias' ? 'accent' : 'id']]);
     out.fields([
-      ...Object.keys(k.fields).map((f) => [f, display(kind, f, item, today), { command: k.cmd + ' edit ' + key + '.' + f, current: k.fields[f].raw(item) }]),
+      ...fieldsOf(kind).map((f) => [f, display(kind, f, item, today),
+        { command: ref + ' edit ' + f, current: k.fields[f].raw(item), open: opts.open === f }]),
       ...extras(kind, item, today),
     ]);
-    out.dim('Tap a value to change it, or: ' + k.cmd + ' edit ' + key + '.<field> <value>');
+    out.dim('Tap a value to change it, or: ' + ref + ' edit <field> <value>');
   }
 
-  // Handles `edit <key>.<field> [value]` for `kind`. Returns false when `rest`
-  // isn't in that shape (or names no record id), so the caller can treat the
-  // words as something else, as `n` does with note text.
-  async function edit(ctx, kind, rest) {
-    const p = parseFieldEdit(rest);
-    if (!p) return false;
-    const k = KINDS[kind];
-    if (kind !== 'alias' && !parseId(k.prefix, p.target)) return false;
+  // Sets one field (value as typed: one quoted argument is unquoted).
+  async function setField(ctx, kind, item, fieldArg, value) {
     const { out } = ctx;
-    const item = findRecord(kind, st(), p.target);
-    if (!item) {
-      out.err('No ' + k.label + ' ' + p.target);
-      return true;
-    }
-    const field = fieldName(kind, p.field);
+    const k = KINDS[kind];
+    const field = fieldName(kind, fieldArg);
     if (!field) {
-      out.err(k.label[0].toUpperCase() + k.label.slice(1) + 's have no field ' + p.field);
-      out.dim('Fields: ' + Object.keys(k.fields).join(', '));
-      return true;
+      out.err(label(kind)[0].toUpperCase() + label(kind).slice(1) + 's have no field ' + fieldArg);
+      out.dim('Fields: ' + fieldsOf(kind).join(', '));
+      return;
     }
-    if (p.value === null) {
-      // No value: put the command with the current value in the prompt.
-      ctx.setInput(k.cmd + ' edit ' + keyOf(kind, item) + '.' + field + ' ' + k.fields[field].raw(item));
-      out.head([['Editing ', ''], [keyOf(kind, item) + '.' + field, 'id']], 'info');
+    const ref = refOf(kind, item);
+    if (value === null) {
+      // No value: the command with the current value, in the prompt.
+      ctx.setInput(ref + ' edit ' + field + ' ' + k.fields[field].raw(item));
+      out.head([['Editing ', ''], [ref + ' ' + field, 'id']], 'info');
       out.dim('Change the value and press Enter · Esc cancels');
-      return true;
+      return;
     }
-    const env = { now: ctx.now, isBuiltin, state: st() };
-    const r = applyField(kind, item, field, p.value, env);
-    if (r.error) {
-      out.err(r.error);
-      return true;
-    }
+    const r = applyField(kind, item, field, value, { now: ctx.now, isBuiltin, state: st() });
+    if (r.error) return out.err(r.error);
     const key = keyOf(kind, item);
     let saved = null;
     await ctx.data.mutate(k.col, (d) => {
@@ -104,20 +116,126 @@ export function createRecords({ st, isBuiltin }) {
       if (kind === 'note') d.items[i].updated = ctx.now().toISOString();
       saved = d.items[i];
     });
-    if (!saved) {
-      out.err('No ' + k.label + ' ' + key);
-      return true;
-    }
-    show(ctx, kind, saved, [['Updated ', ''], [key + '.' + field, kind === 'alias' ? 'accent' : 'id']]);
+    if (!saved) return out.err('No ' + label(kind) + ' ' + key);
+    show(ctx, kind, saved, { head: [['Updated ', ''], [refOf(kind, saved) + ' ' + field, kind === 'alias' ? 'accent' : 'id']] });
     out.tone('ok');
-    return true;
   }
 
-  function showCmd(ctx, kind, target) {
-    const item = findRecord(kind, st(), target);
-    if (!item) return ctx.out.err('No ' + KINDS[kind].label + ' ' + target);
-    show(ctx, kind, item);
+  async function remove(ctx, kind, item) {
+    const { out } = ctx;
+    const key = keyOf(kind, item);
+    if (kind === 'alias') {
+      if (key === st().aliases.defaultEngine) {
+        out.err("'" + key + "' is the default engine");
+        out.dim('Choose another first: engine default <name>');
+        return;
+      }
+      await ctx.data.mutate('aliases', (d) => { d.entries = d.entries.filter((x) => x.name !== key); });
+      return out.head([['Removed ', ''], [key, 'accent']], 'ok');
+    }
+    await ctx.data.mutate(KINDS[kind].col, (d) => { d.items = d.items.filter((x) => x.id !== key); });
+    out.head([['Removed ' + label(kind) + ' ', ''], [key, 'id']], 'ok');
+    out.line(item.text || item.title, 'gone');
   }
 
-  return { show, showCmd, edit };
+  // The entry `word` names: an id for notes, tasks and events (t3, or just 3
+  // when `bare` is allowed), a name for aliases. -> { item } | { missing } | null
+  function target(kind, word, bare) {
+    if (!word) return null;
+    if (kind === 'alias') {
+      const item = findRecord(kind, st(), word);
+      return item ? { item } : null;
+    }
+    const prefix = KINDS[kind].prefix;
+    if (!new RegExp('^' + prefix + '\\d+$', 'i').test(word) && !(bare && /^\d+$/.test(word))) return null;
+    const item = findRecord(kind, st(), word);
+    return item ? { item } : { missing: parseId(prefix, word) };
+  }
+
+  // Routes `<noun> …`, or its short name with spec.short set.
+  // spec: { short?, list(ctx, rest), add(ctx, rest), verbs?: { name: (ctx, item, rest) }, show?(ctx, item) }
+  async function route(ctx, kind, rest, spec) {
+    const { out } = ctx;
+    const text = rest.trim();
+    const words = text.split(/\s+/).filter(Boolean);
+    const n = NOUNS[kind];
+    if (!words.length) return spec.list(ctx, '');
+    if (words[0].toLowerCase() === 'add') return spec.add(ctx, text.slice(3).trim());
+
+    // <key>.<field> <value>: the dot form, still understood.
+    const dot = parseFieldEdit(text);
+    const dotTarget = dot && target(kind, dot.target, !spec.short);
+    if (dotTarget && dotTarget.item) return setField(ctx, kind, dotTarget.item, dot.field, dot.value);
+
+    const t = target(kind, words[0], !spec.short);
+    const verb = (words[1] || '').toLowerCase();
+    const verbs = verbsOf(kind, spec.verbs);
+    // With the short name, `t t3 something` is still task text unless `something` is a verb.
+    const isItem = t && (!spec.short || !words[1] || verbs.includes(verb) || verb === 'show');
+    if (!isItem) return spec.short ? spec.add(ctx, text) : spec.list(ctx, text);
+    if (t.missing) return out.err('No ' + label(kind) + ' ' + t.missing);
+    const item = t.item;
+    // The raw text after the first i words.
+    const after = (i) => {
+      let s = text;
+      for (let k = 0; k < i; k++) s = s.replace(/^\s*\S+/, '');
+      return s.trim();
+    };
+    if (!verb || verb === 'show') return spec.show ? spec.show(ctx, item) : show(ctx, kind, item);
+    if (verb === 'edit') {
+      const field = words[2];
+      if (!field) {
+        return show(ctx, kind, item, { open: fieldsOf(kind)[0],
+          head: [['Editing ', ''], [refOf(kind, item), kind === 'alias' ? 'accent' : 'id'], [' · tap any value, Enter saves, Esc leaves it', 'dim']] });
+      }
+      const v = after(3);
+      return setField(ctx, kind, item, field, v ? oneValue(v) : null);
+    }
+    if (verb === 'rm' || verb === 'remove' || verb === 'delete') return remove(ctx, kind, item);
+    if (spec.verbs && spec.verbs[verb]) return spec.verbs[verb](ctx, item, after(2));
+    out.err(n.noun + ' ' + keyOf(kind, item) + ': no action ' + words[1]);
+    out.dim('Try: ' + verbs.map((v) => n.noun + ' ' + keyOf(kind, item) + ' ' + v).join(' · '));
+  }
+
+  // Tab completion for `<noun> …`: ids, then actions, then field names.
+  function complete(kind, prev, spec = {}) {
+    const ids = () => (kind === 'alias'
+      ? st().aliases.entries.map((e) => ({ value: e.name, label: e.template ? 'engine' : 'alias' }))
+      : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || '').slice(0, 50) })));
+    if (prev.length === 0) return [{ value: 'add' }, ...(spec.first || []), ...ids()];
+    if (prev.length === 1 && target(kind, prev[0], true)) return verbsOf(kind, spec.verbs).map((v) => ({ value: v }));
+    if (prev.length === 2 && prev[1] === 'edit' && target(kind, prev[0], true)) return fieldsOf(kind).map((f) => ({ value: f }));
+    return [];
+  }
+
+  // Usage lines, all in the same shape.
+  function usageFor(kind, spec) {
+    const n = NOUNS[kind];
+    const id = kind === 'alias' ? '<name>' : '<id>';
+    return [
+      n.noun + (spec.filter ? ' ' + spec.filter : ''),
+      n.noun + ' add ' + spec.addArgs,
+      n.noun + ' ' + id,
+      n.noun + ' ' + id + ' edit [<field> [<value>]]',
+      ...Object.keys(spec.verbs || {}).map((v) => n.noun + ' ' + id + ' ' + v),
+      n.noun + ' ' + id + ' rm',
+    ];
+  }
+
+  // The older verb-first forms (t done t3, n rm n2, ev show e1, alias edit
+  // gh.template …) rewritten to the shared order, so they keep working.
+  // Only exact shapes: `t done laundry` stays task text. -> rest or null
+  function legacy(kind, rest, verbs = []) {
+    const words = rest.trim().split(/\s+/);
+    const verb = (words[0] || '').toLowerCase();
+    if (!['show', 'edit', 'rm', ...verbs].includes(verb)) return null;
+    const second = words[1] || '';
+    const dot = /^([^.\s]+)\.[a-z]+$/i.exec(second);
+    const keyFor = (w) => { const t = target(kind, w, true); return t ? (t.item ? keyOf(kind, t.item) : t.missing) : null; };
+    if (verb === 'edit' && dot && keyFor(dot[1])) return keyFor(dot[1]) + rest.trim().replace(/^\S+\s+[^.\s]+/, '');
+    if (words.length !== 2 || !keyFor(second)) return null;
+    return verb === 'show' ? keyFor(second) : keyFor(second) + ' ' + verb;
+  }
+
+  return { show, setField, remove, route, complete, usageFor, target, fieldsOf, legacy };
 }

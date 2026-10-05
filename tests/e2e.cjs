@@ -667,6 +667,15 @@ async function check(name, fn) {
     fs.unlinkSync(f);
   });
 
+  await check('week: days link to date; date maths answers are copyable', async () => {
+    await send('week');
+    await lastTurn().locator('tr.tr-run').nth(2).click();
+    await page.waitForFunction(() => /^date \d{4}-\d{2}-\d{2}$/.test([...document.querySelectorAll('.turn .you-text')].pop().textContent));
+    assert.match(await lastText(), /week \d+[\s\S]*quarter/);
+    await send('days until +10d');
+    assert.match(await lastText(), /10 days until/);
+  });
+
   await check('qr: drawn dark on white in any theme, scans back to the text, redrawn from history', async () => {
     const jsQR = require('jsqr');
     const url = 'https://misch0n.github.io/browser-hub/?q=t%20hello';

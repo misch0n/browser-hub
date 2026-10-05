@@ -35,6 +35,7 @@ still work.
 | Notes | `notes` (`n`) |
 | Tasks | `tasks` (`t`) |
 | Calendar | `events` (`ev`), `cal`, `agenda`, `today` |
+| Dates | `date`, `days`, `week` |
 | Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr` |
 | Share | `clip` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
@@ -191,6 +192,14 @@ one. `sync` shows the state (also the `sync ✓` button under the prompt),
 `sync now` syncs right away, `sync off` forgets the token on this device. Sync
 refuses public repositories. The page may only connect to `api.github.com`
 (its Content Security Policy blocks everything else).
+
+**Date maths**: `date` describes a day (week number, day of the year,
+quarter); `date fri + 3 wd`, `date + 90d`, `date 31 jan + 1m` count forward
+or back in days, weeks, months, years or workdays (Monday to Friday);
+`date 1 jan to 25 dec` and `days until 25 dec` / `days since last fri` give
+the distance in days, weeks, months and workdays. `week` shows this ISO week
+(`week 52`, `week 1 2027`, `week 25 dec` for others), each day linking to
+`date`. Dates are written any way the rest of the hub understands them.
 
 **QR codes**: `qr <text>` draws one for a link or any text, made on the page
 (nothing is sent anywhere), always dark on white so phones can scan it in any

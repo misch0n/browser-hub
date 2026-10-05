@@ -352,6 +352,21 @@ async function check(name, fn) {
     await send('n rm ' + id);
   });
 
+  await check('find: grouped, ranked, highlighted; results link to their entry', async () => {
+    await send('t order oat milk #shop');
+    await send('n oat milk is cheaper at the market');
+    await send('find oat milk');
+    const sections = await lastTurn().locator('.section').allInnerTexts();
+    assert.ok(sections.some((t) => /^Tasks/.test(t)) && sections.some((t) => /^Notes/.test(t)), 'sections: ' + sections.join('|'));
+    assert.ok(await lastTurn().locator('.t-hl').count() >= 4);
+    await lastTurn().locator('.seg-run.t-id').first().click();
+    await page.waitForFunction(() => /^(t|n) show /.test([...document.querySelectorAll('.you-text')].pop().textContent));
+    await send('find /^order\\s/');
+    assert.match(await lastText(), /regular expression[\s\S]*order oat milk/);
+    await send('find qqqzzz');
+    assert.match(await lastText(), /Nothing matches/);
+  });
+
   await check('javascript: aliases are rejected', async () => {
     await send('alias evil javascript:alert(1)');
     assert.match(await lastText(), /only http: and https:/);

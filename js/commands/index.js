@@ -1,3 +1,4 @@
+import find from './find.js';
 import notes from './notes.js';
 import tasks from './tasks.js';
 import calendar from './calendar.js';
@@ -35,7 +36,7 @@ export function createCommands(getCtx) {
   };
   const records = createRecords({ st, isBuiltin });
   const helpers = { st, usage, isBuiltin, defs, byName, records };
-  for (const register of [notes, tasks, calendar, tools, aliases, view, meta]) register(add, helpers);
+  for (const register of [find, notes, tasks, calendar, tools, aliases, view, meta]) register(add, helpers);
 
   // Runs a built-in as one undoable step (unless it is undo/redo itself).
   // Anything thrown is reported in the command's output. A step that removed

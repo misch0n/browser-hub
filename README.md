@@ -47,6 +47,15 @@ its fields editable in place (ids in lists link to it): tap a value, change it,
 press Enter, and the page runs the matching `edit` command, so the transcript
 and history show exactly what changed.
 
+**Find**: `find <words>` searches everything (tasks, notes, events, your
+aliases and engines, built-in commands, your command history) and shows the
+results grouped by kind, best group first, best match first, with the matches
+highlighted. Every word has to match somewhere in an item; a word matches whole,
+at the start of a word, inside one, or loosely (`find pmt` finds "payment").
+`find "oat milk"` matches a phrase, `find /^buy\s/` takes a regular expression
+(`i` unless you give flags), and `find milk in:notes` lists just one group, in full.
+Ids in the results open the entry.
+
 **Recurring tasks**: `t water the plants every:mon,thu`, `t pay rent every:month due:2026-11-01`,
 `t stand-up notes every:weekday`; rules are day, weekday, week, month, year,
 `2w` / `10d` / `3m`, or weekdays. `t done` moves the due date to the next

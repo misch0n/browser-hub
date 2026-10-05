@@ -10,6 +10,7 @@ import { edit, actionFor, historySearch } from '../js/core/lineedit.js';
 import { tokenize, oneValue, quote } from '../js/core/args.js';
 import * as K from '../js/core/keys.js';
 import * as R from '../js/core/repeat.js';
+import * as S from '../js/core/search.js';
 import * as C from '../js/core/completion.js';
 import { createLocalStore } from '../js/core/store.js';
 import { createData, DEFAULTS } from '../js/core/data.js';
@@ -630,6 +631,66 @@ test('recurring tasks: rules, next due date, done moves it on', async () => {
   await app.run('t done t2');
   assert.equal(task('t2').done, true);
   assert.ok((await app.run('tasks')).some((l) => l.includes('water the plants  ↻ every Mon, Thu')));
+});
+
+test('search: matching, ranking, regex, categories, highlighting', async () => {
+  // Term matching: whole word > word start > inside a word > fuzzy.
+  assert.equal(S.matchTerm('milk', 'oat milk').score, 100);
+  assert.equal(S.matchTerm('mil', 'oat milk').score, 70);
+  assert.equal(S.matchTerm('ilk', 'oat milk').score, 50);
+  const f = S.matchTerm('pmt', 'pay the payment');
+  assert.ok(f && f.score < 50 && f.score > 0);
+  assert.deepEqual(f.ranges, [[8, 9], [11, 12], [14, 15]]); // p..m..t in "payment", the tightest run
+  assert.equal(S.matchTerm('pmt', 'p and much later t'), null); // too spread out
+  assert.equal(S.matchTerm('zz', 'pizza').score, 50); // substrings match at any length
+  assert.equal(S.matchTerm('xq', 'a quick fox'), null); // no fuzzy for 2 letters
+  assert.match(S.parseRegex('/a(/'), /^not a valid regular expression: /);
+  assert.equal(S.parseRegex('plain words'), null);
+  assert.equal(S.parseRegex('/^buy/').flags, 'i');
+  assert.equal(S.parseRegex('/^Buy/s').flags, 's'); // given flags are kept (case-sensitive here)
+  assert.deepEqual(S.highlight('buy oat milk', [[4, 7], [8, 12], [6, 9]]), [['buy ', ''], ['oat milk', 'hl']]);
+
+  const app = await makeApp();
+  await app.run('t buy oat milk due:tomorrow #shop');
+  await app.run('t pay the payment for milk delivery');
+  await app.run('n milkshake recipe: banana, oat milk');
+  await app.run('n the payment portal password is in the vault');
+  await app.run('ev fri 09:00 milk run with Sam');
+  await app.run('alias milkman https://milk.example.com/');
+  await app.run('t done t2');
+  await app.data.addHistory('t buy oat milk due:tomorrow #shop'); // the page records what was typed
+  const docs = () => S.documents(app.data.state, app.commands.defs, app.commands.isBuiltin);
+  const titles = (r, cat) => r.groups.find((g) => g.category === cat).results.map((x) => x.doc.key);
+
+  const milk = S.search('milk', docs());
+  // Exact word beats prefix: t1 "oat milk" before the done t2; groups ordered by their best hit.
+  assert.deepEqual(titles(milk, 'tasks'), ['t1', 't2']);
+  assert.deepEqual(titles(milk, 'notes'), ['n1']);
+  assert.ok(milk.groups.some((g) => g.category === 'links'));
+  assert.ok(milk.groups.some((g) => g.category === 'history')); // 't buy oat milk …' was typed
+  // Every word must match, anywhere in the item.
+  assert.deepEqual(S.search('oat shop', docs()).groups.map((g) => g.category), ['tasks', 'history']);
+  assert.deepEqual(titles(S.search('"oat milk"', docs()), 'notes'), ['n1']);
+  // Fuzzy finds what a substring wouldn't.
+  assert.ok(titles(S.search('pmnt', docs()), 'notes').includes('n2'));
+  // Regex, and a category filter.
+  assert.deepEqual(titles(S.search('/^buy\\s/', docs()), 'tasks'), ['t1']);
+  const onlyNotes = S.search('milk in:notes', docs());
+  assert.deepEqual(onlyNotes.groups.map((g) => g.category), ['notes']);
+  assert.match(S.search('x in:stuff', docs()).error, /unknown category 'stuff'/);
+  assert.match(S.search('/(/', docs()).error, /not a valid regular expression/);
+  assert.deepEqual(S.search('zzzz', docs()).groups, []);
+
+  // The command.
+  const out = await app.run('find milk');
+  assert.match(out[0], /^# \d+ results for “milk” · \d groups, best first$/);
+  assert.ok(out.includes('## Tasks 2'));
+  assert.ok(out.includes("t1 | buy oat milk  #shop | tomorrow"));
+  assert.ok(out.includes("milkman | your alias  https://milk.example.com/ | "));
+  assert.ok(out.includes('## Your aliases and engines 1'));
+  assert.equal((await app.run('find nothing-here'))[0], '# Nothing matches “nothing-here”');
+  assert.equal((await app.run('find /(/'))[0].startsWith('err: not a valid regular expression'), true);
+  assert.match((await app.run('find /oat/'))[0], /regular expression/);
 });
 
 test('quotes say what you mean: literal text, names with spaces', async () => {

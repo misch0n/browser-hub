@@ -214,6 +214,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .t-k-engine { color: var(--accent); }
 .t-k-set { color: var(--faint); border-style: dashed; }
 
+/* search hits */
+.t-hl { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--strong); border-radius: 2px; }
+
 /* key caps: ⌃R, Ctrl+R */
 .t-kbd {
   display: inline-block;

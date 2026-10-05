@@ -26,7 +26,7 @@ export const DEFAULTS = {
   tasks: () => ({ items: [] }),
   events: () => ({ items: [] }),
   settings: () => ({ zones: [], zoneNames: {}, theme: DEFAULT_THEME, widgets: DEFAULT_WIDGETS.slice(), panel: true,
-    summary: 'on', summaryDismissed: null }),
+    summary: 'on', summaryDismissed: null, name: null }),
   history: () => ({ items: [] }),
 };
 

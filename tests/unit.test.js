@@ -9,6 +9,7 @@ import { dispatch } from '../js/core/dispatch.js';
 import { edit, actionFor, historySearch } from '../js/core/lineedit.js';
 import { tokenize, oneValue, quote } from '../js/core/args.js';
 import * as K from '../js/core/keys.js';
+import { loadDevice, defaultDeviceName, detectBrowser } from '../js/core/device.js';
 import * as R from '../js/core/repeat.js';
 import * as S from '../js/core/search.js';
 import * as Sum from '../js/core/summary.js';
@@ -430,6 +431,8 @@ async function makeApp(storage) {
     clearOutput() {},
     pickFile: async () => base.nextFile || null,
     download(name, text) { base.downloaded = { name, text }; },
+    device: loadDevice(store, { platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/130.0 Safari/537.36' }),
+    setDeviceName(name) { base.device.name = name; store.setLocal('device', base.device); },
   };
   let ctx = base;
   const commands = createCommands(() => ctx);
@@ -946,6 +949,32 @@ test('dates in commands: words after due: and events add', async () => {
   await app.run('ev next friday lunch');
   assert.deepEqual([st().events.items[1].date, st().events.items[1].title], ['2026-10-16', 'lunch']);
   assert.match((await app.run('t x due:someday'))[0], /Can't read the date 'someday'/);
+});
+
+test('config: your name (synced) and this device (local); device names and ids', async () => {
+  const mac = { platform: 'MacIntel', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15' };
+  assert.equal(defaultDeviceName(mac), 'Mac · Safari');
+  assert.equal(defaultDeviceName({ platform: 'iPhone', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) CriOS/130.0 Safari/604.1' }), 'iPhone · Chrome');
+  assert.equal(detectBrowser({ userAgent: 'Mozilla/5.0 (Windows NT 10.0) Chrome/130.0 Safari/537.36 Edg/130.0' }), 'Edge');
+  const app = await makeApp();
+  const dev = app.ctx.device;
+  assert.match(dev.id, /^[a-z0-9]{8}$/);
+  assert.equal(dev.name, 'Mac · Chrome');
+  assert.deepEqual(app.store.getLocal('device'), dev); // the same id next time
+  const shown = await app.run('config');
+  assert.deepEqual(shown.slice(0, 4), ['# Config', 'name: not set  [config edit name = ]', 'device: Mac · Chrome  [config edit device = Mac · Chrome]', 'device id: ' + dev.id + ' · fixed, marks what this device did']);
+  assert.equal((await app.run('config edit name Michael'))[0], '# Updated config name');
+  assert.equal(app.data.state.settings.name, 'Michael'); // a setting: synced, exported
+  await app.run('config edit device Work laptop');
+  assert.equal(app.store.getLocal('device').name, 'Work laptop'); // this device only
+  assert.ok(!JSON.stringify(app.data.state.settings).includes('Work laptop'));
+  await app.run('config edit name');
+  assert.equal(app.ctx.inputSet, 'config edit name Michael');
+  await app.run('config edit name none');
+  assert.equal(app.data.state.settings.name, null);
+  assert.equal((await app.run('config edit colour red'))[0], 'err: config has no field colour');
+  assert.equal((await app.run('config edit device ""'))[0], 'err: A device needs a name');
+  assert.match((await app.run('config edit'))[0], /^# Editing config/);
 });
 
 test('quotes say what you mean: literal text, names with spaces', async () => {

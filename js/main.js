@@ -8,6 +8,7 @@ import { DAY_NAMES_LONG, MONTH_NAMES, kindSeg } from './core/format.js';
 import { daySummary, summaryVisible, summaryRows, summaryCounts, tomorrowLine } from './core/summary.js';
 import { createCommands } from './commands/index.js';
 import { detectOS, keyLabel } from './core/keys.js';
+import { loadDevice } from './core/device.js';
 import { createSync } from './sync.js';
 import { SYNCED } from './core/merge.js';
 import { createTranscript } from './ui/transcript.js';
@@ -54,9 +55,12 @@ const fileEl = $('file');
 
 // ---- commands -----------------------------------------------------------------
 
+const device = loadDevice(store, navigator);
 const ctxBase = {
   data, store, now,
   os: detectOS(navigator),
+  device,
+  setDeviceName(name) { device.name = name; store.setLocal('device', device); },
   setInput: (text) => { prompt.set(text); prompt.focus(); },
   clearOutput: () => transcript.clear(),
   pickFile(accept) {
@@ -436,7 +440,11 @@ async function start() {
   widgets.render();
   widgets.start();
 
+  const hour = now().getHours();
+  const greet = (hour < 5 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening') +
+    (state.settings.name ? ', ' + state.settings.name : '');
   transcript.welcome([
+    [[greet, 'strong'], [' · ' + device.name, 'faint']],
     [['help', 'accent'], [' for commands · ', 'dim'], ['find', 'accent'], [' searches everything · ', 'dim'], ['/', 'accent'], [' palette · ', 'dim'],
       ['?', 'accent'], [' keys · anything else searches ', 'dim'], [state.aliases.defaultEngine, 'accent']],
   ]);

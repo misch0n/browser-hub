@@ -2146,3 +2146,122 @@ test('bounce: the address packed into the link, signed with your synced key, dam
   assert.deepEqual(m.collections.settings.bounceKeys, ['a', 'b']);
   assert.deepEqual(m.conflicts, []);
 });
+
+test('cook: safe and best temperatures, oven times, measures to grams', async () => {
+  const K = await import('../js/lib/cooking.js');
+  // The safe temperatures are the USDA's; nothing marked "best" below safe goes without a warning.
+  const safe = Object.fromEntries(K.TARGETS.map((t) => [t.id, t.safe.c]));
+  assert.deepEqual([safe['chicken-breast'], safe['chicken-whole'], safe['poultry-ground'], safe['ground-meat'], safe['beef-steak'], safe['pork-loin'], safe.salmon, safe.leftovers, safe.eggs],
+    [74, 74, 74, 71, 63, 63, 63, 74, 71]);
+  for (const t of K.TARGETS) {
+    const below = t.best.some((b) => b.c < t.safe.c);
+    assert.equal(!!t.below, below, t.id + ': below flag');
+    if (below) assert.ok(t.warn, t.id + ' needs a warning');
+  }
+  for (const o of K.OVEN) {
+    if (o.target) assert.ok(K.TARGETS.find((t) => t.id === o.target), o.id + ' -> ' + o.target);
+    assert.ok(o.temp >= o.range[0] && o.temp <= o.range[1], o.id);
+  }
+  assert.deepEqual([K.toF(74), K.toF(63), K.toC(350), K.gasMark(180), K.gasMark(160), K.gasMark(220), K.gasMark(120)], [165, 145, 177, '4', '3', '7', '½']);
+
+  // Finding food: every word starts a word of the name or keys; an id wins outright.
+  assert.deepEqual(K.lookup(K.OVEN, 'chicken').map((x) => x.id), ['chicken-whole', 'chicken-breast', 'chicken-thighs', 'chicken-drumsticks', 'chicken-wings']);
+  assert.deepEqual(K.lookup(K.OVEN, 'whole chicken').map((x) => x.id), ['chicken-whole']);
+  assert.deepEqual(K.lookup(K.TARGETS, 'burgers').map((x) => x.id), ['poultry-ground', 'ground-meat']);
+  assert.deepEqual(K.lookup(K.OVEN, 'chicken-breast').map((x) => x.id), ['chicken-breast']);
+
+  // Reading what you typed.
+  assert.deepEqual(K.readOven('chicken 500g at 200'), { kg: 0.5, tempC: 200, fan: false, done: null, given: { n: 200, unit: 'C' }, food: 'chicken' });
+  assert.equal(K.readOven('chicken 2 lb 400f').tempC, 204);
+  assert.equal(K.readOven('chicken 1,5 kg').kg, 1.5);
+  assert.equal(K.readOven('beef 1.5 kg medium rare').done, 'medium-rare');
+  assert.deepEqual([K.readOven('turkey 6kg gas 4').tempC, K.readOven('lamb fan 160').fan], [180, true]);
+  assert.equal(K.readOven('roast 350').tempC, 177); // a bare 350 can only be °F
+
+  // Oven times: by weight for joints, by thickness for pieces, slower when cooler, refused outside the range.
+  const by = (id) => K.OVEN.find((o) => o.id === id);
+  assert.equal(Math.round(K.ovenTime(by('chicken-whole'), 1.6).minutes), 84); // 40 min/kg + 20
+  assert.equal(Math.round(K.ovenTime(by('turkey-whole'), 5).minutes), 190); // 20 min/kg + 90 over 4.5 kg
+  assert.equal(Math.round(K.ovenTime(by('turkey-whole'), 4).minutes), 150); // + 70 under
+  assert.ok(K.ovenTime(by('chicken-whole'), 1.6, 180).minutes > K.ovenTime(by('chicken-whole'), 1.6, 200).minutes);
+  assert.deepEqual([K.ovenTime(by('chicken-breast'), 0.5).low, K.ovenTime(by('chicken-breast'), 2).low], [20, 20]); // weight doesn't matter
+  assert.match(K.ovenTime(by('chicken-whole'), 1.6, 120).error, /too cool/);
+  assert.match(K.ovenTime(by('chicken-whole'), 1.6, 260).error, /too hot/);
+  assert.equal(K.ovenTime(by('beef-roast'), 1.5, null, 'rare').done, 'rare');
+  assert.ok(K.ovenTime(by('beef-roast'), 1.5, null, 'well done').minutes > K.ovenTime(by('beef-roast'), 1.5, null, 'rare').minutes);
+  assert.deepEqual([K.fmtMinutes(84), K.fmtMinutes(7), K.fmtMinutes(120), K.fmtRange(20, 25), K.fmtRange(150, 180)], ['1 h 25 min', '7 min', '2 h', '20–25 min', '2 h 30 min–3 h']);
+
+  // Measures: amounts written every way, spoons, sticks, eggs, weights; grams back to cups.
+  for (const [s, n] of [['1 1/2 cups', 1.5], ['1½ cups', 1.5], ['½ cup', 0.5], ['3/4 cup', 0.75], ['0,5 l', 0.5], ['a cup', 1], ['half a cup', 0.5], ['two tbsp', 2], ['a quarter cup', 0.25]]) {
+    assert.equal(K.readAmount(s).n, n, s);
+  }
+  const g = (s) => { const r = K.readConvert(s); return r.grams === undefined ? r : Math.round(r.grams * 10) / 10; };
+  assert.equal(g('1 spoon sugar'), 12.5);
+  assert.equal(g('1 tbsp sugar'), 12.5);
+  assert.equal(g('1 tsp sugar'), 4.2);
+  assert.equal(g('2 cups flour'), 250);
+  assert.equal(g('1 cup brown sugar'), 220); // not white sugar
+  assert.equal(g('1 cup icing sugar'), 120);
+  assert.equal(g('1 cup cream cheese'), 232); // not cream
+  assert.equal(g('½ stick butter'), 56.5);
+  assert.equal(g('2 sticks of butter'), 226);
+  assert.equal(g('3 T honey'), 63.8); // T tablespoon, t teaspoon
+  assert.equal(g('1 t salt'), 6);
+  assert.equal(g('8 oz cream cheese'), 226.8);
+  assert.equal(g('1 lb butter'), 453.6);
+  assert.equal(g('2 eggs'), 100);
+  assert.equal(g('3 yolks'), 54);
+  assert.equal(g('1 uk pint milk'), 579.8);
+  assert.equal(g('2 fl oz oil'), 53.2);
+  assert.match(K.readConvert('1 stick flour').error, /measure of butter/);
+  assert.match(K.readConvert('some flour').error, /start with an amount/);
+  assert.match(K.readConvert('2 handfuls flour').error, /say a measure/);
+  assert.equal(K.readConvert('1 cup unicorn').ingredient, null);
+  const flour = K.INGREDIENTS.find((i) => i.id === 'flour');
+  assert.deepEqual(K.asMeasures(250, flour), ['2 cups']);
+  assert.deepEqual(K.asMeasures(31.25, flour), ['¼ cup', '4 tbsp']);
+  assert.deepEqual(K.asMeasures(6, K.INGREDIENTS.find((i) => i.id === 'salt')), ['1 tsp']);
+  assert.deepEqual(K.asMeasures(56.5, K.INGREDIENTS.find((i) => i.id === 'butter')), ['¼ cup', '4 tbsp', '½ stick']);
+  assert.deepEqual([K.fmtGrams(12.5), K.fmtGrams(4.17), K.fmtGrams(312.5), K.fmtGrams(1250)], ['12.5 g', '4.2 g', '313 g', '1.25 kg']);
+});
+
+test('cook command: target, oven, convert', async () => {
+  const app = await makeApp();
+  const ck = await app.run('cook target chicken breast');
+  assert.deepEqual(ck.slice(0, 4), ['# Chicken or turkey breast · inside temperature', '## Chicken or turkey breast  ⚠ best is below safe', 'safe: 74°C (165°F)', 'juicy: 65°C (149°F)']);
+  assert.equal(ck.tone, 'warn');
+  assert.ok(ck.some((l) => /^warn: Pregnant, very young/.test(l)));
+  const all = await app.run('cook target');
+  assert.ok(all.includes('## Poultry'));
+  assert.ok(all.includes('Burgers, mince, meatballs, meatloaf (beef, pork, lamb) | 71°C | done 71°C | ⚠'));
+  assert.match((await app.run('cook target unicorn'))[0], /^err: No temperatures for "unicorn"/);
+
+  const ov = await app.run('cook oven chicken 500g at 200');
+  assert.equal(ov[0], '# 5 ways with "chicken" · 500 g at 200°C · tap one for details');
+  assert.ok(ov.includes('Chicken breasts (boneless) | 200°C | 20–25 min | 74°C'));
+  const whole = await app.run('cook oven whole chicken 1.6kg');
+  assert.deepEqual(whole.slice(0, 4), ['# Whole chicken · 1.6 kg at 190°C', 'oven: 190°C (374°F) · fan 170°C · gas 5', 'time: about 1 h 25 min · start checking at 1 h 15 min',
+    'done at: 74°C (165°F) inside · cook target chicken-whole']);
+  assert.equal(whole.copied, '1 h 25 min');
+  const fan = await app.run('cook oven lamb leg 2kg fan 160');
+  assert.equal(fan[0], '# Leg of lamb · 2 kg at 180°C (160°C fan)');
+  assert.ok(fan.includes('done at: 57–60°C (135–140°F) inside · cook target beef-steak'));
+  assert.ok((await app.run('cook oven chicken breasts 1kg')).includes('dim: Pieces cook by their thickness, not the total weight: 1 kg of them takes as long as one'));
+  assert.match((await app.run('cook oven whole chicken at 120'))[1], /^err: At 120°C it is too cool/);
+  assert.deepEqual(await app.run('cook oven steak'), ['err: No oven times for "steak" · cook oven lists them', 'Its temperatures: cook target steak']);
+
+  const sp = await app.run('cook convert 1 spoon sugar');
+  assert.equal(sp[0], '# 1 tablespoon sugar = 12.5 g');
+  assert.equal(sp.copied, '12.5');
+  assert.ok(sp.includes('dim: A spoon is taken as a tablespoon (15 ml); say tsp for a teaspoon'));
+  assert.equal((await app.run('cook convert ½ stick butter'))[0], '# ½ stick butter = 57 g');
+  assert.equal((await app.run('cook convert 250 g flour'))[0], '# 250 g flour ≈ 2 cups');
+  assert.equal((await app.run('cook convert 350f'))[0], '# 350°F = 177°C · fan 157°C · gas 4');
+  assert.equal((await app.run('cook convert gas 6'))[0], '# gas 6 = 200°C (392°F) · fan 180°C · gas 6');
+  const unknown = await app.run('cook convert 1 cup unicorn');
+  assert.deepEqual(unknown.slice(0, 2), ['# 1 cup = 240 ml', "warn: I don't know how much unicorn weighs per cup; as water it would be 240 g"]);
+  const table = await app.run('cook convert');
+  assert.ok(table.includes('flour (plain, all-purpose) | 125 g | 7.8 g | 2.6 g'));
+  assert.match((await app.run('cook bake'))[0], /^# /);
+  assert.match((await app.run('cook nonsense'))[0], /^# Usage/);
+});

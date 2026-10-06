@@ -44,6 +44,7 @@ still work.
 | Text | `count`, `case` |
 | Developer | `cidr`, `hash`, `jwt`, `url`, `regex`, `diff`, `cron`, `color` |
 | Share | `clip`, `bounce` |
+| Kitchen | `cook target`, `cook oven`, `cook convert` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
 | Sync | `sync` |
@@ -232,6 +233,18 @@ whether the address is inside).
 **QR codes**: `qr <text>` draws one for a link or any text, made on the page
 (nothing is sent anywhere), always dark on white so phones can scan it in any
 theme. Error correction is raised as far as the size allows.
+
+**Kitchen**: `cook target [food]` gives the inside temperature to cook to:
+the safe one (USDA) and the best one for taste and texture, with a warning
+wherever the best is below the safe one or where undercooking is dangerous
+(poultry, mince, sausages, leftovers). `cook oven chicken 500g at 200`
+answers how long, and without a temperature also at what; joints go by weight,
+pieces by thickness, and every answer ends in the temperature to check for.
+It understands fan ovens (`fan 160`), °F (`400f`), gas marks and doneness
+(`beef 1.5kg medium-rare`). `cook convert 1 spoon sugar`, `½ stick butter`,
+`2 cups flour`, `8 oz cream cheese` give grams for a kitchen scale (and
+`250 g flour` gives cups back); `cook convert` alone is the table, and
+`cook convert 350f` converts oven temperatures.
 
 **Bounce links**: `bounce <url>` gives a link to this page that sends whoever
 opens it on to the address. The address travels inside the link (packed, and

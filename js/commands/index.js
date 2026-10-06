@@ -15,6 +15,7 @@ import dev from './dev.js';
 import text from './text.js';
 import keep from './keep.js';
 import bounce from './bounce.js';
+import cook from './cook.js';
 import { usageSegs } from '../core/format.js';
 import { createRecords } from './records.js';
 import { removes } from '../core/undo.js';
@@ -48,7 +49,7 @@ export function createCommands(getCtx) {
   };
   const records = createRecords({ st, isBuiltin });
   const helpers = { st, usage, isBuiltin, defs, byName, records };
-  for (const register of [find, notes, tasks, calendar, keep, dates, tools, text, dev, clip, bounce, zones, aliases, view, sync, config, meta]) register(add, helpers);
+  for (const register of [find, notes, tasks, calendar, keep, dates, tools, text, dev, clip, bounce, cook, zones, aliases, view, sync, config, meta]) register(add, helpers);
 
   // Runs a built-in as one undoable step (unless it is undo/redo itself).
   // Anything thrown is reported in the command's output. A step that removed

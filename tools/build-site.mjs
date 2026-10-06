@@ -19,6 +19,12 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 for (const f of ['style.css', 'themes.css', 'opensearch.xml', 'js']) cpSync(f, join(out, f), { recursive: true });
 
+// The Mermaid renderer's frame page: its script stamped too (the vendored
+// library's own .mjs files sit in a versioned folder and are left as they are).
+const frame = readFileSync('mermaid-frame.html', 'utf8');
+if (!frame.includes('src="js/mermaid-frame.js"')) fail('mermaid-frame.html no longer references js/mermaid-frame.js');
+writeFileSync(join(out, 'mermaid-frame.html'), frame.replace('src="js/mermaid-frame.js"', 'src="js/mermaid-frame.js' + q + '"'));
+
 // index.html: the four entry points.
 let html = readFileSync('index.html', 'utf8');
 const entries = ['themes.css', 'style.css', 'js/boot.js', 'js/main.js'];

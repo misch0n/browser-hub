@@ -425,6 +425,8 @@ function recorder() {
     copyable: (text) => { lines.copied = text; },
     qr: (text, ecl) => lines.push('QR ' + ecl + ' ' + text),
     barcode: (spec) => lines.push('BARCODE ' + JSON.stringify(spec)),
+    diagram: (code, name) => lines.push('DIAGRAM ' + (name || '') + ': ' + code.split('\n')[0]),
+    diagramEditor: (spec) => { lines.push('EDITOR ' + spec.title + ' · ' + spec.save.label + ' · ' + (spec.save.command || spec.save.input) + ' · ' + spec.code.split('\n')[0]); lines.editor = spec; },
     jsonTree: (text) => lines.push('JSONTREE ' + text),
     dataTable: (spec) => lines.push('DATATABLE ' + JSON.stringify(spec)),
     swatch: (items) => lines.push('SWATCH ' + items.map((i) => i.color + (i.text ? ' ' + i.text.value + ' ' + i.text.color : '') + (i.label ? ' ' + i.label : '')).join(' | ')),
@@ -459,6 +461,7 @@ async function makeApp(storage) {
     const r = rec.lines.slice();
     Object.defineProperty(r, 'tone', { value: rec.tone(), enumerable: false });
     Object.defineProperty(r, 'copied', { value: rec.lines.copied, enumerable: false });
+    Object.defineProperty(r, 'editor', { value: rec.lines.editor, enumerable: false });
     return r;
   };
   return { run, data, store, storage, ctx: base, commands, setNow: (d) => { clock = d; } };
@@ -1584,7 +1587,7 @@ test('import: conflicts reported, bad entries rejected, schema checked, never ov
   assert.ok(r.lines.some((l) => /skipped alias 'gh'.*already exists/.test(l)));
   assert.ok(r.lines.some((l) => /skipped alias 'help'.*built-in/.test(l)));
   assert.ok(r.lines.some((l) => /skipped alias 'js'/.test(l)));
-  assert.deepEqual(r.counts, { notes: 1, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, aliases: 2, zones: 1 });
+  assert.deepEqual(r.counts, { notes: 1, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, diagrams: 0, aliases: 2, zones: 1 });
   assert.equal(r.invalid, 2);
   assert.equal(r.collections.settings.theme, 'nord'); // this browser already chose a theme
   assert.deepEqual(r.collections.settings.widgets, ['notes']);
@@ -3216,4 +3219,121 @@ test('barcode command: types, check digits worked out, options first, replay spe
   assert.equal((await app.run('barcode'))[0], '# Usage · barcode');
   assert.equal((await app.run('barcode qr hello'))[1], 'QR M hello'.replace('M', (await app.run('qr hello'))[1].split(' ')[1]));
   assert.deepEqual(app.commands.byName.get('barcode').complete([]).map((x) => x.value), ['code128', 'code39', 'ean13', 'ean8', 'upca', 'itf', 'codabar', 'qr']);
+});
+
+// ---- batch 5: diagrams ----------------------------------------------------------------
+
+import * as Dia from '../js/lib/diagrams.js';
+
+test('diagrams lib: kinds from the first line, the library file read back', () => {
+  assert.equal(Dia.diagramKind('%% a comment\n\ngraph TD\nA-->B'), 'flowchart');
+  assert.equal(Dia.diagramKind('---\ntitle: Flow\n---\nsequenceDiagram\nA->>B: hi'), 'sequence');
+  assert.equal(Dia.diagramKind('erDiagram\n A ||--o{ B : has'), 'entity relationship');
+  assert.equal(Dia.diagramKind('xychart-beta\n'), 'XY chart');
+  assert.equal(Dia.diagramKind('hello'), 'unknown');
+  assert.equal(Dia.diagramKind(''), 'empty');
+  assert.equal(Dia.diagramKind(Dia.STARTER), 'flowchart');
+  const file = Dia.libraryFile([{ id: 'd1', name: 'a', code: 'pie\n "x": 1', created: 'c', updated: 'u' }], new Date(MON));
+  assert.deepEqual(file.diagrams, [{ name: 'a', code: 'pie\n "x": 1', created: 'c', updated: 'u' }]);
+  assert.equal(Dia.readLibrary(JSON.stringify(file)).diagrams.length, 1);
+  assert.deepEqual(Dia.readLibrary('[{"name":"x","code":"graph LR"},{"name":"","code":"x"},{"code":"y"}]'), { diagrams: [{ name: 'x', code: 'graph LR', created: undefined, updated: undefined }], invalid: 2 });
+  assert.equal(Dia.readLibrary('{"schema":1,"collections":{"diagrams":{"items":[{"name":"z","code":"pie"}]}}}').diagrams[0].name, 'z');
+  assert.throws(() => Dia.readLibrary('{"x":1}'), /no diagrams/);
+  assert.throws(() => Dia.readLibrary('nope'), /not JSON/);
+});
+
+test('diagrams: editor draft on this device, save as, save, rename, code, remove and undo, export/import, find', async () => {
+  const app = await makeApp();
+  const flow = 'flowchart LR\n  a --> b';
+  // The editor opens on a starter draft; typing keeps the draft on this device only.
+  const ed = await app.run('mermaid');
+  assert.equal(ed[0], '# New diagram · Mermaid');
+  assert.equal(ed[1], 'EDITOR new diagram · Save as… · diagrams add  · flowchart LR');
+  ed.editor.onChange(flow);
+  assert.equal(app.store.getLocal('diagram-draft').code, flow);
+  assert.equal(app.data.state.diagrams.items.length, 0);
+  // Save as: the draft becomes d1, and the editor now edits d1.
+  const added = await app.run('diagrams add "Sign up"');
+  assert.deepEqual(added, ['# Added diagram d1 · Sign up', 'DIAGRAM Sign up: flowchart LR']);
+  assert.deepEqual(app.data.state.diagrams.items.map((d) => [d.id, d.name, d.code]), [['d1', 'Sign up', flow]]);
+  assert.equal(app.store.getLocal('diagram-draft').target, 'd1');
+  // Show: the drawing, the name editable in place, the code opening the editor.
+  const show = await app.run('diagrams d1');
+  assert.equal(show[0], '# Diagram d1 · Sign up · flowchart');
+  assert.equal(show[1], 'DIAGRAM Sign up: flowchart LR');
+  assert.equal(show[2], 'name: Sign up  [diagrams d1 edit name = Sign up]');
+  assert.equal(show[3], 'code: flowchart · 2 lines  live editor');
+  // Edit: the editor on d1; Save is a command.
+  const e1 = await app.run('diagrams d1 edit');
+  assert.equal(e1[1], 'EDITOR Sign up · Save · diagrams d1 save · flowchart LR');
+  assert.deepEqual(await app.run('diagrams d1 save'), ['# No changes to d1']);
+  e1.editor.onChange(flow + '\n  b --> c');
+  assert.equal((await app.run('diagrams d1 save'))[0], '# Saved diagrams d1 · Sign up · 3 lines');
+  assert.equal(app.data.state.diagrams.items[0].code, flow + '\n  b --> c');
+  // Unsaved changes come back when the editor opens again; saving another one is refused.
+  (await app.run('diagrams d1 edit')).editor.onChange('pie\n "a": 1');
+  const again = await app.run('diagrams d1 edit code');
+  assert.match(again[1], /^warn: Unsaved changes from before are back/);
+  assert.equal(again[2], 'EDITOR Sign up · Save · diagrams d1 save · pie');
+  assert.equal((await app.run('diagrams add other graph TD\n x-->y'))[0], '# Added diagram d2 · other');
+  assert.match((await app.run('diagrams d2 save'))[0], /^err: The editor isn’t open on d2/);
+  // Rename, code, list, find.
+  assert.equal((await app.run('diagrams d1 edit name Onboarding'))[0], '# Updated diagrams d1 name');
+  assert.deepEqual(await app.run('diagrams d2 code'), ['# Code of d2 · other', 'graph TD', ' x-->y']);
+  const list = await app.run('diagrams');
+  assert.deepEqual(list.slice(0, 4), ['# 2 diagrams · tap one to see it', '| id | name | kind | changed', 'd1 | Onboarding | flowchart | today', 'd2 | other | flowchart | today']);
+  assert.equal((await app.run('diagrams onboard'))[0], '# 1 diagram matching "onboard"');
+  assert.ok((await app.run('find onboarding')).some((l) => /d1 \| Onboarding  flowchart/.test(l)));
+  // Remove and undo.
+  assert.equal((await app.run('diagrams d2 rm'))[0], '# Removed diagram d2');
+  await app.run('undo');
+  assert.equal(app.data.state.diagrams.items.length, 2);
+  // Export the library; import it into another device: nothing twice.
+  await app.run('diagrams export');
+  assert.match(app.ctx.downloaded.name, /^diagrams-\d{4}-\d{2}-\d{2}\.json$/);
+  const lib = app.ctx.downloaded.text;
+  assert.equal(JSON.parse(lib).diagrams.length, 2);
+  const other = await makeApp();
+  other.ctx.nextFile = { name: 'diagrams.json', size: lib.length, text: async () => lib };
+  const imp = await other.run('diagrams import');
+  assert.equal(imp[0], '# Imported 2 diagrams');
+  assert.deepEqual(other.data.state.diagrams.items.map((d) => d.id + ':' + d.name), ['d1:Onboarding', 'd2:other']);
+  const twice = await other.run('diagrams import');
+  assert.deepEqual(twice.slice(0, 2), ['# Imported 0 diagrams', 'dim: 2 diagrams already here, skipped']);
+  // The whole-hub export carries them too, and import adds them.
+  const file = await app.store.exportAll();
+  const third = await makeApp();
+  const { merge: mergeImport } = await import('../js/core/importer.js');
+  const cur = {};
+  for (const k of Object.keys(DEFAULTS)) cur[k] = third.data.state[k];
+  assert.equal(mergeImport(cur, file, third.commands.isBuiltin, () => MON).counts.diagrams, 2);
+  // mermaid <code> draws once and makes it the draft, ready for diagrams add.
+  const once = await app.run('mermaid sequenceDiagram\n A->>B: hi');
+  assert.deepEqual(once.slice(0, 2), ['# Mermaid · sequence', 'DIAGRAM diagram: sequenceDiagram']);
+  assert.deepEqual(app.store.getLocal('diagram-draft').target, null);
+  assert.equal((await app.run('diagrams add seq'))[0], '# Added diagram d3 · seq');
+  assert.match((await app.run('diagrams add'))[0], /^err: diagrams add <name>/);
+  const fresh = await makeApp();
+  assert.match((await fresh.run('diagrams add x'))[0], /^err: Nothing to keep/);
+  assert.equal((await fresh.run('diagrams'))[0], '# No diagrams yet');
+  assert.deepEqual(app.commands.byName.get('diagrams').complete(['d1']).map((x) => x.value), ['edit', 'save', 'code', 'rm']);
+});
+
+test('diagrams sync between devices, renumbered on a clash', async () => {
+  const gh = fakeGitHub({ tokens: ['tok'], repos: { 'me/data': { private: true } } });
+  const dev = async () => {
+    const a = await makeApp();
+    a.ctx.sync = createSync({ data: a.data, store: a.store, now: () => new Date(MON), fetch: gh.fetch, device: 'test' });
+    return a;
+  };
+  const A = await dev(), B = await dev();
+  await A.run('diagrams add one graph LR\n a-->b');
+  await B.run('diagrams add two pie\n "x": 1');
+  await A.ctx.sync.setup('me/data', null, 'tok');
+  const rb = await B.ctx.sync.setup('me/data', null, 'tok');
+  assert.deepEqual(rb.renumbered, [{ from: 'd1', to: 'd2' }]);
+  await A.ctx.sync.syncNow();
+  for (const x of [A, B]) assert.deepEqual(x.data.state.diagrams.items.map((d) => d.id + ':' + d.name), ['d1:one', 'd2:two']);
+  // The draft stays on its device.
+  assert.equal(JSON.stringify(gh.state.repos).includes('diagram-draft'), false);
 });

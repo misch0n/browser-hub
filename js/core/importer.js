@@ -54,7 +54,7 @@ export function merge(current, file, isBuiltin, now) {
   const nextId = (prefix) => { counters[prefix] = (counters[prefix] || 0) + 1; return prefix + counters[prefix]; };
   const stamp = (v) => (isStamp(v) ? v : now().toISOString());
   const items = (c) => (src[c] && Array.isArray(src[c].items) ? src[c].items : []);
-  const added = { notes: 0, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, history: 0 };
+  const added = { notes: 0, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, diagrams: 0, history: 0 };
   let invalid = 0;
 
   for (const n of items('notes')) {
@@ -128,6 +128,16 @@ export function merge(current, file, isBuiltin, now) {
     added.foods++;
   }
 
+  // Diagrams: one with the same name and code here already isn't added twice.
+  for (const d of items('diagrams')) {
+    const name = KINDS.diagram.fields.name.parse(d && typeof d.name === 'string' ? d.name : '');
+    const code = KINDS.diagram.fields.code.parse(d && typeof d.code === 'string' ? d.code : '');
+    if (name.error || code.error) { invalid++; continue; }
+    if (out.diagrams.items.some((x) => x.name === name.value && x.code === code.value)) continue;
+    out.diagrams.items.push({ id: nextId('d'), name: name.value, code: code.value, created: stamp(d.created), updated: stamp(d.updated || d.created) });
+    added.diagrams++;
+  }
+
   // Aliases follow the conflict rules: never overwrite, report every collision.
   const srcAliases = src.aliases && Array.isArray(src.aliases.entries) ? src.aliases.entries : [];
   let aliasesAdded = 0;
@@ -186,6 +196,6 @@ export function merge(current, file, isBuiltin, now) {
     if (!sameList(ws, DEFAULT_WIDGETS)) out.settings.widgets = ws;
   }
 
-  const counts = { notes: added.notes, tasks: added.tasks, events: added.events, snippets: added.snippets, later: added.later, foods: added.foods, aliases: aliasesAdded, zones: zonesAdded };
+  const counts = { notes: added.notes, tasks: added.tasks, events: added.events, snippets: added.snippets, later: added.later, foods: added.foods, diagrams: added.diagrams, aliases: aliasesAdded, zones: zonesAdded };
   return { collections: out, counts, invalid, lines };
 }

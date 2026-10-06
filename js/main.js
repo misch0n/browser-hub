@@ -36,6 +36,7 @@ const now = () => new Date();
 const transcript = createTranscript($('transcript'), $('turns'), {
   run: (cmd) => { run(cmd); autoFocus(); },
   refocus: () => autoFocus(),
+  setInput: (text) => { prompt.set(text); prompt.focus(); },
   onCopyable: (text) => setCopyable(text),
   onExpired: (text) => { if (lastCopyable === text) { lastCopyable = ''; copyEl.hidden = true; } },
 });

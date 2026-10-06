@@ -6,12 +6,14 @@ import { toField, fromField } from '../core/paste.js';
 import { encodeQR, qrPath } from '../lib/qr.js';
 import { encodeBarcode, barcodeSvg, barcodeGeometry } from '../lib/barcode.js';
 import { exportRow, qrSvgString, qrCanvas, barcodeCanvas, fileName } from './export.js';
+import { renderMermaid, svgImage, svgToPng } from './mermaid.js';
 
 const MAX_TURNS = 400;
+const touch = () => globalThis.matchMedia && matchMedia('(pointer: coarse)').matches;
 
 // The Out methods that draw something: recorded, so a turn can be stored in
 // the shared history and drawn again later, on any device.
-const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'barcode', 'swatch', 'jsonTree', 'dataTable'];
+const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'barcode', 'diagram', 'swatch', 'jsonTree', 'dataTable'];
 const plain = (v) => JSON.parse(JSON.stringify(v === undefined ? null : v));
 
 // The scrolling conversation: each command is a turn with the echoed input
@@ -231,6 +233,74 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
         svg.setAttribute('aria-label', 'Barcode ' + r.type + ': ' + r.text);
         push(h('div', { class: 'qr-wrap' }, svg,
           exportRow(fileName(r.type, r.text), () => barcodeSvg(r, opts), () => barcodeCanvas(barcodeGeometry(r, opts)))));
+      },
+      // A Mermaid diagram, drawn (again, on replay) from its code.
+      diagram(code, name) {
+        const box = h('div', { class: 'diagram-box' }, h('div', { class: 'line t-faint', text: 'Drawing…' }));
+        const wrap = h('div', { class: 'diagram-wrap' }, box);
+        push(wrap);
+        renderMermaid(code).then((r) => {
+          box.replaceChildren(svgImage(r.svg, r.width, r.height, (name || 'diagram') + ' (Mermaid)'));
+          wrap.append(exportRow(fileName('diagram', name || ''), () => r.svg, () => svgToPng(r.svg)));
+        }, (e) => {
+          box.replaceChildren(h('div', { class: 'line t-err', text: 'Mermaid: ' + e.message }));
+        });
+      },
+      // The live editor: code on the left (above on phones), the drawing beside it.
+      // spec: { code, title, fileName, onChange(code), save: { label, command } | { label, input } }
+      diagramEditor(spec) {
+        if (mode.replay) return;
+        const area = h('textarea', { class: 'dg-code', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off', 'aria-label': 'Mermaid code for ' + spec.title });
+        area.value = spec.code;
+        area.rows = Math.min(18, Math.max(8, spec.code.split('\n').length + 1));
+        const status = h('div', { class: 'line t-faint dg-status', text: 'Drawing…' });
+        const preview = h('div', { class: 'diagram-box dg-preview' });
+        let last = null, timer = null, saveTimer = null, seq = 0;
+        const draw = () => {
+          const n = ++seq;
+          renderMermaid(area.value).then((r) => {
+            if (n !== seq) return;
+            last = r;
+            preview.classList.remove('dg-stale');
+            preview.replaceChildren(svgImage(r.svg, r.width, r.height, spec.title + ' (Mermaid)'));
+            status.className = 'line t-ok dg-status';
+            status.textContent = '✓ drawn · ' + r.width + ' × ' + r.height;
+          }, (e) => {
+            if (n !== seq) return;
+            preview.classList.add('dg-stale');
+            status.className = 'line t-err dg-status';
+            status.textContent = e.message;
+          });
+        };
+        const flush = () => { clearTimeout(saveTimer); spec.onChange(area.value); };
+        area.addEventListener('input', () => {
+          clearTimeout(timer);
+          timer = setTimeout(draw, 350);
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(flush, 250);
+        });
+        area.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          // Tab indents; Esc leaves the box for the prompt.
+          if (e.key === 'Escape') { e.preventDefault(); flush(); area.blur(); if (opts.refocus) opts.refocus(); return; }
+          if (e.key === 'Tab' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            area.setRangeText('  ', area.selectionStart, area.selectionEnd, 'end');
+            area.dispatchEvent(new Event('input'));
+          }
+          if ((e.key === 's' || e.key === 'S') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
+        });
+        const save = () => {
+          flush();
+          if (spec.save.command && opts.run) opts.run(spec.save.command);
+          else if (spec.save.input && opts.setInput) opts.setInput(spec.save.input);
+        };
+        const row = exportRow(fileName('diagram', spec.fileName || ''),
+          () => (last ? last.svg : ''), () => (last ? svgToPng(last.svg) : Promise.reject(new Error('nothing drawn'))),
+          [{ label: spec.save.label, title: spec.save.command ? spec.save.command + ' (Ctrl+S)' : 'Name it and keep it', click: save }]);
+        push(h('div', { class: 'dg-editor' }, h('div', { class: 'dg-left' }, area, status), h('div', { class: 'dg-right' }, preview, row)));
+        draw();
+        if (!touch()) setTimeout(() => area.focus(), 0);
       },
       // Colour samples: [{ color: '#rrggbb[aa]', label }]. SVG fills, so no inline styles (CSP).
       swatch(items) {

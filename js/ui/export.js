@@ -15,7 +15,8 @@ export function saveBlob(name, blob) {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
-const savePng = (name, canvas) => canvas.toBlob((b) => b && saveBlob(name, b), 'image/png');
+// A canvas, or a promise of a PNG blob (drawings that load first).
+const savePng = (name, png) => (png && typeof png.then === 'function' ? png.then((b) => saveBlob(name, b), () => {}) : png.toBlob((b) => b && saveBlob(name, b), 'image/png'));
 const saveSvg = (name, svg) => saveBlob(name, new Blob([svg], { type: 'image/svg+xml' }));
 
 // A file name (without extension) from what the code holds: 'qr-misch0n-github-io'
@@ -61,14 +62,15 @@ export function barcodeCanvas(geo, ratio = 2) {
   return c;
 }
 
-// The row of "SVG" "PNG" buttons under a code.
-export function exportRow(name, getSvg, getCanvas) {
+// The row of "SVG" "PNG" buttons under a code; getPng gives a canvas or a promise of a PNG blob.
+// extra: more buttons first.
+export function exportRow(name, getSvg, getPng, extra = []) {
   const btn = (label, title, fn) => {
     const b = h('button', { class: 'copy', type: 'button', title, text: label });
     b.addEventListener('click', fn);
     return b;
   };
-  return h('div', { class: 'export-row' },
+  return h('div', { class: 'export-row' }, ...extra.map((x) => btn(x.label, x.title || x.label, x.click)),
     btn('SVG', 'Save as SVG (scales to any size)', () => saveSvg(name + '.svg', getSvg())),
-    btn('PNG', 'Save as PNG', () => savePng(name + '.png', getCanvas())));
+    btn('PNG', 'Save as PNG', () => savePng(name + '.png', getPng())));
 }

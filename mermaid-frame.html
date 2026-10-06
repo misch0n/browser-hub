@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- The hidden helper page that draws Mermaid diagrams. Mermaid writes inline
+       styles, so only this page allows them; it can't connect anywhere. The
+       hub shows the result as an image, never as live markup. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Mermaid renderer</title>
+  <script type="module" src="js/mermaid-frame.js"></script>
+</head>
+<body></body>
+</html>

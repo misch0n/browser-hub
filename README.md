@@ -40,6 +40,7 @@ still work.
 | Dates | `date`, `days`, `week` |
 | Snippets | `snippets` (`snip`) |
 | Read later | `later` |
+| Diagrams | `diagrams`, `mermaid` |
 | Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `barcode`, `pw` |
 | Developer | `json`, `csv`, `base`, `escape`, `cidr`, `url`, `regex`, `diff`, `cron`, `color` |
 | Security | `crypt`, `cert`, `jwt`, `hmac`, `hash`, `pw` |
@@ -220,6 +221,25 @@ created offline under the same id get renumbered. When GitHub refuses the token
 one. `sync` shows the state (also the `sync ✓` button under the prompt),
 `sync now` syncs right away, `sync off` forgets the token on this device. Sync
 refuses public repositories. The token is only ever sent to `api.github.com`.
+
+**Diagrams**: `mermaid` opens a live editor for a [Mermaid](https://mermaid.js.org)
+diagram (flowcharts, sequence, class, state, ER, Gantt, pie, mind maps and the
+rest): the code beside the drawing, redrawn as you type, with any mistake
+shown under it while the last good drawing stays. What you type is kept on
+this device as a draft (never synced) until you keep it: **Save as…** (or
+`diagrams add <name>`) makes it a diagram, and in `diagrams d1 edit` **Save**
+(or Ctrl+S, or `diagrams d1 save`) writes it back. Kept diagrams sync and undo
+like notes: `diagrams` lists them, `diagrams d1` draws one, `diagrams d1 edit
+name <name>` renames, `diagrams d1 code` shows the source, `diagrams d1 rm`
+removes it. `mermaid <code>` draws pasted code once. Every drawing has SVG and
+PNG buttons; `diagrams export` saves the whole library as JSON and `diagrams
+import` adds one (skipping diagrams already here).
+
+Mermaid 12.1.0 is vendored in `js/vendor/` (MIT, loaded on first use) and
+runs in a hidden helper page, `mermaid-frame.html`, which may use inline
+styles but can't connect anywhere. Drawings come back as SVG and are shown as
+images, so nothing in a diagram can run in the hub; for that the hub's CSP
+allows `blob:` images.
 
 **Snippets** are named pieces of text you paste often (a signature, an
 address, a command): `snip sig` shows one with a copy button. **Later** keeps
@@ -404,7 +424,8 @@ sync file for ever:
 
 ## Code layout
 
-No build step and no dependencies; the page loads native ES modules.
+No build step; the page loads native ES modules. The one dependency, Mermaid,
+is vendored and loaded only when a diagram is drawn.
 
 ```
 index.html, style.css, themes.css
@@ -413,6 +434,8 @@ tools/            build-site.mjs: cache-busted copy of the site for deploys
 js/main.js        wiring: prompt, transcript, palette, widgets, lifecycle
 js/core/          data model: store, collections, dispatch, completion, import
 js/lib/           pure helpers: calc, units, time zones, ics, base64, epoch
+js/vendor/        third-party code, as published (Mermaid)
+mermaid-frame.html  the hidden page Mermaid draws in
 js/commands/      built-in commands; they write structured output only
 js/ui/            DOM: transcript renderer, prompt, palette, widgets
 ```

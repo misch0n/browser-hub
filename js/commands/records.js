@@ -26,8 +26,11 @@ export const NOUNS = {
   snippet: { noun: 'snippets', short: 'snip', one: 'snippet' },
   link: { noun: 'later', short: 'later', one: 'link' },
   food: { noun: 'cook calorie', short: 'cook calorie', one: 'food' },
+  diagram: { noun: 'diagrams', short: 'diagrams', one: 'diagram' },
   alias: { noun: 'aliases', short: 'alias', one: 'alias' },
 };
+
+const firstCodeLine = (code) => (code.split('\n').find((l) => l.trim() && !/^\s*%%/.test(l)) || '').trim().slice(0, 60);
 
 const keyOf = (kind, item) => (kind === 'alias' ? item.name : item.id);
 export const refOf = (kind, item) => NOUNS[kind].noun + ' ' + keyOf(kind, item);
@@ -43,6 +46,8 @@ function display(kind, field, item, today) {
     case 'event.time': return item.time ? [[item.time, 'num']] : [['all day', 'faint']];
     case 'snippet.name': return [[item.name, 'accent']];
     case 'food.name': return [[item.name, 'strong']];
+    case 'diagram.name': return [[item.name, 'strong']];
+    case 'diagram.code': return [[firstCodeLine(item.code), 'pre'], ['  ' + item.code.split('\n').length + ' lines · tap for the live editor', 'faint']];
     case 'food.kcal': return [[item.kcal + ' kcal', 'num'], [' per 100 g', 'faint']];
     case 'food.protein': case 'food.fat': case 'food.carbs': case 'food.sugar': case 'food.fiber': case 'food.sat': case 'food.salt':
       return item[field] === null || item[field] === undefined ? none : [[item[field] + ' g', 'num']];
@@ -61,7 +66,7 @@ function display(kind, field, item, today) {
 // Read-only rows shown under the editable ones.
 function extras(kind, item, today) {
   const when = (iso) => [[dayLabel(todayISO(new Date(iso)), today), 'dim']];
-  if (kind === 'note' || kind === 'snippet' || kind === 'food') return [['created', when(item.created)], ['updated', when(item.updated)]];
+  if (kind === 'note' || kind === 'snippet' || kind === 'food' || kind === 'diagram') return [['created', when(item.created)], ['updated', when(item.updated)]];
   if (kind === 'link') return [['added', when(item.created)], ...(item.read && item.readAt ? [['read', when(item.readAt)]] : [])];
   if (kind === 'task') {
     const rows = [['created', when(item.created)]];
@@ -126,7 +131,7 @@ export function createRecords({ st, isBuiltin }) {
       if (i < 0) return;
       // Replace, not merge: a cleared field (repeat none) must go.
       d.items[i] = r.item;
-      if (kind === 'note' || kind === 'snippet' || kind === 'food') d.items[i].updated = ctx.now().toISOString();
+      if (kind === 'note' || kind === 'snippet' || kind === 'food' || kind === 'diagram') d.items[i].updated = ctx.now().toISOString();
       saved = d.items[i];
     });
     if (!saved) return out.err('No ' + label(kind) + ' ' + key);
@@ -148,7 +153,7 @@ export function createRecords({ st, isBuiltin }) {
     }
     await ctx.data.mutate(KINDS[kind].col, (d) => { d.items = d.items.filter((x) => x.id !== key); });
     out.head([['Removed ' + label(kind) + ' ', ''], [key, 'id']], 'ok');
-    out.line(kind === 'snippet' || kind === 'food' ? item.name : kind === 'link' ? item.title || item.url : item.text || item.title, 'gone');
+    out.line(kind === 'snippet' || kind === 'food' || kind === 'diagram' ? item.name : kind === 'link' ? item.title || item.url : item.text || item.title, 'gone');
   }
 
   // The entry `word` names: an id for notes, tasks and events (t3, or just 3

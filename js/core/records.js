@@ -48,6 +48,7 @@ export function linkURL(v) {
   }
 }
 const MAX_TEXT = 10000;
+export const MAX_DIAGRAM = 20000;
 
 const text = (max) => (v) => {
   const t = v.trim();
@@ -221,6 +222,13 @@ export const KINDS = {
           item.portionName = value ? value.name : null;
         },
       },
+    },
+  },
+  diagram: {
+    col: 'diagrams', cmd: 'diagrams', prefix: 'd', label: 'diagram',
+    fields: {
+      name: { aliases: ['title'], parse: text(80), raw: (x) => x.name },
+      code: { aliases: ['source', 'text', 'body'], parse: text(MAX_DIAGRAM), raw: (x) => x.code },
     },
   },
   alias: {

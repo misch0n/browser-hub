@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
 // Test the deployable build: the same cache-busting step the Pages workflow runs.
 const root = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cc-site-'));
 require('child_process').execFileSync(process.execPath, ['tools/build-site.mjs', root, 'e2e'], { cwd: path.join(__dirname, '..'), stdio: 'ignore' });
-const types = { '.xml': 'application/opensearchdescription+xml', '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+const types = { '.xml': 'application/opensearchdescription+xml', '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const file = path.join(root, req.url.split('?')[0] === '/' ? 'index.html' : req.url.split('?')[0]);
   if (!file.startsWith(root) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
@@ -1045,6 +1045,57 @@ async function check(name, fn) {
     await page.reload();
     await page.waitForSelector('#turns svg.barcode');
     assert.equal(await page.locator('#turns svg.barcode text').last().textContent(), '5901234123457');
+  });
+
+  await check('mermaid: the live editor draws as you type, saves as a command, exports PNG and SVG; kept diagrams redraw', async () => {
+    await page.evaluate(() => { window.__cspv = []; document.addEventListener('securitypolicyviolation', (e) => window.__cspv.push(e.effectiveDirective + ' ' + e.blockedURI)); });
+    await send('mermaid');
+    const t = lastTurn();
+    await t.locator('.dg-preview img.diagram-img').waitFor({ timeout: 30000 });
+    assert.match(await t.locator('.dg-status').textContent(), /✓ drawn · \d+ × \d+/);
+    // Typing redraws; a mistake says so and keeps the last drawing, faded.
+    const area = t.locator('textarea.dg-code');
+    await area.fill('flowchart TD\n  start([Start]) --> check{Ok?}\n  check -->|yes| done[Done]');
+    await page.waitForFunction(() => /✓ drawn/.test(document.querySelector('.turn:last-child .dg-status').textContent) &&
+      document.querySelector('.turn:last-child .dg-preview img').alt.includes('Mermaid'), null, { timeout: 15000 });
+    await area.fill('flowchart TD\n  a --> ');
+    await page.waitForFunction(() => document.querySelector('.turn:last-child .dg-status').classList.contains('t-err'), null, { timeout: 15000 });
+    assert.equal(await t.locator('.dg-preview.dg-stale').count(), 1);
+    await area.fill('flowchart TD\n  start([Start]) --> check{Ok?}\n  check -->|yes| done[Done]');
+    await page.waitForFunction(() => /✓ drawn/.test(document.querySelector('.turn:last-child .dg-status').textContent), null, { timeout: 15000 });
+    // PNG and SVG of what is drawn.
+    const [png] = await Promise.all([page.waitForEvent('download'), t.locator('.export-row button', { hasText: 'PNG' }).click()]);
+    const pngData = fs.readFileSync(await png.path());
+    assert.equal(png.suggestedFilename(), 'diagram-diagram.png');
+    assert.equal(pngData.slice(1, 4).toString(), 'PNG');
+    assert.ok(pngData.readUInt32BE(16) > 100, 'a PNG wider than 100 px');
+    const [svg] = await Promise.all([page.waitForEvent('download'), t.locator('.export-row button', { hasText: 'SVG' }).click()]);
+    const svgText = fs.readFileSync(await svg.path(), 'utf8');
+    assert.match(svgText, /^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+    assert.match(svgText, />Start</);
+    assert.ok(!/<script|onclick|foreignObject/i.test(svgText));
+    // Save as… puts the command in the prompt; Enter keeps the draft as d1.
+    await t.locator('.export-row button', { hasText: 'Save as…' }).click();
+    assert.equal(await prompt.inputValue(), 'diagrams add ');
+    await prompt.pressSequentially('flow');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Added diagram d1 · flow/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    await lastTurn().locator('img.diagram-img').waitFor({ timeout: 15000 });
+    // diagrams d1 edit, change, Ctrl+S saves through the command.
+    await send('diagrams d1 edit');
+    const t2 = lastTurn();
+    await t2.locator('.dg-preview img').waitFor({ timeout: 15000 });
+    await t2.locator('textarea.dg-code').fill('flowchart LR\n  x[Changed] --> y');
+    await t2.locator('textarea.dg-code').press('Control+s');
+    await page.waitForFunction(() => /Saved diagrams d1 · flow · 2 lines/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    // The history keeps the code and draws it again after a reload.
+    await send('diagrams d1');
+    await lastTurn().locator('img.diagram-img').waitFor({ timeout: 15000 });
+    assert.deepEqual(await page.evaluate(() => window.__cspv), []); // nothing the page's CSP had to block
+    await page.reload();
+    await page.waitForSelector('#turns .diagram-wrap img.diagram-img', { timeout: 30000 });
+    assert.equal(await page.locator('iframe.mermaid-frame').count(), 1);
+    await send('diagrams d1 rm');
   });
 
   await check('copy buttons and json colouring', async () => {

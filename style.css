@@ -399,6 +399,36 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .barcode { display: block; max-width: 100%; height: auto; border-radius: 4px; }
 .export-row { display: flex; gap: 6px; margin-top: 6px; }
 
+/* Mermaid: drawn in a hidden frame, shown as an image on white (like QR codes) */
+.mermaid-frame { position: fixed; left: -10000px; top: 0; width: 1200px; height: 800px; border: 0; visibility: hidden; pointer-events: none; }
+.diagram-wrap { margin: 4px 0; }
+.diagram-box { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 8px; overflow-x: auto; max-width: 100%; }
+.diagram-box .line { background: transparent; }
+.diagram-img { display: block; max-width: 100%; height: auto; }
+.dg-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 10px; margin: 4px 0; align-items: start; }
+.dg-left, .dg-right { min-width: 0; }
+.dg-code {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: calc(13px * var(--scale));
+  line-height: 1.45;
+  color: var(--fg);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 1ch;
+  resize: vertical;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+.dg-code:focus { outline: none; border-color: var(--accent); }
+.dg-status { margin-top: 4px; overflow-wrap: anywhere; }
+.dg-stale { opacity: 0.45; }
+@media (max-width: 760px) { .dg-editor { grid-template-columns: minmax(0, 1fr); } }
+
 .value-text { color: var(--strong); overflow-wrap: anywhere; -webkit-user-select: all; user-select: all; }
 
 .copy {
@@ -901,7 +931,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
    font is under 16px. Keep the fields at 16px there (the ghost layer inherits
    the same size, so completion stays aligned) instead of disabling zoom. */
 @media (pointer: coarse) {
-  .prompt-box, #palette-input, .edit-input, .dt-filter { font-size: max(16px, calc(16px * var(--scale))); }
+  .prompt-box, #palette-input, .edit-input, .dt-filter, .dg-code { font-size: max(16px, calc(16px * var(--scale))); }
   body { touch-action: manipulation; } /* no double-tap zoom on buttons */
 }
 

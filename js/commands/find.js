@@ -2,6 +2,7 @@ import { search, documents, highlight, CATEGORIES } from '../core/search.js';
 import { plural, todayISO } from '../core/util.js';
 import { dueSeg, longDate, kindSeg } from '../core/format.js';
 import { repeatLabel } from '../core/repeat.js';
+import { diagramKind } from '../lib/diagrams.js';
 
 // Long text is cut to a window around the first hit.
 function excerpt(text, ranges, max = 140) {
@@ -22,7 +23,7 @@ const hl = (text, ranges, cls) => {
 
 export default function register(add, { st, defs, isBuiltin }) {
   add({
-    name: 'find', group: 'Find', desc: 'search everything: tasks, notes, events, snippets, links, aliases, commands, history',
+    name: 'find', group: 'Find', desc: 'search everything: tasks, notes, events, snippets, links, diagrams, aliases, commands, history',
     usage: ['find <words>', 'find "<phrase>"', 'find /<regex>/[flags]', 'find <words> in:<category>'],
     examples: ['find flour', 'find pmt', 'find "oat milk"', 'find /^buy\\s/', 'find standup in:events', 'find #home'],
     complete: () => CATEGORIES.map((c) => ({ value: 'in:' + c.id, label: c.label })),
@@ -65,6 +66,8 @@ export default function register(add, { st, defs, isBuiltin }) {
             }
             case 'snippets':
               return [[link(doc.key, 'id')], [...hl(doc.snippet.name, hits.name, 'accent'), ['  ', ''], ...hl(doc.snippet.text.split('\n')[0], hits.text, 'dim')], []];
+            case 'diagrams':
+              return [[link(doc.key, 'id')], [...hl(doc.diagram.name, hits.name, 'strong'), ['  ' + diagramKind(doc.diagram.code), 'dim']], []];
             case 'later': {
               const l = doc.link;
               return [[link(l.id, l.read ? 'faint' : 'id')], [...(l.title ? [...hl(l.title, hits.title, l.read ? 'gone' : ''), ['  ', '']] : []), ...hl(l.url, hits.url, 'url')], []];

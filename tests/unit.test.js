@@ -2547,3 +2547,32 @@ test('cook calorie: your own foods in the shared grammar, portions, meals, sync 
   await A.ctx.sync.syncNow();
   for (const x of [A, B]) assert.deepEqual(x.data.state.foods.items.map((f) => f.id + ':' + f.name), ['f1:kefir', 'f2:ayran']);
 });
+
+test('font: bigger and smaller in steps, a percentage, reset; help and keys are for now', async () => {
+  const app = await makeApp();
+  let scale = 1;
+  app.ctx.fontScale = () => scale;
+  app.ctx.setFontScale = (f) => { scale = f; };
+  assert.equal((await app.run('font'))[0], '# Text size 100% on this device');
+  assert.equal((await app.run('font bigger'))[0], '# Text size 110% on this device');
+  await app.run('font bigger');
+  assert.equal(scale, 1.2);
+  await app.run('font smaller');
+  await app.run('font smaller');
+  await app.run('font smaller');
+  assert.equal(scale, 0.9);
+  await app.run('font smaller');
+  const floor = await app.run('font smaller');
+  assert.deepEqual(floor, ['# Text size 80% (already)', 'dim: That is the smallest step']);
+  await app.run('font 150%');
+  assert.equal(scale, 1.5);
+  assert.equal((await app.run('font 300'))[0], 'err: Between 70% and 200%');
+  await app.run('font reset');
+  assert.equal(scale, 1);
+  assert.match((await app.run('font huge'))[0], /^# Usage/);
+  assert.equal(app.data.steps().undo.length, 0);
+  // Help and the key list stay out of the shared history and leave the screen after the next command.
+  assert.equal(app.commands.byName.get('help').ephemeral, true);
+  assert.equal(app.commands.byName.get('keys').ephemeral, true);
+  assert.notEqual(app.commands.byName.get('help').noHistory, true); // still recalled with ↑
+});

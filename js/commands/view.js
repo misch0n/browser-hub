@@ -210,4 +210,39 @@ export default function register(add, { st, usage, records }) {
       return records.route(ctx, adapter, rest, spec);
     },
   });
+
+  // Text size, per device: a phone may want it bigger, a wide screen smaller.
+  const STEPS = [0.8, 0.9, 1, 1.1, 1.2, 1.35, 1.5, 1.7];
+  add({
+    name: 'font', group: 'View', noUndo: true, desc: 'make the text bigger or smaller on this device',
+    usage: ['font', 'font bigger | smaller', 'font <percent>', 'font reset'],
+    examples: ['font bigger', 'font smaller', 'font 120%', 'font reset'],
+    complete: (prev) => (prev.length === 0 ? ['bigger', 'smaller', 'reset'].map((v) => ({ value: v })) : []),
+    async run(ctx, rest) {
+      const { out } = ctx;
+      const now = ctx.fontScale ? ctx.fontScale() : 1;
+      const pct = (f) => Math.round(f * 100) + '%';
+      const a = rest.trim().toLowerCase();
+      let next;
+      if (!a) {
+        out.head([['Text size ', ''], [pct(now), 'num strong'], [' on this device', 'dim']]);
+        out.line([['font smaller', 'accent', { run: 'font smaller' }], [' · ', 'faint'], ['font bigger', 'accent', { run: 'font bigger' }],
+          [' · ', 'faint'], ['font reset', 'accent', { run: 'font reset' }], [' · font 120%', 'dim']]);
+        return;
+      }
+      if (/^(bigger|larger|up|\+|more|increase)$/.test(a)) next = STEPS.find((x) => x > now + 0.001) || STEPS[STEPS.length - 1];
+      else if (/^(smaller|down|-|less|decrease)$/.test(a)) next = [...STEPS].reverse().find((x) => x < now - 0.001) || STEPS[0];
+      else if (/^(reset|normal|default|100%?)$/.test(a)) next = 1;
+      else {
+        const m = /^(\d{2,3})\s?%?$/.exec(a);
+        if (!m) return usage(ctx, this);
+        next = Number(m[1]) / 100;
+        if (next < 0.7 || next > 2) return out.err('Between 70% and 200%');
+      }
+      if (ctx.setFontScale) ctx.setFontScale(next);
+      out.head([['Text size ', ''], [pct(next), 'num strong'], [next === now ? ' (already)' : ' on this device', 'dim']], 'ok');
+      if (next === STEPS[STEPS.length - 1] && /^(bigger|larger|up|\+|more|increase)$/.test(a)) out.dim('That is the largest step; font 200% goes further');
+      else if (next === STEPS[0] && /^(smaller|down|-|less|decrease)$/.test(a)) out.dim('That is the smallest step');
+    },
+  });
 }

@@ -466,6 +466,41 @@ async function check(name, fn) {
     assert.match(await lastTurn().locator('.value-text').textContent(), /^(\d+, ){5}\d+$/);
   });
 
+  await check('help is for now: shown, recalled with ↑, kept out of the shared history, gone after the next command or ×', async () => {
+    await send('help');
+    assert.equal(await lastTurn().getAttribute('class'), 'turn ephemeral');
+    assert.match(await lastText(), /Built-in/);
+    await send('calc 2+2');
+    assert.equal(await page.locator('article.turn.ephemeral').count(), 0);
+    const log = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:log')).entries.map((e) => e.input));
+    assert.ok(!log.includes('help') && log.includes('calc 2+2'));
+    await prompt.fill('');
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await prompt.inputValue(), 'help');
+    await page.keyboard.press('Escape');
+    await send('keys');
+    await lastTurn().locator('.turn-close').click();
+    assert.equal(await page.locator('article.turn.ephemeral').count(), 0);
+    assert.equal(await focused(), 'prompt');
+  });
+
+  await check('font: bigger and smaller on this device, applied before the first paint', async () => {
+    const size = () => page.evaluate(() => parseFloat(getComputedStyle(document.body).fontSize));
+    const before = await size();
+    await send('font 150%');
+    assert.equal(await size(), before * 1.5);
+    await page.reload();
+    await page.waitForSelector('#prompt');
+    assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--scale')), '1.5');
+    assert.equal(await size(), before * 1.5);
+    await send('font smaller');
+    assert.equal(await size(), Math.round(before * 1.35 * 100) / 100);
+    await send('font reset');
+    assert.equal(await size(), before);
+    assert.equal(await page.evaluate(() => localStorage.getItem('cc-device:fontScale')), null);
+  });
+
   await check('address bar: ?q= opens aliases and searches; built-ins are only pre-filled', async () => {
     assert.match(await page.locator('link[rel=search]').getAttribute('href'), /^opensearch\.xml/);
     const xml = fs.readFileSync(path.join(root, 'opensearch.xml'), 'utf8'); // the built copy
@@ -974,6 +1009,23 @@ async function check(name, fn) {
       return Math.abs(typed - w);
     });
     assert.ok(align < 0.5);
+    // Smaller text never takes the fields under 16px; bigger text grows them.
+    const fieldSize = () => tp.evaluate(() => getComputedStyle(document.getElementById('prompt')).fontSize);
+    const tsend = async (c) => { await tp.locator('#prompt').fill(c); await tp.keyboard.press('Enter'); await tp.waitForTimeout(80); };
+    await tsend('font 80%');
+    assert.equal(await fieldSize(), '16px');
+    await tsend('font 150%');
+    assert.equal(await fieldSize(), '24px');
+    await tsend('font reset');
+    // The on-screen keyboard shrinks the visible area: the app follows it, so the prompt sits just above.
+    await tp.locator('#prompt').tap();
+    await tp.setViewportSize({ width: 390, height: 480 });
+    await tp.waitForFunction(() => document.documentElement.style.getPropertyValue('--app-h') === '480px');
+    const box = await tp.evaluate(() => { const r = document.querySelector('.prompt-box').getBoundingClientRect(); return { bottom: r.bottom, h: window.visualViewport.height }; });
+    assert.ok(box.bottom <= box.h && box.bottom > box.h - 120, JSON.stringify(box));
+    assert.equal(await tp.evaluate(() => window.scrollY), 0);
+    await tp.setViewportSize({ width: 390, height: 844 });
+    await tp.waitForFunction(() => document.documentElement.style.getPropertyValue('--app-h') === '844px');
     await touch.close();
     // desktop (fine pointer) keeps the compact size
     assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('prompt')).fontSize), '14px');
@@ -1059,10 +1111,14 @@ async function check(name, fn) {
     const send2 = async (c) => { await tp.locator('#prompt').fill(c); await tp.keyboard.press('Enter'); await tp.waitForTimeout(80); };
     await send2('alias gh https://github.com/ https://github.com/{} --path');
     await send2('t a task with a fairly long description that has to wrap somewhere due:tomorrow #home');
-    for (const c of ['help', 'keys', 'alias ls', 'tasks', 'tz', 'theme', 'widgets', 'help alias', 'agenda', 'cook target', 'cook oven', 'cook oven chicken 500g', 'cook convert', 'cook calorie chocolate', 'cook calorie 05062', 'roll', 'roll stats']) await send2(c);
-    const bad = await tp.evaluate(() => {
+    // Each command's tables are measured right after it runs (help and keys leave with the next command).
+    const bad = [];
+    for (const c of ['help', 'keys', 'alias ls', 'tasks', 'tz', 'theme', 'widgets', 'help alias', 'agenda', 'cook target', 'cook oven', 'cook oven chicken 500g', 'cook convert', 'cook calorie chocolate', 'cook calorie 05062', 'roll', 'roll stats']) {
+      await send2(c);
+      await tp.waitForTimeout(c.startsWith('cook calorie') ? 300 : 0);
+      bad.push(...(await tp.evaluate(() => {
       const out = [];
-      for (const t of document.querySelectorAll('.tbl')) {
+      for (const t of [...document.querySelectorAll('article.turn')].pop().querySelectorAll('.tbl')) {
         const wrap = t.parentElement;
         // A row as tall as many lines means a column was squeezed to a character or two.
         for (const r of t.querySelectorAll('tr')) {
@@ -1071,7 +1127,8 @@ async function check(name, fn) {
         if (t.classList.contains('tbl-stack') && t.getBoundingClientRect().width > wrap.clientWidth + 1) out.push('stack table overflows');
       }
       return out;
-    });
+    })).map((x) => c + ': ' + x));
+    }
     assert.deepEqual(bad, []);
     assert.ok(await tp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     await touch.close();

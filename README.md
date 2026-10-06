@@ -47,9 +47,16 @@ still work.
 | Chance | `random`, `roll` |
 | Kitchen | `cook target`, `cook oven`, `cook convert`, `cook calorie` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
-| View | `theme`, `widgets` |
+| View | `theme`, `widgets`, `font` |
 | Sync | `sync` |
 | Meta | `help`, `keys`, `config`, `session`, `undo`, `redo`, `clear`, `history`, `export`, `import` (a backup, an xsearch export or an `.ics` calendar) |
+
+`help` and `keys` are for the moment: they show, are recalled with ↑, but stay
+out of the shared history and leave the screen when the next command runs (or
+on ×), so the reference doesn't pile up. Tab's list of completions does the
+same. `font bigger`, `font smaller`, `font 120%` and `font reset` set the text
+size for this device only. On a phone the prompt rests right on top of the
+on-screen keyboard.
 
 Keys: **Tab** completes (again to list), **→** accepts the grey suggestion,
 **↑/↓** history, **/** command palette, **?** shortcuts, **Esc** clears.

@@ -13,7 +13,8 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024;
 export default function register(add, helpers) {
   const { st, usage, isBuiltin, defs, byName } = helpers;
   add({
-    name: 'help', group: 'Meta', desc: 'list commands, or details for one',
+    name: 'help', group: 'Meta', ephemeral: true, // a big reference block: kept out of the shared history, gone after the next command
+    desc: 'list commands, or details for one',
     usage: ['help [command]'],
     complete: (prev) => (prev.length === 0 ? defs.map((d) => ({ value: d.name, label: d.desc })) : []),
     async run(ctx, rest) {
@@ -71,7 +72,7 @@ export default function register(add, helpers) {
   });
 
   add({
-    name: 'keys', group: 'Meta', desc: 'keyboard shortcuts, labelled for this computer',
+    name: 'keys', group: 'Meta', ephemeral: true, desc: 'keyboard shortcuts, labelled for this computer',
     usage: ['keys'],
     async run(ctx) {
       const { out } = ctx;

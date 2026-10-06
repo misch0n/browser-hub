@@ -24,7 +24,8 @@ import { removes } from '../core/undo.js';
 // Built-in commands. Each def is
 //   { name, group, desc, usage: [...], examples?: [...], complete?(prevArgs), run(ctx, rest),
 //     noUndo? (never an undo step), private? (kept out of the shared history), noHistory? (not
-//     kept for ↑ either), hidden? (an older
+//     kept for ↑ either), ephemeral? (not in the shared history, and gone from the screen when
+//     the next command runs: help), hidden? (an older
 //     name: still works, not listed) }
 // and talks to the page only through ctx:
 //   ctx.out     structured output for this command (see ui/transcript.js); table rows

@@ -93,6 +93,13 @@ const ctxBase = {
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   },
   revealPanel(show) { if (show && drawerQuery.matches) setDrawer(true); },
+  // Text size for this device (`font`): a factor, 1 = normal.
+  fontScale: () => Number(store.getLocal('fontScale')) || 1,
+  setFontScale(f) {
+    if (f === 1) store.removeLocal('fontScale'); else store.setLocal('fontScale', f);
+    root.style.setProperty('--scale', String(f));
+    transcript.scroll();
+  },
   navigate(url) { location.assign(url); },
   leave(url) { location.replace(url); },
 };
@@ -187,10 +194,12 @@ function run(raw, shown, pasted) {
   // Every command goes into the shared visual history once it has finished,
   // tagged with this device, except private ones (sync).
   const def = res.kind === 'builtin' ? commands.byName.get(res.name) : null;
-  const keep = !(def && def.private);
+  // Help and the like are for now: not in the shared history, gone when the next command runs.
+  transcript.dropEphemeral();
+  const keep = !(def && (def.private || def.ephemeral));
   const at = now().toISOString();
   const id = newEntryId(device.id, at);
-  const out = transcript.turn(echoed, { at, pending: keep ? id : null });
+  const out = transcript.turn(echoed, { at, pending: keep ? id : null, ephemeral: !!(def && def.ephemeral) });
   // A shared clip isn't kept for ↑ either.
   const saved = def && def.noHistory ? Promise.resolve() : data.addHistory(input);
   const record = () => (keep ? data.appendLog(makeEntry({ id, at, device: device.id, deviceName: device.name, input: echoed, ops: out.ops })) : Promise.resolve());
@@ -279,7 +288,8 @@ const prompt = createPrompt({
     return false;
   },
   onList(input, candidates) {
-    const out = transcript.turn(input);
+    transcript.dropEphemeral();
+    const out = transcript.turn(input, { ephemeral: true });
     out.head([[plural(candidates.length, 'completion'), 'strong'], [' · keep typing or press tab', 'dim']]);
     out.table(null, candidates.map((c) => [[[c.value, 'accent']], c.kind ? [kindSeg(c.kind)] : [], [[c.label || '', 'dim']]]), { stack: true });
   },
@@ -422,6 +432,28 @@ data.onChange((col) => {
   widgets.render();
   prompt.update();
 });
+
+// ---- the on-screen keyboard ---------------------------------------------------------
+// On a phone the keyboard covers the bottom of the page without resizing it
+// (iOS), so the prompt could sit underneath until typing scrolled it into view.
+// The app is sized to the visible part instead (the visual viewport) and the
+// page kept at the top, so the prompt rests right on top of the keyboard.
+
+const viewport = window.visualViewport;
+function fitViewport() {
+  if (!viewport) return;
+  if (viewport.scale > 1.01) { root.style.removeProperty('--app-h'); return; } // pinch-zoomed: leave the layout alone
+  const stick = transcript.atBottom();
+  root.style.setProperty('--app-h', Math.round(viewport.height) + 'px');
+  if (window.scrollY || viewport.offsetTop) window.scrollTo(0, 0);
+  if (stick) transcript.scroll();
+}
+if (viewport) {
+  viewport.addEventListener('resize', fitViewport);
+  viewport.addEventListener('scroll', fitViewport);
+  $('prompt').addEventListener('focus', () => { fitViewport(); setTimeout(fitViewport, 300); }); // after the keyboard's animation
+  fitViewport();
+}
 
 // ---- focus and tab lifecycle -------------------------------------------------------
 

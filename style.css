@@ -4,6 +4,7 @@
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", Consolas, monospace;
   --panel-w: 340px;
   --gutter: 24px;
+  --scale: 1; /* text size, set per device with `font` (boot.js applies it before first paint) */
 }
 
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
@@ -13,7 +14,7 @@ html, body { height: 100%; margin: 0; }
 body {
   background: var(--bg);
   color: var(--fg);
-  font: 14px/1.55 var(--mono);
+  font: calc(14px * var(--scale))/1.55 var(--mono);
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
 }
@@ -48,6 +49,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 #app {
   height: 100vh;
   height: 100dvh;
+  /* On phones, the part of the screen above the on-screen keyboard (main.js):
+     the prompt sits right on top of the keyboard instead of under it. */
+  height: var(--app-h, 100dvh);
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--panel-w);
 }
@@ -87,7 +91,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .pin-title { flex: 1; min-width: 0; }
 .pin-close {
   font: inherit;
-  font-size: 16px;
+  font-size: calc(16px * var(--scale));
   line-height: 1;
   color: var(--faint);
   background: none;
@@ -115,6 +119,18 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 /* ---- turns: echoed input + reply ---------------------------------------------------- */
 
 .turn { margin: 0 0 16px; }
+.turn.ephemeral .you { position: relative; }
+.turn-close {
+  margin-left: auto;
+  padding: 0 6px;
+  font-size: calc(16px * var(--scale));
+  line-height: 1;
+  color: var(--faint);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.turn-close:hover { color: var(--accent); }
 
 .you {
   display: flex;
@@ -367,7 +383,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .copy {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: calc(11px * var(--scale));
   line-height: 1.6;
   color: var(--dim);
   background: var(--bg);
@@ -478,7 +494,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   height: 34px;
   padding: 0 10px;
   font: inherit;
-  font-size: 14px;
+  font-size: calc(14px * var(--scale));
   color: var(--strong);
   background: var(--bg-elev);
   border: 1px solid var(--border);
@@ -496,7 +512,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 #copy-last {
   flex-shrink: 0;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--scale));
   line-height: 1.6;
   color: var(--dim);
   background: var(--bg-elev);
@@ -548,7 +564,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   gap: 2ch;
   min-height: 1.7em;
   padding: 4px 1.5ch 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--scale));
   color: var(--faint);
 }
 
@@ -621,7 +637,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   cursor: default;
   padding: 8px 1ch 2px;
   color: var(--faint);
-  font-size: 11px;
+  font-size: calc(11px * var(--scale));
   text-transform: uppercase;
   letter-spacing: 0.07em;
 }
@@ -629,7 +645,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 #palette-list li.empty { display: block; color: var(--faint); cursor: default; }
 .p-name { color: var(--accent); white-space: nowrap; }
 .p-desc { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.p-kind { font-size: 11px; white-space: nowrap; }
+.p-kind { font-size: calc(11px * var(--scale)); white-space: nowrap; }
 
 /* ---- widget panel ------------------------------------------------------------------------ */
 
@@ -647,7 +663,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   background: none;
   border: 0;
   color: var(--dim);
-  font-size: 18px;
+  font-size: calc(18px * var(--scale));
   line-height: 1;
   cursor: pointer;
   padding: 2px 6px;
@@ -673,13 +689,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .w-title {
   color: var(--dim);
-  font-size: 11px;
+  font-size: calc(11px * var(--scale));
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.w-meta { margin-left: auto; font-size: 12px; white-space: nowrap; }
+.w-meta { margin-left: auto; font-size: calc(12px * var(--scale)); white-space: nowrap; }
 
 .w-close {
   background: none;
@@ -699,7 +715,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 
 .w-body { padding: 8px 1.5ch 10px; min-width: 0; }
-.w-empty, .w-none { color: var(--faint); font-size: 12px; }
+.w-empty, .w-none { color: var(--faint); font-size: calc(12px * var(--scale)); }
 .w-none { padding: 4px 2px; line-height: 1.7; }
 
 .w-list { display: flex; flex-direction: column; gap: 1px; }
@@ -711,10 +727,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   align-items: baseline;
 }
 
-.w-row > span:first-child { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-row > span:first-child { font-size: calc(12px * var(--scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .w-row > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.w-group { margin-top: 6px; font-size: 12px; color: var(--dim); font-weight: 600; }
+.w-group { margin-top: 6px; font-size: calc(12px * var(--scale)); color: var(--dim); font-weight: 600; }
 .w-group:first-child { margin-top: 0; }
 
 .w-link {
@@ -723,7 +739,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   padding: 0;
   background: none;
   border: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--scale));
   color: var(--faint);
   cursor: pointer;
 }
@@ -739,7 +755,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .w-clock .w-sec { font-size: 0.45em; letter-spacing: 0; }
 .w-date { margin-top: 4px; }
-.w-sub { margin-top: 2px; font-size: 12px; color: var(--faint); }
+.w-sub { margin-top: 2px; font-size: calc(12px * var(--scale)); color: var(--faint); }
 
 .w-tasks, .w-notes { list-style: none; margin: 0; padding: 0; }
 
@@ -765,7 +781,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .w-check:hover { border-color: var(--ok); box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 0 8px var(--ok); }
 .w-task-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.w-task-due { font-size: 12px; white-space: nowrap; }
+.w-task-due { font-size: calc(12px * var(--scale)); white-space: nowrap; }
 
 .w-zone {
   display: grid;
@@ -776,7 +792,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .w-zone-name { min-width: 0; }
 .w-zone-name > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.w-zone-day { font-size: 12px; }
+.w-zone-day { font-size: calc(12px * var(--scale)); }
 .w-dot { font-size: 0.75em; }
 
 .w-note {
@@ -802,7 +818,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 @media (max-width: 860px) {
   :root { --gutter: 14px; }
-  body { font-size: 13px; }
+  body { font-size: calc(13px * var(--scale)); }
 
   #app, [data-panel="hidden"] #app { grid-template-columns: minmax(0, 1fr); }
 
@@ -856,7 +872,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   .tbl-stack .tr-section td { padding-top: 8px; }
   .tbl-stack tbody .tr-section:first-child td { padding-top: 0; }
 
-  .tbl { font-size: 12px; }
+  .tbl { font-size: calc(12px * var(--scale)); }
   .tbl td, .tbl th { padding-right: 1.5ch; }
   #palette-list li { gap: 1.2ch; }
 }
@@ -865,7 +881,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
    font is under 16px. Keep the fields at 16px there (the ghost layer inherits
    the same size, so completion stays aligned) instead of disabling zoom. */
 @media (pointer: coarse) {
-  .prompt-box, #palette-input, .edit-input { font-size: 16px; }
+  .prompt-box, #palette-input, .edit-input { font-size: max(16px, calc(16px * var(--scale))); }
   body { touch-action: manipulation; } /* no double-tap zoom on buttons */
 }
 

@@ -286,6 +286,12 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
       const el = h('article', { class: 'turn', 'data-at': meta.at || new Date().toISOString() }, echo(input));
       // Becomes a stored entry (data-id) once its command has finished and been saved.
       if (meta.pending) el.setAttribute('data-pending', meta.pending);
+      // Only for now: the next command clears it, and × does now.
+      if (meta.ephemeral) {
+        el.classList.add('ephemeral');
+        el.querySelector('.you').appendChild(h('button', { type: 'button', class: 'turn-close', title: 'Dismiss (the next command does too)', 'aria-label': 'Dismiss',
+          text: '×', onclick: () => { el.remove(); if (opts.refocus) opts.refocus(); } }));
+      }
       append(el);
       const out = recording(makeOut(el));
       out.el = el;
@@ -335,5 +341,10 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
     },
     clear() { listEl.textContent = ''; },
     scroll,
+    atBottom,
+    // Turns that are only for now (help, a Tab list): gone when the next command runs.
+    dropEphemeral() {
+      for (const el of listEl.querySelectorAll('article.turn.ephemeral')) el.remove();
+    },
   };
 }

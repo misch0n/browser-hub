@@ -51,6 +51,17 @@ still work.
 | Sync | `sync` |
 | Meta | `help`, `keys`, `config`, `session`, `undo`, `redo`, `clear`, `history`, `export`, `import` (a backup, an xsearch export or an `.ics` calendar) |
 
+`help` lists every command by category, one line each (its name and what it
+does), tagged ⚙ built-in, with your engines (⌕) and aliases (↗) after them; tap
+a command for `help <command>`, everything about it: every form and examples.
+A command run without what it needs shows the same. Tab completes the next
+word wherever the choices are known (subcommands, months, units, dice, foods
+to look up, ids and fields), and Tab again lists them; the list goes as soon
+as you type. On a phone, the same letter tapped twice quickly works as Tab
+where it can't be typing (at the end of the line, when the doubled letters
+lead nowhere and the text before them completes): both letters go and it
+completes.
+
 `help` and `keys` are for the moment: they show, are recalled with ↑, but stay
 out of the shared history and leave the screen when the next command runs (or
 on ×), so the reference doesn't pile up. Tab's list of completions does the

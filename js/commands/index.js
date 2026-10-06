@@ -40,17 +40,31 @@ export function createCommands(getCtx) {
   const st = () => getCtx().data.state;
   const isBuiltin = (name) => byName.has(name);
 
-  const usage = (ctx, def) => {
-    ctx.out.head([['Usage', ''], [' · ' + def.name, 'dim']], 'err');
-    ctx.out.table(null, def.usage.map((u) => [usageSegs(u)]));
+  // Everything about one command: what it does, every form, examples. `help <name>`
+  // shows it; so does a command run without what it needs (head: Usage).
+  const fullHelp = (ctx, def, asUsage) => {
+    const { out } = ctx;
+    if (asUsage) {
+      out.head([['Usage', ''], [' · ' + def.name, 'dim']], 'err');
+      out.line([[def.desc, 'dim']]);
+    } else {
+      out.head([[def.name, 'accent'], [' · ' + def.desc, 'dim']]);
+    }
+    out.section('Usage');
+    out.table(null, def.usage.map((u) => [usageSegs(u)]));
+    if (def.examples) {
+      out.section('Examples');
+      out.table(null, def.examples.map((x) => [[['› ', 'faint'], [x, '']]])); // not tappable: some change or remove things
+    }
   };
+  const usage = (ctx, def) => fullHelp(ctx, def, true);
 
   const add = (def) => {
     defs.push(def);
     byName.set(def.name, def);
   };
   const records = createRecords({ st, isBuiltin });
-  const helpers = { st, usage, isBuiltin, defs, byName, records };
+  const helpers = { st, usage, fullHelp, isBuiltin, defs, byName, records };
   for (const register of [find, notes, tasks, calendar, keep, dates, tools, text, dev, clip, bounce, cook, chance, zones, aliases, view, sync, config, meta]) register(add, helpers);
 
   // Runs a built-in as one undoable step (unless it is undo/redo itself).

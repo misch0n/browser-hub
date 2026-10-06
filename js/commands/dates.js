@@ -50,7 +50,9 @@ function describeSpan(out, from, to, today, headText) {
 
 export default function register(add, { usage }) {
   add({
-    name: 'date', group: 'Dates', desc: 'a day in detail, date ± days/weeks/months, or the days between two dates',
+    name: 'date', group: 'Dates',
+    complete: (prev) => (prev.length === 0 ? ['today', 'tomorrow', 'yesterday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'next']
+      .map((v) => ({ value: v })) : prev.length === 1 ? ['+', '-', 'to'].map((v) => ({ value: v })) : []), desc: 'a day in detail, date ± days/weeks/months, or the days between two dates',
     usage: ['date [<date>]', 'date [<date>] ± <n> d|w|m|y|wd', 'date <date> to <date>'],
     examples: ['date', 'date 25 dec', 'date + 90d', 'date fri + 3 wd', 'date 31 jan + 1m', 'date 1 jan to 25 dec', 'date 2026-10-05 - 2026-01-01'],
     async run(ctx, rest) {

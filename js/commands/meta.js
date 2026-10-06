@@ -14,60 +14,40 @@ export default function register(add, helpers) {
   const { st, usage, isBuiltin, defs, byName } = helpers;
   add({
     name: 'help', group: 'Meta', ephemeral: true, // a big reference block: kept out of the shared history, gone after the next command
-    desc: 'list commands, or details for one',
+    desc: 'list commands, or everything about one',
     usage: ['help [command]'],
-    complete: (prev) => (prev.length === 0 ? defs.map((d) => ({ value: d.name, label: d.desc })) : []),
+    complete: (prev) => (prev.length === 0 ? defs.filter((d) => !d.hidden).map((d) => ({ value: d.name, label: d.desc })) : []),
     async run(ctx, rest) {
       const { out } = ctx;
       if (rest) {
         const def = byName.get(rest.toLowerCase());
         if (!def) return out.err("No built-in command '" + rest + "'");
-        out.head([[def.name, 'accent'], [' · ' + def.desc, 'dim']]);
-        out.section('Usage');
-        out.table(null, def.usage.map((u) => [usageSegs(u)]));
-        if (def.examples) {
-          out.section('Examples');
-          out.table(null, def.examples.map((x) => [[['› ', 'faint'], [x, '']]]));
-        }
-        return;
+        return helpers.fullHelp(ctx, def);
       }
       const doc = st().aliases;
       const mine = doc.entries.filter((e) => !isBuiltin(e.name));
       const engines = mine.filter((e) => e.template).sort((a, b) => (a.name < b.name ? -1 : 1));
       const aliases = mine.filter((e) => !e.template).sort((a, b) => (a.name < b.name ? -1 : 1));
-      out.head([['Help', 'strong'], [' · ' + defs.filter((x) => !x.hidden).length + ' built-in commands · ' + plural(engines.length, 'engine') + ' and ' +
-        plural(aliases.length, 'alias', 'aliases') + ' of yours', 'dim']]);
-      // The one shape every kept thing follows.
-      out.section('Notes, tasks, events, snippets, links and aliases all work the same way');
-      out.table(null, [
-        [usageSegs('tasks'), [['list them', 'dim']]],
-        [usageSegs('tasks add <text>'), [['add one', 'dim']]],
-        [usageSegs('tasks <id>'), [['show one (ids in any list link here)', 'dim']]],
-        [usageSegs('tasks <id> edit'), [['edit it in place', 'dim']]],
-        [usageSegs('tasks <id> edit <field> <value>'), [['change one field', 'dim']]],
-        [usageSegs('tasks <id> rm'), [['remove it (undo brings it back)', 'dim']]],
-      ], { stack: true });
-      out.dim('Short names do the same, and add from plain text: t buy milk, n call mum, ev fri 19:00 dinner, snip sig Cheers, later https://…, alias gh https://github.com/');
-      // One table, so descriptions line up across groups.
+      const shown = defs.filter((x) => !x.hidden);
+      out.head([['Help', 'strong'], [' · ' + shown.length + ' commands · tap one for everything about it', 'dim']]);
+      // One row per command, by category; the tag says what kind of name it is.
       const rows = [];
       let group = null;
-      for (const d of defs.filter((x) => !x.hidden)) {
-        if (d.group !== group) { group = d.group; rows.push({ section: [['Built-in · ', 'faint'], [group, '']] }); }
-        rows.push([usageSegs(d.usage[0]), [[d.desc, 'dim']]]);
+      for (const d of shown) {
+        if (d.group !== group) { group = d.group; rows.push({ section: [[group, ''], ['  ', ''], ['⚙ built-in', 'k-cmd']] }); }
+        rows.push([[[d.name, 'accent', { run: 'help ' + d.name }]], [[d.desc, 'dim']]]);
       }
-      rows.push({ section: [['Your search engines  ', ''], kindSeg('engine')] });
+      rows.push({ section: [['Your search engines', ''], ['  ', ''], ['⌕ engine', 'k-engine']] });
       if (!engines.length) rows.push([[['none yet', 'faint']], [['alias <name> <url with {}>', 'dim']]]);
       for (const e of engines) {
-        rows.push([[[e.name, 'accent', { run: 'aliases ' + e.name }], [' <text>', 'faint']],
-          [[e.template, 'url'], [e.name === doc.defaultEngine ? '  ★ default' : '', 'accent']]]);
+        rows.push([[[e.name, 'accent', { run: 'aliases ' + e.name }]], [[e.template, 'url'], [e.name === doc.defaultEngine ? '  ★ default' : '', 'accent']]]);
       }
-      rows.push({ section: [['Your aliases  ', ''], kindSeg('alias')] });
+      rows.push({ section: [['Your aliases', ''], ['  ', ''], ['↗ alias', 'k-alias']] });
       if (!aliases.length) rows.push([[['none yet', 'faint']], [['alias <name> <url>', 'dim']]]);
       for (const e of aliases) rows.push([[[e.name, 'accent', { run: 'aliases ' + e.name }]], [[e.base, 'url']]]);
       out.table(null, rows, { stack: true });
-      out.section('Everything else');
-      out.line([['Anything else is searched with ', 'dim'], [doc.defaultEngine, 'accent'],
-        [' · help <command> for details · keys (or ?) for shortcuts', 'dim']]);
+      out.dim('Notes, tasks, events, snippets, links and aliases share one grammar: tasks · tasks add <text> · tasks <id> · tasks <id> edit · tasks <id> rm');
+      out.dim('Anything else is searched with ' + doc.defaultEngine + ' · Tab completes, Tab again lists the choices · keys (or ?) for shortcuts');
     },
   });
 

@@ -282,14 +282,16 @@ const prompt = createPrompt({
   },
   onSubmit: run,
   onPalette: () => palette.open(),
+  onType: () => transcript.dropEphemeral('completions'),
+  doubleTapTab: () => touchQuery.matches,
   onShortcuts: () => run('keys'),
   onEscape() {
     if (root.classList.contains('drawer-open')) { setDrawer(false); return true; }
     return false;
   },
   onList(input, candidates) {
-    transcript.dropEphemeral();
-    const out = transcript.turn(input, { ephemeral: true });
+    transcript.dropEphemeral('completions');
+    const out = transcript.turn(input, { ephemeral: 'completions' });
     out.head([[plural(candidates.length, 'completion'), 'strong'], [' · keep typing or press tab', 'dim']]);
     out.table(null, candidates.map((c) => [[[c.value, 'accent']], c.kind ? [kindSeg(c.kind)] : [], [[c.label || '', 'dim']]]), { stack: true });
   },

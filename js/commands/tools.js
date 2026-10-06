@@ -86,7 +86,15 @@ export default function register(add, { st, usage }) {
   });
 
   add({
-    name: 'units', group: 'Tools', desc: 'convert length, mass, volume, temperature, data …',
+    name: 'units', group: 'Tools',
+    // units <value> <from> to <to>: unit names, then 'to', then unit names again.
+    complete(prev) {
+      const names = () => listUnits().flatMap((l) => l.split(': ')[1].split(/[\s,]+/)).filter(Boolean).map((u) => ({ value: u }));
+      if (prev.length === 1) return names();
+      if (prev.length === 2) return [{ value: 'to' }];
+      if (prev.length === 3 && prev[2] === 'to') return names();
+      return [];
+    }, desc: 'convert length, mass, volume, temperature, data …',
     usage: ['units <value> <from> to <to>'],
     examples: ['units 5 km to mi', 'units 350 f to c', 'units 2 gib to mb'],
     async run(ctx, rest) {

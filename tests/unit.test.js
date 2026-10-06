@@ -1466,13 +1466,16 @@ test('theme and widgets commands', async () => {
 test('help, history', async () => {
   const app = await makeApp();
   const help = await app.run('help');
-  assert.match(help[0], /^# Help · \d+ built-in commands · 2 engines and 0 aliases of yours$/);
-  // Built-in groups, then the user's own engines and aliases, each labelled.
-  assert.ok(help.includes('## Built-in · View'));
-  assert.ok(help.includes('## Built-in · Aliases & engines'));
-  assert.ok(help.includes('## Your search engines  your engine'));
-  assert.ok(help.some((l) => /^g <text> \| https:\/\/www\.google\.com\/search\?q=\{\}  ★ default$/.test(l)));
-  assert.ok(help.includes('## Your aliases  your alias'));
+  assert.match(help[0], /^# Help · \d+ commands · tap one for everything about it$/);
+  // Categories tagged as built-in, one row per command (its name and what it does), then your engines and aliases.
+  assert.ok(help.includes('## View  ⚙ built-in'));
+  assert.ok(help.includes('## Aliases & engines  ⚙ built-in'));
+  assert.ok(help.includes('theme | switch colour theme') || help.some((l) => /^theme \| /.test(l)));
+  assert.ok(help.some((l) => /^tasks \| /.test(l)));
+  assert.ok(!help.some((l) => /^tasks add /.test(l))); // names, not every form
+  assert.ok(help.includes('## Your search engines  ⌕ engine'));
+  assert.ok(help.some((l) => /^g \| https:\/\/www\.google\.com\/search\?q=\{\}  ★ default$/.test(l)));
+  assert.ok(help.includes('## Your aliases  ↗ alias'));
   assert.ok(help.includes('none yet | alias <name> <url>'));
   await app.run('alias mail https://mail.example.com/');
   assert.ok((await app.run('help')).includes('mail | https://mail.example.com/'));
@@ -1489,6 +1492,11 @@ test('help, history', async () => {
   assert.ok(win.includes('## Edit the line'));
   const ht = await app.run('help t');
   assert.deepEqual(ht.slice(0, 3), ['# t · short for tasks; t <text> adds a task', '## Usage', 't <text> [due:<date>] [every:<rule>] [#tag]']);
+  // A command without what it needs shows the same full help, headed Usage.
+  const u = await app.run('qr');
+  assert.deepEqual(u.slice(0, 4), ['# Usage · qr', 'a QR code for text or a link, to scan with a phone', '## Usage', 'qr <text>']);
+  assert.equal(u.tone, 'err');
+  assert.ok(u.includes('## Examples'));
   // Every kept thing documents the same shape.
   for (const [noun, id] of [['notes', '<id>'], ['tasks', '<id>'], ['events', '<id>'], ['aliases', '<name>'], ['zones', '<zone>'], ['widgets', '<name>']]) {
     const u = (await app.run('help ' + noun)).filter((l) => l.startsWith(noun));
@@ -2575,4 +2583,25 @@ test('font: bigger and smaller in steps, a percentage, reset; help and keys are 
   assert.equal(app.commands.byName.get('help').ephemeral, true);
   assert.equal(app.commands.byName.get('keys').ephemeral, true);
   assert.notEqual(app.commands.byName.get('help').noHistory, true); // still recalled with ↑
+});
+
+test('completion offers the next input where it is known', async () => {
+  const app = await makeApp();
+  const env = { defs: app.commands.defs.filter((d) => !d.hidden), entries: app.data.state.aliases.entries, history: [] };
+  const vals = (input) => C.complete(input, env).candidates.map((c) => c.value);
+  assert.ok(vals('units 5 ').length > 20);
+  assert.ok(vals('units 5 k').includes('km') && vals('units 5 k').includes('kg'));
+  assert.deepEqual(vals('units 5 km '), ['to']);
+  assert.ok(vals('units 5 km to m').includes('mi'));
+  assert.deepEqual(vals('cal n'), ['next', 'november']);
+  assert.deepEqual(vals('agenda '), ['7', '14', '30']);
+  assert.ok(vals('date fr').includes('friday'));
+  assert.deepEqual(vals('date friday '), ['+', '-', 'to']);
+  assert.deepEqual(vals('cron @d'), ['@daily']);
+  assert.ok(vals('cook ').includes('calorie'));
+  assert.ok(vals('roll d').includes('d20'));
+  assert.ok(vals('help ro').includes('roll'));
+  // Tab on an empty argument with one known choice completes it; with several, the second Tab lists them.
+  assert.deepEqual(C.applyTab('units 5 km ', env), { input: 'units 5 km to ' });
+  assert.ok(C.applyTab('agenda ', env).list.length === 3);
 });

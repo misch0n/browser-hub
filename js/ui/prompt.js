@@ -67,6 +67,42 @@ export function createPrompt(opts) {
     s.resolve(value);
   }
 
+  // Tab: complete as far as the choices agree, or list them when that's no further.
+  function tab(value) {
+    const r = applyTab(value, opts.env());
+    if (r.input !== undefined) set(r.input);
+    else if (r.list) opts.onList(value, r.list);
+    return r.input !== undefined || !!r.list;
+  }
+
+  // Phones have no Tab key: the same letter tapped twice quickly acts as Tab
+  // (and both go). Only where it can't be typing: at the end of the line, when
+  // the doubled letters complete to nothing and the text before them does, so
+  // 'all', 'coffee' or a note's 'meeting' are never touched.
+  const DOUBLE_TAP_MS = 300;
+  let lastTap = null; // { ch, at, pos }
+  function doubleTap(e) {
+    if (secret || search || !opts.doubleTapTab || !opts.doubleTapTab()) return false;
+    if (e.inputType !== 'insertText' || !e.data || !/^[a-z]$/i.test(e.data)) { lastTap = null; return false; }
+    const pos = input.selectionStart;
+    const at = (globalThis.performance || Date).now();
+    const prev = lastTap;
+    lastTap = { ch: e.data.toLowerCase(), at, pos };
+    const v = input.value;
+    if (!prev || prev.ch !== lastTap.ch || at - prev.at > DOUBLE_TAP_MS || prev.pos !== pos - 1) return false;
+    if (pos !== v.length || input.selectionEnd !== pos || v.slice(pos - 2).toLowerCase() !== prev.ch + prev.ch) return false;
+    if (complete(v, opts.env()).candidates.length) return false; // real typing toward something
+    const without = v.slice(0, -2);
+    const r = applyTab(without, opts.env());
+    if (r.input === undefined && !r.list) return false;
+    lastTap = null;
+    input.value = without;
+    input.setSelectionRange(without.length, without.length);
+    tab(without);
+    update();
+    return true;
+  }
+
   function update() {
     // The cursor went into a paste placeholder: show the text itself.
     if (!secret && pastes.size && input.selectionStart === input.selectionEnd) {
@@ -200,9 +236,7 @@ export function createPrompt(opts) {
       }
       case 'Tab': {
         e.preventDefault(); // focus never leaves the prompt
-        const r = applyTab(input.value, opts.env());
-        if (r.input !== undefined) set(r.input);
-        else if (r.list) opts.onList(input.value, r.list);
+        tab(input.value);
         break;
       }
       case 'ArrowUp': e.preventDefault(); walk(-1); break;
@@ -231,7 +265,12 @@ export function createPrompt(opts) {
     }
   });
 
-  input.addEventListener('input', () => { histIdx = -1; update(); });
+  input.addEventListener('input', (e) => {
+    histIdx = -1;
+    if (opts.onType) opts.onType(); // a list of completions goes once you type
+    if (doubleTap(e)) return;
+    update();
+  });
   input.addEventListener('paste', (e) => {
     if (secret) return; // a token goes in as it is
     const text = e.clipboardData && e.clipboardData.getData('text/plain');

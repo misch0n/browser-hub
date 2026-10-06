@@ -7,10 +7,13 @@ import { oneValue } from '../core/args.js';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
+const MONTHS_FULL = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
 export default function register(add, helpers) {
   const { st, usage, records } = helpers;
   add({
-    name: 'cal', group: 'Calendar', desc: 'month grid with event days marked',
+    name: 'cal',
+    complete: (prev) => (prev.length === 0 ? ['next', 'last', ...MONTHS_FULL].map((v) => ({ value: v })) : []), group: 'Calendar', desc: 'month grid with event days marked',
     usage: ['cal [month [year]]', 'cal [YYYY-MM]', 'cal next|last'],
     examples: ['cal', 'cal dec', 'cal march 2027', 'cal 2026-12', 'cal next'],
     async run(ctx, rest) {
@@ -47,7 +50,8 @@ export default function register(add, helpers) {
   });
 
   add({
-    name: 'agenda', group: 'Calendar', desc: 'events and due tasks for the next n days (default 7)',
+    name: 'agenda',
+    complete: (prev) => (prev.length === 0 ? ['7', '14', '30'].map((v) => ({ value: v, label: 'days' })) : []), group: 'Calendar', desc: 'events and due tasks for the next n days (default 7)',
     usage: ['agenda [n]'],
     examples: ['agenda', 'agenda 30'],
     async run(ctx, rest) {

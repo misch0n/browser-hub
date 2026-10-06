@@ -469,7 +469,7 @@ async function check(name, fn) {
   await check('help is for now: shown, recalled with ↑, kept out of the shared history, gone after the next command or ×', async () => {
     await send('help');
     assert.equal(await lastTurn().getAttribute('class'), 'turn ephemeral');
-    assert.match(await lastText(), /Built-in/);
+    assert.match(await lastText(), /⚙ built-in/);
     await send('calc 2+2');
     assert.equal(await page.locator('article.turn.ephemeral').count(), 0);
     const log = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:log')).entries.map((e) => e.input));
@@ -483,6 +483,24 @@ async function check(name, fn) {
     await lastTurn().locator('.turn-close').click();
     assert.equal(await page.locator('article.turn.ephemeral').count(), 0);
     assert.equal(await focused(), 'prompt');
+  });
+
+  await check('help: by category, tap a command for its full help; a Tab list goes as soon as you type', async () => {
+    await send('help');
+    assert.match(await lastText(), /Tools\s+⚙ built-in/);
+    await lastTurn().locator('tr.tr-run', { hasText: /^roll/ }).first().click();
+    await page.waitForFunction(() => /^help roll$/.test([...document.querySelectorAll('.turn .you-text')].pop().textContent));
+    assert.match(await lastText(), /roll · roll dice[\s\S]*Usage[\s\S]*roll d20 adv/);
+    assert.equal(await page.locator('article.turn.ephemeral').count(), 1); // the overview left when help roll ran
+    // A command without what it needs shows its full help.
+    await send('qr');
+    assert.match(await lastText(), /Usage · qr[\s\S]*a QR code for text[\s\S]*Examples/);
+    await type('ca');
+    await page.keyboard.press('Tab');
+    await page.waitForSelector('article.turn.completions');
+    await page.keyboard.type('l');
+    assert.equal(await page.locator('article.turn.completions').count(), 0);
+    await prompt.fill('');
   });
 
   await check('font: bigger and smaller on this device, applied before the first paint', async () => {
@@ -1009,6 +1027,22 @@ async function check(name, fn) {
       return Math.abs(typed - w);
     });
     assert.ok(align < 0.5);
+    // Phones: the same letter twice, quickly, where it can't be typing, is Tab (and both letters go).
+    await tp.locator('#prompt').fill('');
+    await tp.locator('#prompt').pressSequentially('cou');
+    await tp.keyboard.type('xx');
+    assert.equal(await tp.locator('#prompt').inputValue(), 'count ');
+    for (const text of ['tasks all', 'n coffee meeting', 'g hello']) {
+      await tp.locator('#prompt').fill('');
+      await tp.keyboard.type(text);
+      assert.equal(await tp.locator('#prompt').inputValue(), text);
+    }
+    await tp.locator('#prompt').fill('');
+    await tp.locator('#prompt').pressSequentially('agenda ');
+    await tp.keyboard.type('qq');
+    await tp.waitForSelector('article.turn.completions');
+    assert.equal(await tp.locator('#prompt').inputValue(), 'agenda ');
+    await tp.locator('#prompt').fill('');
     // Smaller text never takes the fields under 16px; bigger text grows them.
     const fieldSize = () => tp.evaluate(() => getComputedStyle(document.getElementById('prompt')).fontSize);
     const tsend = async (c) => { await tp.locator('#prompt').fill(c); await tp.keyboard.press('Enter'); await tp.waitForTimeout(80); };

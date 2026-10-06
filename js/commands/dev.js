@@ -203,7 +203,8 @@ export default function register(add, { usage }) {
   });
 
   add({
-    name: 'cron', group: 'Developer', desc: 'a cron schedule in words, and when it runs next',
+    name: 'cron', group: 'Developer',
+    complete: (prev) => (prev.length === 0 ? ['@hourly', '@daily', '@weekly', '@monthly', '@yearly'].map((v) => ({ value: v })) : []), desc: 'a cron schedule in words, and when it runs next',
     usage: ['cron <minute> <hour> <day> <month> <weekday>', 'cron @daily|@hourly|@weekly|@monthly|@yearly'],
     examples: ['cron */15 * * * *', 'cron 30 9 * * 1-5', 'cron 0 0 1 * *'],
     async run(ctx, rest) {

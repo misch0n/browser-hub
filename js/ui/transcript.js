@@ -289,6 +289,7 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
       // Only for now: the next command clears it, and × does now.
       if (meta.ephemeral) {
         el.classList.add('ephemeral');
+        if (meta.ephemeral !== true) el.classList.add(meta.ephemeral); // 'completions': gone as soon as you type
         el.querySelector('.you').appendChild(h('button', { type: 'button', class: 'turn-close', title: 'Dismiss (the next command does too)', 'aria-label': 'Dismiss',
           text: '×', onclick: () => { el.remove(); if (opts.refocus) opts.refocus(); } }));
       }
@@ -343,8 +344,8 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
     scroll,
     atBottom,
     // Turns that are only for now (help, a Tab list): gone when the next command runs.
-    dropEphemeral() {
-      for (const el of listEl.querySelectorAll('article.turn.ephemeral')) el.remove();
+    dropEphemeral(only) {
+      for (const el of listEl.querySelectorAll('article.turn.ephemeral' + (only ? '.' + only : ''))) el.remove();
     },
   };
 }

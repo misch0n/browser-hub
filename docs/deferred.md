@@ -14,6 +14,7 @@ it to [todo.md](todo.md) (or write an [exploration](exploration/README.md) first
 | Sync with Apple Calendar, Reminders and Notes | 5 Oct 2026 | "dropping that feature for the time being… if it turns into a painpoint" | Options researched: [exploration/apple-sync.md](exploration/apple-sync.md). |
 | `timer` / `pomodoro` / `stopwatch` with notifications | 5 Oct 2026 | "Easier on the phone but not a bad idea. Defer." | Browsers only fire timers reliably while the tab is open. |
 | `events export` to an `.ics` file (and sharing a note or task via the share sheet, proposed with it) | 6 Oct 2026 | "events export - defer" | The cheap end of [apple-sync](exploration/apple-sync.md). |
+| Redirect chain in `request` (each hop's status and address) | 6 Oct 2026 | "keep it as today" | `request` shows the final address when redirected; browsers hide the hops unless every server allows it. |
 | Internet-backed tools: weather widget, currency in `units`, GitHub PRs/issues (`gh prs`) | 5 Oct 2026 | "all. without the internet ones." | The network tools since widened the CSP (D10), so these are technically possible now; still not requested. |
 
 ## Left out for technical reasons
@@ -27,8 +28,8 @@ it to [todo.md](todo.md) (or write an [exploration](exploration/README.md) first
 - **Other key formats.** SEC1 `EC PRIVATE KEY` and passphrase-protected
   `ENCRYPTED PRIVATE KEY` files aren't read; `crypt` names the `openssl`
   command that converts them to PKCS#8.
-- **WebSocket, raw TCP/UDP and ICMP.** `request` and `ping` only speak HTTP(S).
-  Browsers allow nothing lower; a WebSocket check could come later.
+- **Raw TCP/UDP and ICMP.** `request` and `ping` speak HTTP(S) (and soon
+  WebSocket, a Dev task in [todo.md](todo.md#dev)); browsers allow nothing lower.
 - **Telling network failures apart.** A page can't tell DNS failure, a refused
   connection, a bad TLS certificate and a CORS refusal apart beyond the
   no-cors retry; `request` says so rather than guessing.

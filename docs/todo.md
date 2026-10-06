@@ -60,6 +60,19 @@ otherwise. The owner may reorder.
    README and command reference updated.
    *Open (ask when starting):* is "skip one occurrence" or an end date needed now?
    Default: no, whole series only.
+4. **WebSocket check in `request`** (owner: "web socket - yes", 6 Oct 2026).
+   *What:* `request wss://host/path` (and `ws://` to localhost) opens a
+   connection, reports whether the handshake was accepted, its time, and the
+   close code/reason, then closes it; `timeout` works as for HTTP. Browsers
+   expose no status or headers for a refused handshake, so say so (as `request`
+   does for CORS). Mixed content: `ws://` only to localhost from the https page.
+   *Check first:* whether the CSP's `https:` source also allows `wss:` in Safari
+   and Chromium; if not, add `wss:` to `connect-src` (security.md, decision D10, and the e2e CSP check).
+   *Done when:* `lib/net.js` has a testable `probeSocket` (WebSocket injected
+   like `fetch`), unit tests cover accepted / refused / timeout / mixed content,
+   an e2e check runs against a local WebSocket server started by the harness,
+   README and command reference updated, and the "WebSocket" line in
+   [deferred.md](deferred.md) updated.
 
 ## Research
 
@@ -98,9 +111,4 @@ Not requested; propose to the owner before building. Deferred items have
 their own list in [deferred.md](deferred.md); don't re-propose those without
 new information.
 
-- A WebSocket reachability check in `request` (`wss://`): handshake accepted or
-  not, and its time. Owner asked what it's for (6 Oct): useful only for
-  debugging live-connection services; awaiting a yes or no.
-- `request`: show the redirect chain (each hop's status and address). Owner
-  asked for detail (6 Oct): often hidden by browsers when servers don't allow
-  it; awaiting a yes or no.
+None open.

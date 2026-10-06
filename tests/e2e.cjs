@@ -998,6 +998,55 @@ async function check(name, fn) {
     await send('theme auto');
   });
 
+  await check('qr and barcode: saved as PNG and SVG, the PNGs scan back; a barcode is redrawn from history', async () => {
+    const jsQR = require('jsqr');
+    const zx = require('@zxing/library');
+    // A downloaded PNG's pixels, read in a blank page (the hub's CSP keeps images same-origin).
+    const pixels = async (buf) => {
+      const blank = await context.newPage();
+      const px = await blank.evaluate(async (b64) => {
+        const bmp = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: 'image/png' }));
+        const c = new OffscreenCanvas(bmp.width, bmp.height);
+        const g = c.getContext('2d');
+        g.drawImage(bmp, 0, 0);
+        return { w: bmp.width, h: bmp.height, data: Array.from(g.getImageData(0, 0, bmp.width, bmp.height).data) };
+      }, buf.toString('base64'));
+      await blank.close();
+      return px;
+    };
+    const save = async (label) => {
+      const [dl] = await Promise.all([page.waitForEvent('download'), lastTurn().locator('.export-row button', { hasText: label }).click()]);
+      return { name: dl.suggestedFilename(), data: fs.readFileSync(await dl.path()) };
+    };
+    await send('qr https://example.com/x');
+    const qrPng = await save('PNG');
+    assert.equal(qrPng.name, 'qr-example-com-x.png');
+    const q = await pixels(qrPng.data);
+    assert.equal(jsQR(Uint8ClampedArray.from(q.data), q.w, q.h).data, 'https://example.com/x');
+    const qrSvg = await save('SVG');
+    assert.equal(qrSvg.name, 'qr-example-com-x.svg');
+    assert.match(qrSvg.data.toString(), /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"[\s\S]*<path fill="#000" d="M/);
+
+    await send('barcode ean13 590123412345');
+    assert.match(await lastText(), /EAN-13 · 13 characters · check digit 7 added/);
+    assert.equal(await lastTurn().locator('svg.barcode path').count(), 1);
+    assert.equal(await lastTurn().locator('svg.barcode text').textContent(), '5901234123457');
+    const bPng = await save('PNG');
+    assert.equal(bPng.name, 'ean13-5901234123457.png');
+    const b = await pixels(bPng.data);
+    const lum = new Uint8ClampedArray(b.w * b.h);
+    for (let i = 0; i < lum.length; i++) lum[i] = b.data[i * 4];
+    const bitmap = new zx.BinaryBitmap(new zx.HybridBinarizer(new zx.RGBLuminanceSource(lum, b.w, b.h)));
+    assert.equal(new zx.MultiFormatOneDReader(new Map()).decode(bitmap).getText(), '5901234123457');
+    assert.match((await save('SVG')).data.toString(), /<text [^>]*>5901234123457<\/text><\/svg>$/);
+    // The shared history keeps the spec; the bars are drawn again from it.
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:log')).entries.pop());
+    assert.deepEqual(stored.ops.find((o) => o[0] === 'barcode'), ['barcode', { type: 'ean13', text: '5901234123457' }]);
+    await page.reload();
+    await page.waitForSelector('#turns svg.barcode');
+    assert.equal(await page.locator('#turns svg.barcode text').last().textContent(), '5901234123457');
+  });
+
   await check('copy buttons and json colouring', async () => {
     await send('json {"a":[1,true,null]}');
     assert.ok(await lastTurn().locator('.code .t-num').count() > 0);

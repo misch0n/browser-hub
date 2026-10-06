@@ -40,7 +40,7 @@ still work.
 | Dates | `date`, `days`, `week` |
 | Snippets | `snippets` (`snip`) |
 | Read later | `later` |
-| Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `pw` |
+| Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `barcode`, `pw` |
 | Developer | `json`, `csv`, `base`, `escape`, `cidr`, `url`, `regex`, `diff`, `cron`, `color` |
 | Security | `crypt`, `cert`, `jwt`, `hmac`, `hash`, `pw` |
 | Web | `http`, `mime`, `ua`, `device` |
@@ -320,9 +320,16 @@ To allow this, the page's Content Security Policy permits connections to any
 allow only `api.github.com`). Scripts still only load from the page itself, so
 no other code can use that access.
 
-**QR codes**: `qr <text>` draws one for a link or any text, made on the page
+**QR codes and barcodes**: `qr <text>` draws one for a link or any text, made on the page
 (nothing is sent anywhere), always dark on white so phones can scan it in any
-theme. Error correction is raised as far as the size allows.
+theme. Error correction is raised as far as the size allows. `barcode <text>`
+draws Code 128; `barcode code39|ean13|ean8|upca|itf|codabar <text>` the others
+(`ean`, `upc` and `i25` work too, and `barcode qr <text>` is the same as `qr`).
+EAN, UPC and ITF check digits are worked out when left off (and checked when
+given); `check` adds Code 39's and ITF's optional one. Options go before the
+text: `height <px>`, `scale <px per bar>`, `margin <bars>` (the quiet zone by
+default) and `notext`. Every code has SVG and PNG buttons to save it; the
+shared history keeps only the text and options, and draws the code again.
 
 **Kitchen**: `cook target [food]` gives the inside temperature to cook to:
 the safe one (USDA) and the best one for taste and texture, with a warning
@@ -428,9 +435,10 @@ Tests:
 ```sh
 npm test                                         # unit tests, no dependencies
 npm run test:tz                                  # unit tests in six time zones (UTC-11 … UTC+14)
-NODE_PATH=$(npm root -g) npm run test:e2e        # the real page in Chromium (needs Playwright, and jsqr below)
+NODE_PATH=$(npm root -g) npm run test:e2e        # the real page in Chromium (needs Playwright, and jsqr and @zxing/library below)
 npm i --no-save jsqr@1.4.0 && node --test tests/qr.test.mjs   # QR codes read back by an independent decoder
 node --test tests/x509.test.mjs                  # certificate decoder against fixed certificates (tests/fixtures/x509)
+npm i --no-save @zxing/library@0.21.3 && node --test tests/barcode.test.mjs   # barcodes read back by ZXing
 ```
 
 The nutrition table is generated: list foods in `tools/nutrition-foods.mjs`

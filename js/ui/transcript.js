@@ -4,12 +4,14 @@ import { jsonLines } from '../core/format.js';
 import { oneValue, quote } from '../core/args.js';
 import { toField, fromField } from '../core/paste.js';
 import { encodeQR, qrPath } from '../lib/qr.js';
+import { encodeBarcode, barcodeSvg, barcodeGeometry } from '../lib/barcode.js';
+import { exportRow, qrSvgString, qrCanvas, barcodeCanvas, fileName } from './export.js';
 
 const MAX_TURNS = 400;
 
 // The Out methods that draw something: recorded, so a turn can be stored in
 // the shared history and drawn again later, on any device.
-const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'swatch', 'jsonTree', 'dataTable'];
+const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'barcode', 'swatch', 'jsonTree', 'dataTable'];
 const plain = (v) => JSON.parse(JSON.stringify(v === undefined ? null : v));
 
 // The scrolling conversation: each command is a turn with the echoed input
@@ -215,7 +217,20 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
         path.setAttribute('d', qrPath(q.modules));
         path.setAttribute('fill', '#000');
         svg.append(bg, path);
-        push(h('div', { class: 'qr-wrap' }, svg));
+        push(h('div', { class: 'qr-wrap' }, svg, exportRow(fileName('qr', text), () => qrSvgString(q.modules), () => qrCanvas(q.modules))));
+      },
+      // A 1D barcode, encoded again from its spec on every draw:
+      // { type, text, height?, scale?, margin?, showText? }
+      barcode(spec) {
+        const r = encodeBarcode(spec.type, spec.text);
+        const opts = { height: spec.height, scale: spec.scale, margin: spec.margin, text: spec.showText !== false };
+        const doc = new DOMParser().parseFromString(barcodeSvg(r, opts), 'image/svg+xml');
+        const svg = document.importNode(doc.documentElement, true);
+        svg.setAttribute('class', 'barcode');
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', 'Barcode ' + r.type + ': ' + r.text);
+        push(h('div', { class: 'qr-wrap' }, svg,
+          exportRow(fileName(r.type, r.text), () => barcodeSvg(r, opts), () => barcodeCanvas(barcodeGeometry(r, opts)))));
       },
       // Colour samples: [{ color: '#rrggbb[aa]', label }]. SVG fills, so no inline styles (CSP).
       swatch(items) {

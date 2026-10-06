@@ -2,6 +2,7 @@ import { plural } from '../core/util.js';
 import { evaluate, formatNumber } from '../lib/calc.js';
 import { convert, listUnits } from '../lib/units.js';
 import { encodeQR } from '../lib/qr.js';
+import { encodeBarcode, BARCODE_TYPES, barcodeWidth } from '../lib/barcode.js';
 import { uuid, b64encode, b64decode, prettyJson, parseEpochInput, fmtUTC, fmtLocal, relative } from '../lib/misc.js';
 
 export default function register(add, { st, usage }) {
@@ -157,7 +158,62 @@ export default function register(add, { st, usage }) {
       const bytes = new TextEncoder().encode(text).length;
       out.head([['QR code', 'strong'], [' · ' + plural(bytes, 'byte') + ' · version ' + q.version + ' · error correction ' + q.ecl, 'dim']]);
       out.qr(text, q.ecl);
-      out.dim(text.length > 80 ? text.slice(0, 79) + '…' : text);
+      out.dim((text.length > 80 ? text.slice(0, 79) + '…' : text) + ' · save it with SVG or PNG');
+    },
+  });
+
+  const KINDS = ['code128', 'code39', 'ean13', 'ean8', 'upca', 'itf', 'codabar', 'ean', 'upc', 'i25', 'qr'];
+  add({
+    name: 'barcode', group: 'Tools', desc: 'a barcode: Code 128, Code 39, EAN-13/8, UPC-A, ITF, Codabar (or QR), to save as SVG or PNG',
+    usage: ['barcode <text>', 'barcode code128|code39|ean13|ean8|upca|itf|codabar|qr <text>',
+      'barcode <type> [height <px>] [scale <px per bar>] [margin <bars>] [notext] [check] <text>'],
+    examples: ['barcode HELLO-123', 'barcode ean13 590123412345', 'barcode upca 03600029145', 'barcode code39 check WIDGET-7',
+      'barcode itf height 100 scale 3 1234567890', 'barcode codabar A40156B', 'barcode notext code128 order 1182'],
+    complete: (prev) => (prev.length === 0 ? KINDS.slice(0, 7).concat('qr').map((v) => ({ value: v })) : ['height', 'scale', 'margin', 'notext', 'check'].map((v) => ({ value: v }))),
+    async run(ctx, rest) {
+      const { out } = ctx;
+      // Options come first; everything after them is the text, spaces and all.
+      let s = rest.replace(/^\s+/, '');
+      const spec = { type: 'code128' };
+      let check = false;
+      for (;;) {
+        const m = /^(code128|code39|ean13|ean8|ean|upca|upc|itf|i25|codabar|qr|notext|check|(height|scale|margin)\s+(\d+(?:\.\d+)?))(?:\s+|$)/i.exec(s);
+        if (!m) break;
+        const w = m[1].toLowerCase();
+        if (m[2]) spec[m[2].toLowerCase()] = Number(m[3]);
+        else if (w === 'notext') spec.showText = false;
+        else if (w === 'check') check = true;
+        else spec.type = w;
+        s = s.slice(m[0].length);
+      }
+      const text = s.replace(/\s+$/, '');
+      if (!text) return usage(ctx, this);
+      if (spec.type === 'qr') {
+        let q;
+        try { q = encodeQR(text); } catch (e) { return out.err(e.message); }
+        out.head([['QR code', 'strong'], [' · version ' + q.version + ' · error correction ' + q.ecl, 'dim']]);
+        out.qr(text, q.ecl);
+        return;
+      }
+      if (spec.height !== undefined && !(spec.height >= 10 && spec.height <= 600)) return out.err('height is 10 to 600 px');
+      if (spec.scale !== undefined && !(spec.scale >= 1 && spec.scale <= 10)) return out.err('scale is 1 to 10 px per bar');
+      if (spec.margin !== undefined && spec.margin > 50) return out.err('margin is 0 to 50 bars');
+      let r;
+      try {
+        r = encodeBarcode(spec.type, text, { check });
+      } catch (e) {
+        return out.err(e.message);
+      }
+      spec.type = r.type;
+      spec.text = r.text; // with any check digit worked out, so a replay draws the same
+      const info = BARCODE_TYPES.find((t) => t.id === r.type);
+      const given = ['ean13', 'ean8', 'upca', 'itf'].includes(r.type) ? text.replace(/[\s-]/g, '') : r.type === 'code128' ? text : text.toUpperCase();
+      const extra = r.text.length > given.length && r.text.startsWith(given) ? r.text.slice(given.length) : '';
+      const added = extra ? ' · check ' + (/^\d$/.test(extra) ? 'digit ' : 'character ') + extra + ' added' : '';
+      out.head([[info.name, 'strong'], [' · ' + plural([...r.text].length, 'character') + added + ' · ' + Math.round(barcodeWidth(r, { scale: spec.scale, margin: spec.margin })) + ' px wide', 'dim']]);
+      out.barcode(spec);
+      out.dim(info.chars + ' · save it with SVG or PNG');
+      out.copyable(r.text);
     },
   });
 }

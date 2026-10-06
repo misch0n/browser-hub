@@ -396,6 +396,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .swatch-label { color: var(--dim); }
 /* Always dark on white, whatever the theme: scanners expect it. */
 .qr { display: block; width: min(100%, 264px); height: auto; border-radius: 4px; }
+.barcode { display: block; max-width: 100%; height: auto; border-radius: 4px; }
+.export-row { display: flex; gap: 6px; margin-top: 6px; }
 
 .value-text { color: var(--strong); overflow-wrap: anywhere; -webkit-user-select: all; user-select: all; }
 

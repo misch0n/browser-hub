@@ -424,6 +424,7 @@ function recorder() {
     value: (text) => { lines.push('= ' + text); lines.copied = text; }, // the page's value() also marks it copyable
     copyable: (text) => { lines.copied = text; },
     qr: (text, ecl) => lines.push('QR ' + ecl + ' ' + text),
+    barcode: (spec) => lines.push('BARCODE ' + JSON.stringify(spec)),
     jsonTree: (text) => lines.push('JSONTREE ' + text),
     dataTable: (spec) => lines.push('DATATABLE ' + JSON.stringify(spec)),
     swatch: (items) => lines.push('SWATCH ' + items.map((i) => i.color + (i.text ? ' ' + i.text.value + ' ' + i.text.color : '') + (i.label ? ' ' + i.label : '')).join(' | ')),
@@ -1740,7 +1741,7 @@ test('clip: sealed with a passphrase, one item, gone after 15 minutes, never kep
 
 test('qr command: drawn from the text, too long refused', async () => {
   const app = await makeApp();
-  assert.deepEqual(await app.run('qr https://example.com'), ['# QR code · 19 bytes · version 2 · error correction Q', 'QR Q https://example.com', 'dim: https://example.com']);
+  assert.deepEqual(await app.run('qr https://example.com'), ['# QR code · 19 bytes · version 2 · error correction Q', 'QR Q https://example.com', 'dim: https://example.com · save it with SVG or PNG']);
   assert.match((await app.run('qr ' + 'x'.repeat(3000)))[0], /^err: too long for a QR code: 3000 bytes \(at most 2331 at level M\)/);
   assert.match((await app.run('qr'))[0], /^# Usage/);
 });
@@ -3186,4 +3187,33 @@ test('ip: the public address from ipify, details from ipapi.co; kept out of the 
   assert.equal(app.commands.byName.get('ip').private, true);
   app.ctx.fetch = fakeNet({ 'api.ipify.org': () => ({ body: JSON.stringify({ ip: '203.0.113.9' }) }) });
   assert.equal((await app.run('ip'))[2], 'IPv6: none: this connection has no IPv6');
+});
+
+// ---- batch 4: barcodes --------------------------------------------------------------
+
+test('barcode command: types, check digits worked out, options first, replay spec; qr through it', async () => {
+  const app = await makeApp();
+  const b = await app.run('barcode HELLO-123');
+  assert.match(b[0], /^# Code 128 · 9 characters · \d+ px wide$/);
+  assert.equal(b[1], 'BARCODE {"type":"code128","text":"HELLO-123"}');
+  assert.equal(b.copied, 'HELLO-123');
+  const ean = await app.run('barcode ean 590123412345');
+  assert.match(ean[0], /^# EAN-13 · 13 characters · check digit 7 added · /);
+  assert.equal(ean[1], 'BARCODE {"type":"ean13","text":"5901234123457"}');
+  assert.match((await app.run('barcode upca 03600029145'))[0], /check digit 2 added/);
+  assert.match((await app.run('barcode ean13 5901234123457'))[0], /^# EAN-13 · 13 characters · \d+ px wide$/);
+  const c39 = await app.run('barcode code39 check widget-7');
+  assert.match(c39[0], /^# Code 39 · 9 characters · check character - added/);
+  assert.equal(c39[1], 'BARCODE {"type":"code39","text":"WIDGET-7-"}');
+  const opts = await app.run('barcode itf height 100 scale 3 margin 4 notext 1234567890');
+  assert.equal(opts[1], 'BARCODE {"type":"itf","height":100,"scale":3,"margin":4,"showText":false,"text":"1234567890"}');
+  // Words that look like options are text once the text has started.
+  assert.equal((await app.run('barcode order notext 5'))[1], 'BARCODE {"type":"code128","text":"order notext 5"}');
+  assert.match((await app.run('barcode ean13 12345'))[0], /^err: /);
+  assert.match((await app.run('barcode code39 lower~case'))[0], /^err: Code 39 can't encode "~"/);
+  assert.equal((await app.run('barcode height 5 x'))[0], 'err: height is 10 to 600 px');
+  assert.equal((await app.run('barcode scale 20 x'))[0], 'err: scale is 1 to 10 px per bar');
+  assert.equal((await app.run('barcode'))[0], '# Usage · barcode');
+  assert.equal((await app.run('barcode qr hello'))[1], 'QR M hello'.replace('M', (await app.run('qr hello'))[1].split(' ')[1]));
+  assert.deepEqual(app.commands.byName.get('barcode').complete([]).map((x) => x.value), ['code128', 'code39', 'ean13', 'ean8', 'upca', 'itf', 'codabar', 'qr']);
 });

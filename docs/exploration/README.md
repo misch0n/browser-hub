@@ -8,7 +8,7 @@ when the owner says go, write a [plan](../plans/README.md) and add it to
 
 | Topic | Status | Summary |
 | --- | --- | --- |
-| [iOS notifications](ios-notifications.md) | approved 6 Oct 2026 → [plan 001](../plans/001-ios-notifications.md) | Home Screen web app + Web Push; needs a scheduled sender (GitHub Action or Cloudflare Worker). |
+| [iOS notifications](ios-notifications.md) | open: research task (6 Oct 2026); draft [plan 001](../plans/001-ios-notifications.md) | Home Screen web app + Web Push; needs a scheduled sender (GitHub Action or Cloudflare Worker). |
 | [Apple Calendar, Reminders, Notes sync](apple-sync.md) | dropped by the owner, 5 Oct 2026 | No direct API; options from `.ics` export to a Mac helper. Revisit only if it becomes a pain point. |
 
 Statuses: **open** (being looked into), **parked** (owner said not now),

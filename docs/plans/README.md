@@ -9,7 +9,7 @@ is enough.
 
 | Plan | Status |
 | --- | --- |
-| [001 · iOS notifications](001-ios-notifications.md) | approved, not started |
+| [001 · iOS notifications](001-ios-notifications.md) | draft; research task first |
 
 New plans: `NNN-short-name.md`, listed here and linked from todo.md.
 

@@ -5,6 +5,8 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 6 October 2026
 
+- Todo split into Dev, Research and Confirmation tasks (D17); recurring events
+  added as a Dev task; `events export` deferred; iOS notifications made a research task.
 - First manual run in Safari and on the iPhone: focus on ⌘T, Back, fresh files
   after deploys, Mac keys, copy, sync and history across devices, iPhone
   keyboard, double tap and layout confirmed; nothing failed.

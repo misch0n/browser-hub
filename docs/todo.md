@@ -1,7 +1,15 @@
 # Todo
 
-The work queue. **"The next task" is the first item under Ready.** Take it
-unless the owner names another.
+The work queue, in three kinds of task:
+
+- **Dev**: building or changing code. **"The next task" (or "the next
+  implementation") is the first Dev item.** Take it unless the owner names another.
+- **Research**: finding out and proposing; ends with findings and questions
+  for the owner, never with built features (see [exploration/](exploration/README.md)).
+  Only when the owner asks for research.
+- **Confirmation**: verifying that what's built works (CI coverage, checks on
+  the owner's devices). Never picked as the next implementation; only when the
+  owner asks for it.
 
 How to use this file:
 
@@ -11,8 +19,8 @@ How to use this file:
   update **State** below.
 - Stopping partway: leave it in progress with a note of exactly where you
   stopped and what's next (or update its plan's log).
-- New work from the owner goes into Ready, in the order they want it.
-  Ideas of your own go under Ideas (never straight into Ready).
+- New work from the owner goes under its kind, in the order they want it.
+  Ideas of your own go under Ideas (never straight into a task list).
 
 ## State
 
@@ -26,46 +34,63 @@ How to use this file:
 
 Nothing.
 
-## Ready
+## Dev
 
 Do in order. Each is safe to start without asking, unless its entry says
 otherwise. The owner may reorder.
 
-1. **Run the e2e suite in WebKit on CI as well as Chromium.**
-   *Why:* the target browser is Safari; only Chromium is tested today.
-   *Done when:* the workflow runs `tests/e2e.cjs` in both (a `BROWSER=webkit`
-   switch in the harness, `playwright install --with-deps webkit` in CI), both
-   green. A check that can't pass in WebKit for a real platform reason gets a
-   documented browser-specific expectation, never a silent skip.
-   *Note:* the cloud environment can't download WebKit, so iterate through CI runs.
-2. **Split `tests/unit.test.js` (3,300+ lines) by area.**
+1. **Split `tests/unit.test.js` (3,300+ lines) by area.**
    *Why:* agents load less context to find and add tests.
    *Done when:* `tests/unit/<area>.test.js` files share a `tests/helpers.mjs`
    (`makeApp`, `recorder`, `fakeStorage`, `fakeNet`, `MON`); the same tests
    pass (same count); `run-tz.mjs`, npm scripts, CI and [testing.md](testing.md) updated.
-3. **CI calls the npm scripts** (`npm run setup`, `test:tz`, `test:decoders`,
+2. **CI calls the npm scripts** (`npm run setup`, `test:tz`, `test:decoders`,
    `test:e2e`) so commands live in one place. *Done when:* the workflow uses
    them and stays green.
-4. **iOS notifications** (approved 6 Oct 2026). Follow
-   [plan 001](plans/001-ios-notifications.md); its step 0 asks the owner four
-   questions (sender, what notifies, quiet hours, icon) with proposed defaults,
-   so **ask before building**. Step 1 (icons, favicon, manifest) also removes
-   the favicon 404 every page load causes.
+3. **Recurring events** (owner: "recurring events yes", 6 Oct 2026).
+   *What:* `events add fri 19:00 book club every:week` and `ev …`, with the same
+   rules as tasks (`day`, `weekday`, `week`, `2w`, `month`, `year`, `mon,thu`;
+   `js/core/repeat.js`), and an editable `repeat` field
+   (`events e2 edit repeat none` ends it). An event repeats from its date onward.
+   *Done when:* `events`, `agenda`, `cal` (the grid's marks and the
+   calendar/agenda widgets), `today` and the pinned summary all show
+   occurrences on the right days, with ↻ and the rule; editing or removing
+   acts on the whole series (say so in the output); import, sync and undo carry
+   the field; unit tests in six time zones, an e2e check of `cal` and `agenda`;
+   README and command reference updated.
+   *Open (ask when starting):* is "skip one occurrence" or an end date needed now?
+   Default: no, whole series only.
 
-## Waiting on the owner
+## Research
 
-Decisions only the owner can make. Don't start these; mention them if relevant.
+Only when the owner asks; ends with findings in [exploration/](exploration/README.md)
+and questions for the owner.
 
-- **Remaining manual checks in Safari and on the iPhone** (first run 6 Oct
-  2026, nothing failed): Mac downloads (M5), Safari engine features (M6–M8),
-  storage after a week (M10, check after 14 Oct), and on the iPhone the key bar
-  and text size (P3), long paste (P5), clip (P6), QR scan (P7) and Mermaid
-  (P8). List and results in
-  [testing.md](testing.md#by-hand-in-safari-and-on-the-iphone). Only the
-  owner's devices can run them.
+- **iOS notifications** (owner: "research task", 6 Oct 2026). Draft plan:
+  [plan 001](plans/001-ios-notifications.md); findings so far:
+  [exploration/ios-notifications.md](exploration/ios-notifications.md). To
+  settle: the sender (GitHub Action vs Cloudflare Worker: timing, Actions
+  minutes, setup), what should notify, quiet hours, the icon. Output: a
+  recommendation and the owner's answers, which turn the plan into Dev tasks.
 
-Decided recently (no longer waiting): no separate domain for now
-([D15](decisions.md)); iOS notifications go ahead ([D16](decisions.md)).
+## Confirmation
+
+Verifying what's built. Not a next implementation; only when the owner asks.
+
+- **Browser tests in WebKit on CI** (agent): run `tests/e2e.cjs` in WebKit as
+  well as Chromium (a `BROWSER=webkit` switch in the harness, `playwright
+  install --with-deps webkit` in CI). A check that can't pass in WebKit for a
+  real platform reason gets a documented browser-specific expectation, never a
+  silent skip. The cloud environment can't download WebKit, so iterate through
+  CI runs. Automates most of M6–M8 below.
+- **Manual checks in Safari and on the iPhone** (owner; first run 6 Oct 2026,
+  nothing failed). Still to run: Mac downloads (M5), Safari engine features
+  (M6–M8), storage after a week (M10, check after 14 Oct), and on the iPhone
+  the key bar and text size (P3), long paste (P5), clip (P6), QR scan (P7) and
+  Mermaid (P8). List and results in
+  [testing.md](testing.md#by-hand-in-safari-and-on-the-iphone).
+
+Decided recently: no separate domain for now ([D15](decisions.md)).
 
 ## Ideas
 
@@ -73,8 +98,9 @@ Not requested; propose to the owner before building. Deferred items have
 their own list in [deferred.md](deferred.md); don't re-propose those without
 new information.
 
-- `events export` to `.ics`, and `tasks t3 share` / `notes n3 share` via the
-  share sheet (the cheap end of [apple-sync](exploration/apple-sync.md)).
-- Recurring events (`every:` like tasks).
-- A WebSocket reachability check in `request` (`ws://`, `wss://`).
-- `request`: show the redirect chain when the server allows it.
+- A WebSocket reachability check in `request` (`wss://`): handshake accepted or
+  not, and its time. Owner asked what it's for (6 Oct): useful only for
+  debugging live-connection services; awaiting a yes or no.
+- `request`: show the redirect chain (each hop's status and address). Owner
+  asked for detail (6 Oct): often hidden by browsers when servers don't allow
+  it; awaiting a yes or no.

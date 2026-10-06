@@ -36,7 +36,8 @@ private GitHub repo. One owner, who uses it on a Mac and an iPhone.
 ## Doing a task
 
 1. Read [docs/todo.md](docs/todo.md): the State section, then take the first
-   Ready item (or the one the owner named). Move it to In progress.
+   **Dev** item (or the one the owner named). Research and Confirmation tasks
+   are only done when the owner asks for them. Move it to In progress.
 2. Read only what the task needs: [docs/architecture.md](docs/architecture.md)
    for where things live, the matching recipe in [docs/recipes.md](docs/recipes.md),
    and the header comments of the modules you touch.

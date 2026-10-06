@@ -105,7 +105,7 @@ anything that fails becomes a todo item. First run: 6 October 2026 (no
 failures; rows without a result haven't been tried yet).
 
 Part of this list (engine features: crypto, compression, canvas, layout)
-will also be covered by running the e2e suite in WebKit on CI (todo item 1).
+will also be covered by running the e2e suite in WebKit on CI (a confirmation task in [todo.md](todo.md#confirmation)).
 The rest stays manual.
 
 ### Mac, Safari

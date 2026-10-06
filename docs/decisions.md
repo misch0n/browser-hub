@@ -101,3 +101,10 @@ Owner: "ios notifications as todo" (it was parked as an exploration). → Planne
 [plans/001-ios-notifications.md](plans/001-ios-notifications.md); the
 plan's first step settles its open questions with the owner (sender, what
 notifies, quiet hours, icon), with proposed defaults.
+
+**D17. Three kinds of todo task** (6 Oct 2026, active)
+The owner doesn't want verification work showing up as the next thing to
+build. → [todo.md](todo.md) splits tasks into Dev (the only source of "the
+next task"), Research (findings and questions, only on request) and
+Confirmation (verifying what's built, only on request). iOS notifications
+became a research task (amends D16); WebKit on CI became a confirmation task.

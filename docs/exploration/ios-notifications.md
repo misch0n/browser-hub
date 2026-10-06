@@ -1,8 +1,8 @@
 # iOS notifications
 
-Status: **approved** (6 Oct 2026, owner: "ios notifications as todo"; earlier the
-same day: "Not now. Mark it for exploration."). Work is planned in
-[plans/001-ios-notifications.md](../plans/001-ios-notifications.md).
+Status: **open: research task** (6 Oct 2026, owner: "ios notifications - research
+task"; earlier: "Not now. Mark it for exploration.", then "ios notifications as
+todo"). A draft plan exists: [plans/001-ios-notifications.md](../plans/001-ios-notifications.md).
 
 ## Question
 

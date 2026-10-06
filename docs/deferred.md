@@ -13,6 +13,7 @@ it to [todo.md](todo.md) (or write an [exploration](exploration/README.md) first
 | Custom domain / dedicated account for an isolated origin | 5 Oct, confirmed 6 Oct 2026 | "not yet", then "no separate domain for now" | Accepted risk, see [D15](decisions.md) and [security.md](security.md#origin-decided-shared-for-now). |
 | Sync with Apple Calendar, Reminders and Notes | 5 Oct 2026 | "dropping that feature for the time being… if it turns into a painpoint" | Options researched: [exploration/apple-sync.md](exploration/apple-sync.md). |
 | `timer` / `pomodoro` / `stopwatch` with notifications | 5 Oct 2026 | "Easier on the phone but not a bad idea. Defer." | Browsers only fire timers reliably while the tab is open. |
+| `events export` to an `.ics` file (and sharing a note or task via the share sheet, proposed with it) | 6 Oct 2026 | "events export - defer" | The cheap end of [apple-sync](exploration/apple-sync.md). |
 | Internet-backed tools: weather widget, currency in `units`, GitHub PRs/issues (`gh prs`) | 5 Oct 2026 | "all. without the internet ones." | The network tools since widened the CSP (D10), so these are technically possible now; still not requested. |
 
 ## Left out for technical reasons
@@ -38,8 +39,6 @@ it to [todo.md](todo.md) (or write an [exploration](exploration/README.md) first
   device (D13).
 - **Geolocation without a third party.** `ip more` asks ipapi.co (free tier,
   daily limit); there's no offline alternative.
-- **Recurring events.** Only tasks repeat (`every:`); events don't yet. Not
-  requested; would reuse `core/repeat.js`.
 - **Fresher nutrition data.** The table is USDA SR28 (2015). USDA's servers
   were unreachable from the build environment; `tools/build-nutrition.mjs` can
   rebuild from a newer export where they're reachable.

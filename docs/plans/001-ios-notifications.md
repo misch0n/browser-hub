@@ -1,7 +1,9 @@
 # 001 · iOS notifications
 
-Status: **approved, not started** (6 Oct 2026, owner: "ios notifications as todo")
-· Todo: [todo.md](../todo.md#ready) · Research: [exploration/ios-notifications.md](../exploration/ios-notifications.md)
+Status: **draft, research first** (6 Oct 2026, owner: "ios notifications as todo", then
+"ios notifications - research task"). Becomes Dev tasks once the research
+questions are answered
+· Todo: [todo.md](../todo.md#research) · Research: [exploration/ios-notifications.md](../exploration/ios-notifications.md)
 
 ## Goal
 
@@ -80,3 +82,4 @@ by the owner (step 7).
 ## Log
 
 - 6 Oct 2026: plan written from the exploration; not started.
+- 6 Oct 2026: owner made it a research task; the open questions come first.

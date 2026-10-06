@@ -5,7 +5,7 @@ Everything about building the hub. The user guide is the top-level
 
 | File | Read it when | Keep it current when |
 | --- | --- | --- |
-| [todo.md](todo.md) | starting any session: state, the next task, what waits on the owner | you start, stop or finish work |
+| [todo.md](todo.md) | starting any session: state, the next Dev task, research and confirmation tasks | you start, stop or finish work |
 | [architecture.md](architecture.md) | changing anything beyond one command | structure, data, sync, output or build changes |
 | [conventions.md](conventions.md) | writing code, UI text or docs | the owner states a new preference |
 | [security.md](security.md) | touching storage, sync, secrets, network, CSP, rendering | any of those change |
@@ -20,7 +20,7 @@ Everything about building the hub. The user guide is the top-level
 
 Where new information goes:
 
-- The owner asks for something → [todo.md](todo.md) Ready (plus a plan if it's big).
+- The owner asks for something → [todo.md](todo.md) under Dev, Research or Confirmation (plus a plan if it's big).
 - The owner says "defer", "skip", "not now" → [deferred.md](deferred.md) or an exploration marked parked.
 - The owner states a preference or rule → [conventions.md](conventions.md) (★) or [security.md](security.md).
 - You decide something structural → [decisions.md](decisions.md).

@@ -50,8 +50,8 @@ function derLen(n) {
 }
 const der = (tag, bytes) => Uint8Array.from([tag, ...derLen(bytes.length), ...bytes]);
 const RSA_ALG_ID = Uint8Array.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
-const spkiFromPkcs1 = (pk) => der(0x30, [...RSA_ALG_ID, ...der(0x03, [0, ...pk])]);
-const pkcs8FromPkcs1 = (pk) => der(0x30, [0x02, 0x01, 0x00, ...RSA_ALG_ID, ...der(0x04, pk)]);
+export const spkiFromPkcs1 = (pk) => der(0x30, [...RSA_ALG_ID, ...der(0x03, [0, ...pk])]);
+export const pkcs8FromPkcs1 = (pk) => der(0x30, [0x02, 0x01, 0x00, ...RSA_ALG_ID, ...der(0x04, pk)]);
 
 // The SubjectPublicKeyInfo inside a certificate: Certificate → tbsCertificate →
 // its 7th element (version is explicit [0] when present).

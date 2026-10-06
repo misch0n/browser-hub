@@ -42,8 +42,8 @@ still work.
 | Read later | `later` |
 | Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `pw` |
 | Developer | `json`, `csv`, `base`, `escape`, `cidr`, `url`, `regex`, `diff`, `cron`, `color` |
-| Security | `jwt`, `hmac`, `hash`, `pw` |
-| Web | `http`, `mime` |
+| Security | `crypt`, `cert`, `jwt`, `hmac`, `hash`, `pw` |
+| Web | `http`, `mime`, `ua`, `device` |
 | Text | `text`, `count`, `case` |
 | Share | `clip`, `bounce` |
 | Chance | `random`, `roll` |
@@ -269,6 +269,31 @@ for JavaScript, Python, Java, C#, Go, PHP, Ruby, Rust and JSON, with raw and
 verbatim forms and each language's flags. `http` and `mime` are searchable
 references (`http 4xx`, `http rate limit`, `mime docx`, `mime image/*`).
 
+**Encryption and certificates**, on the page with Web Crypto: `crypt encrypt
+<text>` asks for a passphrase (hidden, twice) or a raw key (`hex:…`,
+`base64:…`, or an AES JWK) and gives one line to keep, `ccx1.gcm.210000.<salt>.<iv>.<ciphertext>`:
+AES-256-GCM (or `crypt encrypt cbc`) with the key from PBKDF2-SHA-256 at
+210,000 rounds; `crypt decrypt <that line>` asks for the secret again. The IV,
+salt and ciphertext are also shown apart for other tools, and `crypt decrypt
+gcm|cbc <iv> <ciphertext>` reads theirs with a raw key. `crypt encrypt rsa
+<public key> <text>` and `crypt decrypt rsa <private key> <ciphertext>` use
+RSA-OAEP with SHA-256 (keys pasted as PEM or JWK, anywhere in the line).
+`crypt keygen aes|rsa|ec|ed25519 [size]` makes keys and `crypt key <PEM or
+JWK>` shows a key in every form (PEM SPKI/PKCS#8, JWK, RFC 7638 thumbprint).
+Nothing `crypt` sees is kept: not in the shared history, not for ↑.
+`cert <paste>` decodes an X.509 certificate, a whole chain or a certificate
+request (PEM, or base64/hex DER): subject, issuer, validity against today,
+names (SANs), key, signature algorithm, CA and key usage, OCSP/CRL addresses
+and SHA-256/SHA-1 fingerprints. It reads; it doesn't check signatures or chains.
+
+**Browser**: `ua` reads a user-agent string (this browser's by default, with
+its client hints where the browser gives them): browser, engine, system and
+device, and says what today's frozen strings hide (Windows 11, the macOS
+version, reduced Android strings). `device` shows the screen and window,
+pixel ratio, colour scheme and input, language and time zone, CPU threads,
+memory, graphics, network hints, storage use and which web platform features
+are here (`device features` for just those).
+
 **QR codes**: `qr <text>` draws one for a link or any text, made on the page
 (nothing is sent anywhere), always dark on white so phones can scan it in any
 theme. Error correction is raised as far as the size allows.
@@ -379,6 +404,7 @@ npm test                                         # unit tests, no dependencies
 npm run test:tz                                  # unit tests in six time zones (UTC-11 … UTC+14)
 NODE_PATH=$(npm root -g) npm run test:e2e        # the real page in Chromium (needs Playwright, and jsqr below)
 npm i --no-save jsqr@1.4.0 && node --test tests/qr.test.mjs   # QR codes read back by an independent decoder
+node --test tests/x509.test.mjs                  # certificate decoder against fixed certificates (tests/fixtures/x509)
 ```
 
 The nutrition table is generated: list foods in `tools/nutrition-foods.mjs`

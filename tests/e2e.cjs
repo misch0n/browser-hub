@@ -543,6 +543,47 @@ async function check(name, fn) {
     assert.match(await lastText(), /✓ Signature valid · ES256/);
   });
 
+  await check('crypt: passphrase asked twice, hidden; the envelope decrypts; cert, ua and device read here', async () => {
+    const paste = (text) => prompt.evaluate((el, t) => {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', t);
+      return el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, text);
+    const answer = async (secret) => {
+      await page.waitForFunction(() => document.getElementById('prompt').type === 'password');
+      await prompt.pressSequentially(secret);
+      await page.keyboard.press('Enter');
+    };
+    await type('crypt encrypt the plan is secret');
+    await page.keyboard.press('Enter');
+    await answer('hunter22');
+    await answer('hunter22');
+    await page.waitForFunction(() => /Encrypted/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 10000 });
+    const envelope = await lastTurn().locator('.value-text').textContent();
+    assert.match(envelope, /^ccx1\.gcm\.210000\./);
+    await type('crypt decrypt ' + envelope);
+    await page.keyboard.press('Enter');
+    await answer('hunter22');
+    await page.waitForFunction(() => /Decrypted/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 10000 });
+    assert.equal(await lastTurn().locator('.value-text').textContent(), 'the plan is secret');
+    const kept = await page.evaluate(() => Object.keys(localStorage).map((k) => localStorage.getItem(k)).join('\n'));
+    assert.ok(!kept.includes('hunter22') && !kept.includes('the plan is secret') && !kept.includes(envelope.slice(0, 30)));
+    // cert: a pasted certificate.
+    await prompt.focus();
+    await type('cert ');
+    await paste(fs.readFileSync(path.join(__dirname, 'fixtures/x509/ec-leaf.pem'), 'utf8'));
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /SHA-256/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await lastText(), /leaf\.example\.test · certificate · valid/);
+    assert.match(await lastText(), /EC P-256/);
+    await send('ua');
+    assert.match(await lastText(), /Chrome \d+[\s\S]*this browser[\s\S]*engine\s+Blink/);
+    await send('device');
+    await page.waitForFunction(() => /Features/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await lastText(), /window\s+1440 × 900/);
+    assert.match(await lastText(), /✓ Web Crypto/);
+  });
+
   await check('font: bigger and smaller on this device, applied before the first paint', async () => {
     const size = () => page.evaluate(() => parseFloat(getComputedStyle(document.body).fontSize));
     const before = await size();

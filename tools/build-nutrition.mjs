@@ -64,13 +64,14 @@ const rows = [];
 const seen = new Set();
 let bad = 0;
 for (const [group, list] of Object.entries(FOODS)) {
-  for (const [ndb, name, state, keys] of list) {
+  for (const [ndb, name, state, keys, household = []] of list) {
     const r = abbrev.get(ndb);
     if (!r) { console.error('missing NDB ' + ndb + ' (' + name + ')'); bad++; continue; }
     if (seen.has(ndb)) { console.error('listed twice: ' + ndb); bad++; continue; }
     seen.add(ndb);
     const values = NUTRIENTS.map(([, , , col]) => (r[col] === '' ? null : Number(r[col])));
-    const portions = [[r[48], r[49]], [r[50], r[51]]].filter(([g, d]) => g && d).map(([g, d]) => [Number(g), d]);
+    // Household sizes first: counting (2 eggs, a banana) uses the first that isn't a measure.
+    const portions = [...household, ...[[r[48], r[49]], [r[50], r[51]]].filter(([g, d]) => g && d).map(([g, d]) => [Number(g), d])];
     rows.push([ndb, group, name, state, keys, values, portions, names.get(ndb)]);
     console.log(ndb, String(values[0]).padStart(4), (name + (state ? ' · ' + state : '')).padEnd(46), '| ' + names.get(ndb));
   }

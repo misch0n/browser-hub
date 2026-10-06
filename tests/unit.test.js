@@ -1567,7 +1567,7 @@ test('import: conflicts reported, bad entries rejected, schema checked, never ov
   assert.ok(r.lines.some((l) => /skipped alias 'gh'.*already exists/.test(l)));
   assert.ok(r.lines.some((l) => /skipped alias 'help'.*built-in/.test(l)));
   assert.ok(r.lines.some((l) => /skipped alias 'js'/.test(l)));
-  assert.deepEqual(r.counts, { notes: 1, tasks: 0, events: 0, snippets: 0, later: 0, aliases: 2, zones: 1 });
+  assert.deepEqual(r.counts, { notes: 1, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, aliases: 2, zones: 1 });
   assert.equal(r.invalid, 2);
   assert.equal(r.collections.settings.theme, 'nord'); // this browser already chose a theme
   assert.deepEqual(r.collections.settings.widgets, ['notes']);
@@ -2422,4 +2422,128 @@ test('random and roll commands', async () => {
   assert.match((await app.run('roll d20 adv'))[0], /^# d20 with advantage = \d+/);
   assert.match((await app.run('roll 2d6 adv'))[0], /^err: advantage needs one d20/);
   assert.equal(app.data.steps().undo.length, 0);
+});
+
+test('own foods, portions and meals: reading labels, amounts and portion sizes', async () => {
+  const N = await import('../js/lib/nutrition.js');
+  const { readAmount } = await import('../js/lib/cooking.js');
+  const L = (s) => N.readFoodLabel(s);
+  assert.deepEqual(L('lyutenitsa 75 kcal 1.5 protein 2.5 fat 11 carbs'), { name: 'lyutenitsa', values: { kcal: 75, protein: 1.5, fat: 2.5, carbs: 11 }, portion: null });
+  assert.deepEqual(L('kefir kcal 52 protein 3.3 fat 1.8 carbs 4.7 sugar 4.7 salt 0.1'), { name: 'kefir', values: { kcal: 52, protein: 3.3, fat: 1.8, carbs: 4.7, sugar: 4.7, salt: 0.1 }, portion: null });
+  assert.deepEqual(L('banana bread 320kcal 5g protein 12g fat 48g carbs'), { name: 'banana bread', values: { kcal: 320, protein: 5, fat: 12, carbs: 48 }, portion: null });
+  // Values for a portion become per 100 g, and the portion is kept for counting.
+  assert.deepEqual(L('"oat bar" kcal 190 protein 4 fat 7 carbs 27 per 1 bar = 45 g'),
+    { name: 'oat bar', values: { kcal: 422.22, protein: 8.89, fat: 15.56, carbs: 60 }, portion: { name: 'bar', g: 45 } });
+  assert.deepEqual(L('soup 60 kcal per 250g').values, { kcal: 24 });
+  assert.match(L('75 kcal').error, /start with the food/);
+  assert.match(L('thing 75 kcal 3').error, /'3' has no label/);
+  assert.match(L('thing kcal 75 vitamins 3').error, /'vitamins' isn't kcal/);
+  assert.match(L('thing 1.5 protein').error, /at least the kcal/);
+  assert.match(L('thing 950 kcal').error, /more than pure fat/);
+  assert.match(L('thing 75 kcal per slice').error, /portion/);
+
+  const Q = (s) => N.readQuantity(s, readAmount);
+  assert.deepEqual(Q('200g chicken breast'), { grams: 200, rest: 'chicken breast' });
+  assert.deepEqual(Q('chicken breast 1.5 kg'), { grams: 1500, rest: 'chicken breast' });
+  assert.deepEqual(Q('2 eggs'), { count: 2, unit: null, rest: 'eggs' });
+  assert.deepEqual(Q('½ cup rice'), { count: 0.5, unit: 'cup', rest: 'rice' });
+  assert.deepEqual(Q('2 slices of bread'), { count: 2, unit: 'slices', rest: 'bread' });
+  assert.deepEqual(Q('a banana'), { count: 1, unit: null, rest: 'banana' });
+  assert.deepEqual(Q('05062'), { rest: '05062' });
+  assert.deepEqual(Q('7up'), { rest: '7up' });
+  assert.deepEqual(N.mealParts('200g chicken + 150g rice; 1 tbsp oil'), ['200g chicken', '150g rice', '1 tbsp oil']);
+  assert.equal(N.mealParts('chicken breast'), null);
+
+  const item = { portions: [[118, '1 medium'], [225, '1 cup, mashed'], [8.5, '1 tbsp']] };
+  const P = (c, u) => N.portionGrams(item, c, u, readAmount);
+  assert.deepEqual(P(2, null), { grams: 236, label: '2 × 1 medium' });
+  assert.deepEqual(P(1, null), { grams: 118, label: '1 medium' });
+  assert.deepEqual(P(1, 'medium'), { grams: 118, label: '1 medium' });
+  assert.equal(P(2, 'tbsp').grams, 2 * 225 / 16); // from the cup: the first volume portion
+  assert.equal(P(1, 'tsp').grams, 225 / 48);
+  assert.equal(P(1, 'slice'), null);
+  assert.equal(N.portionGrams({ portions: [[28, '1 oz']] }, 1, null, readAmount), null); // an ounce is a weight, not a thing
+});
+
+test('cook calorie: your own foods in the shared grammar, portions, meals, sync and import', async () => {
+  const app = await makeApp();
+  assert.deepEqual(await app.run('cook calorie add lyutenitsa 75 kcal 1.5 protein 2.5 fat 11 carbs'),
+    ['# Added food f1 · lyutenitsa', 'per 100 g: 75 kcal · protein 1.5 g · fat 2.5 g · carbs 11 g']);
+  await app.run('cook calorie add "oat bar" kcal 190 protein 4 fat 7 carbs 27 per 1 bar = 45 g');
+  assert.match((await app.run('cook calorie add Lyutenitsa 80 kcal'))[0], /^err: You already have Lyutenitsa \(f1\)/);
+  assert.equal(app.data.state.foods.items[1].portionG, 45);
+  // Shown with its fields, editable in place; found by name; counted by its portion.
+  const shown = await app.run('cook calorie f1');
+  assert.equal(shown[0], '# food f1');
+  assert.ok(shown.includes('kcal: 75 kcal per 100 g  [cook calorie f1 edit kcal = 75]'));
+  assert.ok(shown.includes('sugar: none  [cook calorie f1 edit sugar = none]'));
+  assert.equal((await app.run('cook calorie lyutenitsa'))[0], '# food f1');
+  const bars = await app.run('cook calorie 2 bars oat bar');
+  assert.equal(bars[bars.length - 1], '2 × 1 bar = 90 g: 380 kcal · protein 8 g · fat 14 g · carbs 54 g');
+  assert.equal(bars.copied, '380');
+  assert.deepEqual((await app.run('cook calorie f1 edit kcal 80')).slice(0, 1), ['# Updated cook calorie f1 kcal']);
+  assert.equal(app.data.state.foods.items[0].kcal, 80);
+  assert.match((await app.run('cook calorie f1 edit kcal lots'))[0], /^err: kcal is a number from 0 to 900/);
+  assert.match((await app.run('cook calorie f1 edit portion 1 jar = 260 g'))[0], /Updated/);
+  assert.deepEqual([app.data.state.foods.items[0].portionName, app.data.state.foods.items[0].portionG], ['1 jar', 260]);
+  const mine = await app.run('cook calorie mine');
+  assert.deepEqual(mine.slice(2), ['lyutenitsa | yours | 80 | 1.5 | 2.5 | 11', 'oat bar | yours | 422 | 8.9 | 15.6 | 60']);
+  assert.match((await app.run('cook calorie overview'))[0], /^err: No food matches/);
+  assert.ok((await app.run('cook calorie')).some((l) => /^Yours \| lyutenitsa, oat bar$/.test(l)));
+
+  // USDA foods by count and by measure.
+  assert.equal((await app.run('cook calorie a banana'))[0], '# Banana · raw · 1 medium = 118 g');
+  assert.equal((await app.run('cook calorie 2 eggs whole hard-boiled'))[0], '# Egg, whole · hard-boiled · 2 × 1 large = 100 g');
+  assert.equal((await app.run('cook calorie 1 tbsp olive oil'))[0], '# Olive oil · 1 tbsp = 13.5 g');
+  assert.equal((await app.run('cook calorie 2 cloves garlic'))[0], '# Garlic · raw · 2 × 1 clove = 6 g');
+  assert.match((await app.run('cook calorie 2 slices chicken breast skinless raw'))[0], /^err: No portion size for Chicken breast, skinless in slices/);
+  const eggs = await app.run('cook calorie 2 eggs');
+  assert.equal(eggs[1], '| food |  | weight | kcal | protein g | fat g | carbs g');
+  assert.ok(eggs.includes('Egg, whole | raw | 100 g | 143 | 12.6 | 9.5 | 0.72'));
+
+  // A meal: amounts and foods added up, which food was picked said, rows open the food.
+  const m = await app.run('cook calorie 200g chicken breast raw + 150g rice cooked + 1 tbsp olive oil + 100g lyutenitsa');
+  assert.equal(m[0], '# Meal · 4 items · 634 kcal');
+  assert.deepEqual(m.slice(1, 7), ['| amount | food | kcal | protein g | fat g | carbs g',
+    '200 g | Chicken breast, skinless · raw | 240 | 45 | 5.2 | 0', '150 g | Rice, white, long-grain · boiled | 195 | 4 | 0.42 | 42.3',
+    '1 tbsp · 13.5 g | Olive oil | 119 | 0 | 13.5 | 0', '100 g | lyutenitsa | 80 | 1.5 | 2.5 | 11', ' | Total | 634 | 50.5 | 21.7 | 53.3']);
+  assert.ok(m.includes('dim: "chicken breast raw": Chicken breast, skinless, raw (1 of 2 that match; add words for another)'));
+  assert.equal(m.copied, '634');
+  const bad = await app.run('cook calorie 100g unicorn + 2 slices chicken breast skinless raw + rice cooked');
+  assert.equal(bad.tone, 'warn');
+  assert.ok(bad.some((l) => /no food matches "unicorn"/.test(l)));
+  assert.ok(bad.some((l) => /no portion size for Chicken breast, skinless: give grams/.test(l)));
+  assert.ok(bad.includes('dim: rice cooked: no amount given, counted 100 g'));
+
+  // Remove and undo; export and import; sync between devices.
+  await app.run('cook calorie f2 rm');
+  assert.equal(app.data.state.foods.items.length, 1);
+  await app.run('undo');
+  assert.equal(app.data.state.foods.items.length, 2);
+  const file = await app.store.exportAll();
+  assert.equal(file.collections.foods.items.length, 2);
+  const other = await makeApp();
+  const { merge: mergeImport } = await import('../js/core/importer.js');
+  const cur = {};
+  for (const k of Object.keys(DEFAULTS)) cur[k] = other.data.state[k];
+  const imp = mergeImport(cur, file, other.commands.isBuiltin, () => MON);
+  assert.equal(imp.counts.foods, 2);
+  assert.deepEqual(imp.collections.foods.items.map((f) => [f.id, f.name, f.kcal, f.portionG]), [['f1', 'lyutenitsa', 80, 260], ['f2', 'oat bar', 422.22, 45]]);
+  const bogus = mergeImport(cur, { schema: 1, collections: { foods: { items: [{ name: 'x', kcal: 5000 }, { name: '', kcal: 1 }, { name: 'ok', kcal: 10 }] } } }, other.commands.isBuiltin, () => MON);
+  assert.deepEqual([bogus.counts.foods, bogus.invalid], [1, 2]);
+
+  const gh = fakeGitHub({ tokens: ['tok'], repos: { 'me/data': { private: true } } });
+  const dev = async () => {
+    const a = await makeApp();
+    a.ctx.sync = createSync({ data: a.data, store: a.store, now: () => new Date(MON), fetch: gh.fetch, device: 'test' });
+    return a;
+  };
+  const A = await dev(), B = await dev();
+  await A.run('cook calorie add kefir 52 kcal 3.3 protein 1.8 fat 4.7 carbs');
+  await B.run('cook calorie add ayran 35 kcal 1.7 protein 1.8 fat 2.4 carbs');
+  await A.ctx.sync.setup('me/data', null, 'tok');
+  const rb = await B.ctx.sync.setup('me/data', null, 'tok');
+  assert.deepEqual(rb.renumbered, [{ from: 'f1', to: 'f2' }]);
+  await A.ctx.sync.syncNow();
+  for (const x of [A, B]) assert.deepEqual(x.data.state.foods.items.map((f) => f.id + ':' + f.name), ['f1:kefir', 'f2:ayran']);
 });

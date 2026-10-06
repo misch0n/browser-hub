@@ -1,6 +1,6 @@
 import { SCHEMA, parseISO, parseTime, isValidZone, canonicalZone, truncate } from './util.js';
 import { validateEntry, siteRoot, SHIPPED_DEFAULT } from './aliases.js';
-import { SNIPPET_NAME, linkURL } from './records.js';
+import { SNIPPET_NAME, linkURL, KINDS } from './records.js';
 import { parseRepeat } from './repeat.js';
 import { migrateCollections, HISTORY_CAP } from './data.js';
 import { isTheme, isWidget, DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js';
@@ -54,7 +54,7 @@ export function merge(current, file, isBuiltin, now) {
   const nextId = (prefix) => { counters[prefix] = (counters[prefix] || 0) + 1; return prefix + counters[prefix]; };
   const stamp = (v) => (isStamp(v) ? v : now().toISOString());
   const items = (c) => (src[c] && Array.isArray(src[c].items) ? src[c].items : []);
-  const added = { notes: 0, tasks: 0, events: 0, snippets: 0, later: 0, history: 0 };
+  const added = { notes: 0, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, history: 0 };
   let invalid = 0;
 
   for (const n of items('notes')) {
@@ -104,6 +104,28 @@ export function merge(current, file, isBuiltin, now) {
     const read = l.read === true;
     out.later.items.push({ id: nextId('l'), url, title: l.title || null, read, readAt: read && isStamp(l.readAt) ? l.readAt : null, created: stamp(l.created) });
     added.later++;
+  }
+
+  // Your foods: each value checked like an edit; one with the same name here already is kept.
+  for (const f of items('foods')) {
+    if (!f || !isStr(f.name, 80)) { invalid++; continue; }
+    const food = { id: null, name: f.name.trim(), created: stamp(f.created), updated: stamp(f.updated || f.created), portionG: null, portionName: null };
+    let ok = true;
+    for (const k of ['kcal', 'protein', 'fat', 'carbs', 'sugar', 'fiber', 'sat', 'salt']) {
+      const v = f[k] === null || f[k] === undefined ? 'none' : String(f[k]);
+      const r = KINDS.food.fields[k].parse(v);
+      if (r.error) { ok = false; break; }
+      food[k] = r.value;
+    }
+    if (f.portionG && typeof f.portionName === 'string') {
+      const r = KINDS.food.fields.portion.parse(f.portionName + ' = ' + f.portionG + ' g');
+      if (r.error) ok = false; else { food.portionG = r.value.g; food.portionName = r.value.name; }
+    }
+    if (!ok) { invalid++; continue; }
+    if (out.foods.items.some((x) => x.name.toLowerCase() === food.name.toLowerCase())) { lines.push("skipped food '" + food.name + "': already exists"); continue; }
+    food.id = nextId('f');
+    out.foods.items.push(food);
+    added.foods++;
   }
 
   // Aliases follow the conflict rules: never overwrite, report every collision.
@@ -164,6 +186,6 @@ export function merge(current, file, isBuiltin, now) {
     if (!sameList(ws, DEFAULT_WIDGETS)) out.settings.widgets = ws;
   }
 
-  const counts = { notes: added.notes, tasks: added.tasks, events: added.events, snippets: added.snippets, later: added.later, aliases: aliasesAdded, zones: zonesAdded };
+  const counts = { notes: added.notes, tasks: added.tasks, events: added.events, snippets: added.snippets, later: added.later, foods: added.foods, aliases: aliasesAdded, zones: zonesAdded };
   return { collections: out, counts, invalid, lines };
 }

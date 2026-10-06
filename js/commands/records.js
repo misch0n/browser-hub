@@ -25,6 +25,7 @@ export const NOUNS = {
   event: { noun: 'events', short: 'ev', one: 'event' },
   snippet: { noun: 'snippets', short: 'snip', one: 'snippet' },
   link: { noun: 'later', short: 'later', one: 'link' },
+  food: { noun: 'cook calorie', short: 'cook calorie', one: 'food' },
   alias: { noun: 'aliases', short: 'alias', one: 'alias' },
 };
 
@@ -41,6 +42,11 @@ function display(kind, field, item, today) {
     case 'event.date': return [[longDate(item.date, today), 'date'], [' · ' + dayLabel(item.date, today), 'faint']];
     case 'event.time': return item.time ? [[item.time, 'num']] : [['all day', 'faint']];
     case 'snippet.name': return [[item.name, 'accent']];
+    case 'food.name': return [[item.name, 'strong']];
+    case 'food.kcal': return [[item.kcal + ' kcal', 'num'], [' per 100 g', 'faint']];
+    case 'food.protein': case 'food.fat': case 'food.carbs': case 'food.sugar': case 'food.fiber': case 'food.sat': case 'food.salt':
+      return item[field] === null || item[field] === undefined ? none : [[item[field] + ' g', 'num']];
+    case 'food.portion': return item.portionG ? [[item.portionName + ' = ' + item.portionG + ' g', '']] : none;
     case 'link.url': return [[item.url, 'url']];
     case 'link.title': return item.title ? [[item.title, 'strong']] : none;
     case 'link.read': return item.read ? [['✓ read', 'ok']] : [['○ unread', 'dim']];
@@ -55,7 +61,7 @@ function display(kind, field, item, today) {
 // Read-only rows shown under the editable ones.
 function extras(kind, item, today) {
   const when = (iso) => [[dayLabel(todayISO(new Date(iso)), today), 'dim']];
-  if (kind === 'note' || kind === 'snippet') return [['created', when(item.created)], ['updated', when(item.updated)]];
+  if (kind === 'note' || kind === 'snippet' || kind === 'food') return [['created', when(item.created)], ['updated', when(item.updated)]];
   if (kind === 'link') return [['added', when(item.created)], ...(item.read && item.readAt ? [['read', when(item.readAt)]] : [])];
   if (kind === 'task') {
     const rows = [['created', when(item.created)]];
@@ -120,7 +126,7 @@ export function createRecords({ st, isBuiltin }) {
       if (i < 0) return;
       // Replace, not merge: a cleared field (repeat none) must go.
       d.items[i] = r.item;
-      if (kind === 'note' || kind === 'snippet') d.items[i].updated = ctx.now().toISOString();
+      if (kind === 'note' || kind === 'snippet' || kind === 'food') d.items[i].updated = ctx.now().toISOString();
       saved = d.items[i];
     });
     if (!saved) return out.err('No ' + label(kind) + ' ' + key);
@@ -142,7 +148,7 @@ export function createRecords({ st, isBuiltin }) {
     }
     await ctx.data.mutate(KINDS[kind].col, (d) => { d.items = d.items.filter((x) => x.id !== key); });
     out.head([['Removed ' + label(kind) + ' ', ''], [key, 'id']], 'ok');
-    out.line(kind === 'snippet' ? item.name : kind === 'link' ? item.title || item.url : item.text || item.title, 'gone');
+    out.line(kind === 'snippet' || kind === 'food' ? item.name : kind === 'link' ? item.title || item.url : item.text || item.title, 'gone');
   }
 
   // The entry `word` names: an id for notes, tasks and events (t3, or just 3
@@ -180,7 +186,7 @@ export function createRecords({ st, isBuiltin }) {
       ids: () => (kind === 'alias'
         ? st().aliases.entries.map((e) => ({ value: e.name, label: e.template ? 'engine' : 'alias' }))
         : kind === 'snippet' ? st().snippets.items.map((x) => ({ value: x.name, label: x.text.split('\n')[0].slice(0, 50) }))
-          : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || x.url || '').slice(0, 50) }))),
+          : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || x.url || x.name || '').slice(0, 50) }))),
     };
   }
   const asAdapter = (kindOrAdapter) => (typeof kindOrAdapter === 'string' ? adapterFor(kindOrAdapter) : kindOrAdapter);

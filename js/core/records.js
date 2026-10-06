@@ -16,6 +16,23 @@ import { validateEntry } from './aliases.js';
 import { parseRepeat, firstDue } from './repeat.js';
 
 const NONE = /^(none|-|clear)$/i;
+const num = (v) => (v === null || v === undefined ? 'none' : String(v));
+// Grams (or kcal) per 100 g: a number from 0 to max; 'none' clears an optional one.
+const amount = (max, required) => (v) => {
+  const t = v.trim().replace(',', '.').replace(/\s*(g|kcal)$/i, '');
+  if (!required && NONE.test(t)) return { value: null };
+  const n = Number(t);
+  if (t === '' || !Number.isFinite(n) || n < 0 || n > max) return { error: 'is a number from 0 to ' + max + ' (per 100 g)' };
+  return { value: Math.round(n * 100) / 100 };
+};
+// '1 slice = 30 g', '1 slice 30g', '30 g' -> { name, g } or null
+export function readPortionText(v) {
+  const m = /^(.*?)\s*=?\s*(\d+(?:[.,]\d+)?)\s*g$/i.exec(String(v).trim());
+  if (!m) return null;
+  const g = Number(m[2].replace(',', '.'));
+  if (!(g > 0 && g <= 5000)) return null;
+  return { name: m[1].replace(/=\s*$/, '').trim() || 'portion', g };
+}
 export const SNIPPET_NAME = /^[\p{L}\p{N}_.-]{1,40}$/u;
 
 // A link to keep: http(s) only; a bare domain gets https://. -> the URL or null
@@ -174,6 +191,34 @@ export const KINDS = {
         apply(item, value, env) {
           item.read = value;
           item.readAt = value ? item.readAt || env.now().toISOString() : null;
+        },
+      },
+    },
+  },
+  // Your own foods for `cook calorie`: values per 100 g, optionally a portion.
+  food: {
+    col: 'foods', cmd: 'cook calorie', prefix: 'f', label: 'food',
+    fields: {
+      name: { aliases: ['title'], parse: text(80), raw: (x) => x.name },
+      kcal: { aliases: ['energy', 'calories', 'cal'], raw: (x) => num(x.kcal), parse: amount(900, true) },
+      protein: { aliases: [], raw: (x) => num(x.protein), parse: amount(100) },
+      fat: { aliases: [], raw: (x) => num(x.fat), parse: amount(100) },
+      carbs: { aliases: ['carbohydrate', 'carbohydrates', 'carb'], raw: (x) => num(x.carbs), parse: amount(100) },
+      sugar: { aliases: ['sugars'], raw: (x) => num(x.sugar), parse: amount(100) },
+      fiber: { aliases: ['fibre'], raw: (x) => num(x.fiber), parse: amount(100) },
+      sat: { aliases: ['saturated', 'saturates'], raw: (x) => num(x.sat), parse: amount(100) },
+      salt: { aliases: [], raw: (x) => num(x.salt), parse: amount(100) },
+      portion: {
+        aliases: ['serving'],
+        raw: (x) => (x.portionG ? x.portionName + ' = ' + x.portionG + ' g' : 'none'),
+        parse(v) {
+          if (NONE.test(v.trim())) return { value: null };
+          const p = readPortionText(v);
+          return p ? { value: p } : { error: "is like '1 slice = 30 g' or '30 g'" };
+        },
+        apply(item, value) {
+          item.portionG = value ? value.g : null;
+          item.portionName = value ? value.name : null;
         },
       },
     },

@@ -441,7 +441,19 @@ async function check(name, fn) {
     await lastTurn().locator('tr.tr-run').first().click();
     await page.waitForFunction(() => /cook calorie 05062/.test([...document.querySelectorAll('.turn .you-text')].pop().textContent));
     await page.waitForFunction(() => /energy\s+120 kcal/.test([...document.querySelectorAll('.turn')].pop().innerText));
-    assert.match(await lastText(), /Minerals[\s\S]*selenium[\s\S]*Vitamins[\s\S]*niacin/);
+    assert.match(await lastText(), /Minerals[\s\S]*selenium[\s\S]*Vitamins[\s\S]*niacin/);    // Your own food: added, edited in place, counted by its portion in a meal.
+    await send('cook calorie add "oat bar" kcal 190 protein 4 fat 7 carbs 27 per 1 bar = 45 g');
+    assert.match(await lastText(), /Added food f\d+ · oat bar/);
+    const fid = (await lastText()).match(/Added food (f\d+)/)[1];
+    await send('cook calorie ' + fid);
+    await lastTurn().locator('button.editable').nth(1).click();
+    await lastTurn().locator('.edit-input').fill('400');
+    await lastTurn().locator('.edit-input').press('Enter');
+    await page.waitForFunction((id) => new RegExp('^cook calorie ' + id + ' edit kcal 400$').test([...document.querySelectorAll('.turn .you-text')].pop().textContent), fid);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('cc:foods')).items.pop().kcal), 400);
+    await send('cook calorie 2 bars oat bar + a banana');
+    await page.waitForFunction(() => /Meal · 2 items/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await lastText(), /2 × 1 bar · 90 g[\s\S]*1 medium · 118 g[\s\S]*Total\s+465/);
   });
 
   await check('roll: one of each die, tap a die to roll it again; random numbers', async () => {

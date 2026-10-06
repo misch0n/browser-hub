@@ -259,6 +259,21 @@ nuts, oils, sweets, snacks like crisps and chocolate, drinks, condiments)
 come from the USDA National Nutrient Database for Standard Reference (SR28,
 public domain); the table loads only when first used.
 
+Amounts can be weights (`150g`, `8 oz`) or counts: `cook calorie 2 eggs`,
+`a banana`, `1 slice bread`, `½ cup rice cooked`, `1 tbsp olive oil` use the
+food's household sizes. Join foods with `+` for a meal:
+`cook calorie 200g chicken breast raw + 150g rice cooked + 1 tbsp olive oil`
+gives each line, the total, where the energy comes from (protein, fat,
+carbs), and which food each line picked when several matched.
+
+Your own foods (a jar of lyutenitsa, a protein bar) are saved and synced like
+notes: `cook calorie add lyutenitsa 75 kcal 1.5 protein 2.5 fat 11 carbs`, or
+straight off a label with its portion, `cook calorie add "oat bar" kcal 190
+protein 4 fat 7 carbs 27 per 1 bar = 45 g` (stored per 100 g, counted by the
+bar). They come first in searches and meals; `cook calorie mine` lists them,
+`cook calorie f2` shows one with every value editable in place, `cook calorie
+f2 edit sugar 9` and `cook calorie f2 rm` work as everywhere else.
+
 **Chance**: `random` gives 1–100; `random 50`, `random 10-20`, `random -5..5`
 and `random 0.5-2.5` set the band (decimals as written), `random 6 digits`
 the length, and `x6` and `unique` draw several (`random 1-49 x6 unique`).

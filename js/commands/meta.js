@@ -232,6 +232,7 @@ export default function register(add, helpers) {
         ['events', [[String(count('events')), 'num']]],
         ['snippets', [[String(count('snippets')), 'num']]],
         ['links', [[String(count('later')), 'num']]],
+        ['foods', [[String(count('foods')), 'num']]],
         ['aliases', [[String(c.aliases ? c.aliases.entries.length : 0), 'num']]],
         ['size', [[bytes(text.length), 'dim']]],
       ]);

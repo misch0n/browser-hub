@@ -2265,3 +2265,79 @@ test('cook command: target, oven, convert', async () => {
   assert.match((await app.run('cook bake'))[0], /^# /);
   assert.match((await app.run('cook nonsense'))[0], /^# Usage/);
 });
+
+test('nutrition data: USDA SR28 values, consistent with themselves and with the food list', async () => {
+  const data = await import('../js/lib/nutrition-data.js');
+  const { FOODS: LIST } = await import('../tools/nutrition-foods.mjs');
+  const N = await import('../js/lib/nutrition.js');
+  const items = N.prepare(data);
+  // The generated file is exactly the list (regenerate it after editing the list).
+  const listed = Object.entries(LIST).flatMap(([g, l]) => l.map(([id, name, state, words]) => [id, g, name, state, words]));
+  assert.deepEqual(items.map((f) => [f.id, f.group, f.name, f.state, f.words]), listed);
+  assert.equal(new Set(items.map((f) => f.id)).size, items.length);
+  assert.ok(items.length >= 300);
+  // Known values from USDA's own tables.
+  const by = (id) => items.find((f) => f.id === id).values;
+  assert.deepEqual([by('05062').kcal, by('05062').protein, by('05062').fat], [120, 22.5, 2.62]); // chicken breast, raw
+  assert.deepEqual([by('05064').kcal, by('05064').protein], [165, 31.02]); // roasted
+  assert.deepEqual([by('01123').kcal, by('20045').kcal, by('09003').kcal, by('19411').kcal], [143, 130, 52, 532]); // egg, cooked rice, apple, crisps
+  for (const f of items) {
+    const v = f.values;
+    assert.ok(typeof v.kcal === 'number' && v.kcal >= 0, f.id + ' kcal');
+    for (const k of ['protein', 'fat', 'carbs']) assert.ok(typeof v[k] === 'number' && v[k] >= 0, f.id + ' ' + k);
+    // Parts of 100 g add up to no more than 100 g (a shifted column would break this).
+    assert.ok(v.protein + v.fat + v.carbs + (v.water || 0) <= 101, f.id + ' adds up to more than 100 g');
+    // Energy agrees with the macronutrients (Atwater 4/9/4), apart from alcohol.
+    const est = 4 * v.protein + 9 * v.fat + 4 * v.carbs;
+    if (!/alcohol|beer|wine|spirits/i.test(f.usda + f.words)) assert.ok(Math.abs(v.kcal - est) <= Math.max(25, 0.15 * v.kcal), f.id + ' ' + f.name + ': ' + v.kcal + ' vs ' + Math.round(est));
+    if (v.sat !== null) assert.ok(v.sat <= v.fat + 0.01, f.id + ' saturated > fat');
+    if (v.sugar !== null) assert.ok(v.sugar <= v.carbs + 0.5, f.id + ' sugars > carbs');
+  }
+  for (const n of data.NUTRIENTS) assert.ok(['main', 'mineral', 'vitamin'].includes(n[4]));
+
+  // Finding foods: every word, plurals, raw/cooked, ids; weights anywhere.
+  const names = (q) => N.findFoods(items, q).map((f) => f.name + (f.state ? ' · ' + f.state : ''));
+  assert.deepEqual(names('chicken breast skinless'), ['Chicken breast, skinless · raw', 'Chicken breast, skinless · roasted', 'Chicken breast, skinless · grilled', 'Chicken breast, skinless · fried']);
+  assert.deepEqual(names('chicken breast skinless raw'), ['Chicken breast, skinless · raw']);
+  assert.ok(names('chicken breast cooked').every((n) => !/· raw/.test(n)));
+  assert.ok(names('chicken').length >= 20);
+  assert.ok(names('eggs').includes('Egg, whole · hard-boiled'));
+  assert.deepEqual(names('crisps'), ['Potato crisps (chips)']);
+  assert.ok(names('chips').includes('Tortilla chips'));
+  assert.deepEqual(names('05062'), ['Chicken breast, skinless · raw']);
+  assert.deepEqual(names('5062'), ['Chicken breast, skinless · raw']);
+  assert.deepEqual(names('unicorn'), []);
+  assert.deepEqual(N.readWeight('chicken breast 250g raw'), { grams: 250, rest: 'chicken breast raw' });
+  assert.deepEqual(N.readWeight('rice 1,5 kg'), { grams: 1500, rest: 'rice' });
+  assert.equal(Math.round(N.readWeight('steak 8 oz').grams), 227);
+  assert.deepEqual(N.readWeight('chicken'), { grams: null, rest: 'chicken' });
+  assert.deepEqual([N.fmtNum(22.5), N.fmtNum(0.0283), N.fmtNum(165.4), N.fmtNum(null), N.fmtNum(0), N.fmtNum(1234.5)], ['22.5', '0.028', '165', '–', '0', '1,235']);
+  assert.equal(N.salt(400), 1);
+});
+
+test('cook calorie: a table for many, everything for one, scaled to a weight', async () => {
+  const app = await makeApp();
+  const t = await app.run('cook calorie chicken breast');
+  assert.equal(t[0], '# 6 foods for "chicken breast" · per 100 g · tap one for everything in it');
+  assert.equal(t[1], '| food |  | kcal | protein g | fat g | carbs g');
+  assert.equal(t[2], 'Chicken breast, skinless | raw | 120 | 22.5 | 2.6 | 0');
+  assert.ok(t.some((l) => /^dim: Cooking drives water out/.test(l)));
+  const many = await app.run('cook calorie chocolate');
+  assert.ok(many.includes('## Snacks and sweets'));
+  const one = await app.run('cook calorie chicken breast skinless raw 250g');
+  assert.deepEqual(one.slice(0, 8), ['# Chicken breast, skinless · raw · per 250 g', 'energy: 300 kcal · 1,255 kJ · 15% of 2,000 kcal', 'protein: 56.3 g',
+    'fat: 6.6 g · saturated 1.4 g', 'carbohydrate: 0 g · sugars 0 g', 'fibre: 0 g', 'salt: 0.28 g · sodium 113 mg', 'cholesterol: 183 mg']);
+  assert.ok(one.includes('selenium | 57 µg | 104%'));
+  assert.ok(one.includes('niacin (B3) | 24 mg | 150%'));
+  assert.equal(one.copied, '300');
+  assert.ok(one.some((l) => /NDB 05062: Chicken, broiler or fryers, breast, skinless, boneless, meat only, raw$/.test(l)));
+  assert.ok((await app.run('cook calorie 05062')).includes('energy: 120 kcal · 502 kJ · 6% of 2,000 kcal'));
+  const scaled = await app.run('cook calorie rice cooked 150g');
+  assert.equal(scaled[2], 'Rice, white, long-grain | boiled | 195 | 4 | 0.42 | 42.3');
+  assert.deepEqual((await app.run('cook calorie unicorn')).slice(0, 1), ['err: No food matches "unicorn"']);
+  assert.equal((await app.run('cook calorie chicken 0g'))[0], 'err: Give an amount between 1 g and 100 kg');
+  const groups = await app.run('cook calorie');
+  assert.match(groups[0], /^# Calories and nutrients · \d+ foods, raw and cooked · per 100 g$/);
+  assert.ok(groups.some((l) => /^Poultry \| Chicken breast, Chicken breast with skin/.test(l)));
+  for (const alias of ['calories', 'kcal', 'nutrition', 'macros']) assert.match((await app.run('cook ' + alias + ' apple raw'))[0], /^# Apple · raw · per 100 g$/);
+});

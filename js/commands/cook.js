@@ -3,6 +3,7 @@ import {
   readConvert, asMeasures, fmtAmount, fmtGrams,
 } from '../lib/cooking.js';
 import { plural } from '../core/util.js';
+import { prepare, findFoods, readWeight, per, fmtNum, salt } from '../lib/nutrition.js';
 
 // cook: a kitchen reference (lib/cooking.js).
 //   cook target [food]                       safe and best internal temperatures
@@ -83,6 +84,97 @@ function ovenDetail(ctx, e, q) {
   if (t && t.warn) out.warn(t.warn);
   out.dim('Times are a guide: a thermometer in the thickest part says when it is done');
   out.copyable(fmtMinutes(r.perPiece ? r.high : r.minutes));
+}
+
+// ---- calories and nutrients (lib/nutrition-data.js, loaded the first time) ----
+
+let foodsCache = null;
+async function nutrition() {
+  if (!foodsCache) {
+    const data = await import('../lib/nutrition-data.js');
+    foodsCache = { data, items: prepare(data) };
+  }
+  return foodsCache;
+}
+
+const MAX_ROWS = 40;
+const isRawish = (f) => f.state === 'raw' || f.state === 'dry' || f.state === 'uncooked';
+
+function calorieTable(out, list, grams, query) {
+  const amount = grams || 100;
+  const groups = new Set(list.map((f) => f.group));
+  const rows = [];
+  let group = null;
+  for (const f of list.slice(0, MAX_ROWS)) {
+    if (groups.size > 1 && f.group !== group) { group = f.group; rows.push({ section: [[group, '']] }); }
+    const v = (k) => fmtNum(per(f.values[k], amount));
+    rows.push([[[f.name, '', { run: 'cook calorie ' + f.id + (grams ? ' ' + Math.round(grams) + 'g' : '') }]], [[f.state, 'dim']],
+      [[v('kcal'), 'num strong']], [[v('protein'), 'num']], [[v('fat'), 'num']], [[v('carbs'), 'num']]]);
+  }
+  out.head([[plural(list.length, 'food') + ' for "' + query + '"', 'strong'], [' · per ' + fmtNum(amount) + ' g · tap one for everything in it', 'dim']]);
+  out.table(['food', '', 'kcal', 'protein g', 'fat g', 'carbs g'], rows);
+  if (list.length > MAX_ROWS) out.dim('+' + (list.length - MAX_ROWS) + ' more · add a word to narrow it down');
+  if (list.some(isRawish) && list.some((f) => !isRawish(f) && f.state)) {
+    out.dim('Cooking drives water out, so cooked food has more per 100 g: weigh it raw and use the raw line, or weigh it cooked and use the cooked one');
+  }
+}
+
+function calorieDetail(out, f, nutrients, grams, source) {
+  const amount = grams || 100;
+  const v = (k) => per(f.values[k], amount);
+  const dvOf = Object.fromEntries(nutrients.map(([k, , , dv]) => [k, dv]));
+  const pct = (k) => (dvOf[k] && v(k) !== null ? Math.round((v(k) / dvOf[k]) * 100) + '%' : '');
+  const g = (k, unit = 'g') => (v(k) === null ? [['not measured', 'faint']] : [[fmtNum(v(k)) + ' ' + unit, 'num']]);
+  out.head([[f.name, 'strong'], [f.state ? ' · ' + f.state : '', ''], [' · per ' + fmtNum(amount) + ' g', 'dim']]);
+  out.kv([
+    ['energy', [[fmtNum(v('kcal')) + ' kcal', 'num strong'], [' · ' + fmtNum(v('kcal') * 4.184) + ' kJ', 'dim'], [' · ' + pct('kcal') + ' of 2,000 kcal', 'faint']]],
+    ['protein', g('protein')],
+    ['fat', [...g('fat'), [v('sat') !== null ? ' · saturated ' + fmtNum(v('sat')) + ' g' : '', 'dim']]],
+    ['carbohydrate', [...g('carbs'), [v('sugar') !== null ? ' · sugars ' + fmtNum(v('sugar')) + ' g' : '', 'dim']]],
+    ['fibre', g('fiber')],
+    ['salt', v('sodium') === null ? [['not measured', 'faint']] : [[fmtNum(salt(v('sodium'))) + ' g', 'num'], [' · sodium ' + fmtNum(v('sodium')) + ' mg', 'dim']]],
+    ['cholesterol', g('cholesterol', 'mg')],
+  ]);
+  for (const [title, kind] of [['Minerals', 'mineral'], ['Vitamins', 'vitamin']]) {
+    const rows = nutrients.filter((n) => n[4] === kind).map(([k, label, unit]) => [[[label, 'dim']],
+      [[v(k) === null ? '–' : fmtNum(v(k)) + ' ' + unit, v(k) === null ? 'faint' : 'num']], [[pct(k), Number.parseInt(pct(k), 10) >= 20 ? 'ok' : 'faint']]]);
+    out.section([[title, ''], ['  % of daily value', 'faint']]);
+    out.table(null, rows);
+  }
+  const other = [['monounsaturated fat', 'mono'], ['polyunsaturated fat', 'poly'], ['water', 'water']].filter(([, k]) => v(k) !== null);
+  if (other.length) out.dim(other.map(([l, k]) => l + ' ' + fmtNum(v(k)) + ' g').join(' · '));
+  if (f.portions.length) {
+    out.line([['Portions: ', 'dim'], ...f.portions.flatMap(([pg, d], i) => [[(i ? ' · ' : '') + d + ' = ' + fmtNum(pg) + ' g, ', ''],
+      [fmtNum(per(f.values.kcal, pg)) + ' kcal', 'num']])]);
+  }
+  out.dim('– not measured · daily values: FDA, adults · ' + source.split(' (')[0] + ' (SR28), NDB ' + f.id + ': ' + f.usda);
+  out.copyable(fmtNum(v('kcal')));
+}
+
+async function calorie(ctx, arg) {
+  const { out } = ctx;
+  const { data, items } = await nutrition();
+  const { grams, rest } = readWeight(arg);
+  if (grams !== null && !(grams > 0 && grams <= 100000)) return out.err('Give an amount between 1 g and 100 kg');
+  if (!rest) {
+    const groups = [...new Set(items.map((f) => f.group))];
+    out.head([['Calories and nutrients', 'strong'], [' · ' + items.length + ' foods, raw and cooked · per 100 g', 'dim']]);
+    out.table(null, groups.map((gname) => {
+      const names = [...new Set(items.filter((f) => f.group === gname).map((f) => f.name.split(/[,(]/)[0].trim()))];
+      return [[[gname, 'strong', { run: 'cook calorie ' + gname.toLowerCase().split(/[ ,]/)[0] }]], [[names.slice(0, 6).join(', ') + (names.length > 6 ? '…' : ''), 'dim']]];
+    }), { stack: true });
+    out.dim('cook calorie chicken · cook calorie chicken breast raw · cook calorie rice cooked 150g · cook calorie crisps');
+    out.dim(data.SOURCE + ', public domain');
+    return;
+  }
+  const list = findFoods(items, rest);
+  if (!list.length) {
+    out.err('No food matches "' + rest + '"');
+    out.dim('Try a shorter or more general word (chicken, rice, cheese, chocolate) · cook calorie lists the groups');
+    return;
+  }
+  if (list.length === 1) return calorieDetail(out, list[0], data.NUTRIENTS, grams, data.SOURCE);
+  calorieTable(out, list, grams, rest);
 }
 
 function convertTemp(out, text) {
@@ -179,12 +271,13 @@ function convert(ctx, text) {
 
 export default function register(add, { usage }) {
   add({
-    name: 'cook', group: 'Kitchen', desc: 'kitchen reference: safe and best temperatures, oven times, cups and spoons to grams',
-    usage: ['cook target [food]', 'cook oven [food] [weight] [temperature] [fan] [doneness]', 'cook convert <amount> <measure> <ingredient>', 'cook convert <temperature>'],
+    name: 'cook', group: 'Kitchen', desc: 'kitchen reference: safe and best temperatures, oven times, cups and spoons to grams, calories and nutrients',
+    usage: ['cook target [food]', 'cook oven [food] [weight] [temperature] [fan] [doneness]', 'cook convert <amount> <measure> <ingredient>', 'cook convert <temperature>',
+      'cook calorie [food] [raw | cooked] [weight]'],
     examples: ['cook target chicken', 'cook target', 'cook oven chicken 500g at 200', 'cook oven whole chicken 1.6kg', 'cook oven beef 1.5kg medium-rare',
-      'cook oven lamb leg 2kg fan 160', 'cook convert 1 spoon sugar', 'cook convert ½ stick butter', 'cook convert 250 g flour', 'cook convert 350f'],
+      'cook oven lamb leg 2kg fan 160', 'cook calorie chicken', 'cook calorie chicken breast raw 250g', 'cook calorie crisps', 'cook convert 1 spoon sugar', 'cook convert ½ stick butter', 'cook convert 250 g flour', 'cook convert 350f'],
     complete(prev) {
-      if (prev.length === 0) return ['target', 'oven', 'convert'].map((v) => ({ value: v }));
+      if (prev.length === 0) return ['target', 'oven', 'convert', 'calorie'].map((v) => ({ value: v }));
       if (prev.length === 1 && prev[0] === 'target') return TARGETS.map((t) => ({ value: t.id, label: t.name }));
       if (prev.length === 1 && prev[0] === 'oven') return OVEN.map((o) => ({ value: o.id, label: o.name }));
       return [];
@@ -196,11 +289,12 @@ export default function register(add, { usage }) {
       const arg = m && m[2] ? m[2].trim() : '';
 
       if (!sub) {
-        out.head([['Kitchen', 'strong'], [' · temperatures, oven times, measures', 'dim']]);
+        out.head([['Kitchen', 'strong'], [' · temperatures, oven times, measures, nutrition', 'dim']]);
         out.table(null, [
           [[['cook target', 'accent', { run: 'cook target' }], [' [food]', 'dim']], [['how hot inside: safe, and best for taste', 'dim']]],
           [[['cook oven', 'accent', { run: 'cook oven' }], [' [food] [weight] [°C]', 'dim']], [['oven temperature and how long', 'dim']]],
           [[['cook convert', 'accent', { run: 'cook convert' }], [' <amount> <measure> <food>', 'dim']], [['cups, spoons, sticks, oz to grams; °F to °C', 'dim']]],
+          [[['cook calorie', 'accent', { run: 'cook calorie' }], [' [food] [raw|cooked] [weight]', 'dim']], [['calories, protein, fat, carbs, vitamins and minerals', 'dim']]],
         ], { stack: true });
         return;
       }
@@ -255,6 +349,7 @@ export default function register(add, { usage }) {
       }
 
       if (sub === 'convert' || sub === 'grams' || sub === 'conv') return convert(ctx, arg);
+      if (['calorie', 'calories', 'kcal', 'nutrition', 'nutrients', 'macros'].includes(sub)) return calorie(ctx, arg);
       return usage(ctx, this);
     },
   });

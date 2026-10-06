@@ -44,7 +44,7 @@ still work.
 | Text | `count`, `case` |
 | Developer | `cidr`, `hash`, `jwt`, `url`, `regex`, `diff`, `cron`, `color` |
 | Share | `clip`, `bounce` |
-| Kitchen | `cook target`, `cook oven`, `cook convert` |
+| Kitchen | `cook target`, `cook oven`, `cook convert`, `cook calorie` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
 | Sync | `sync` |
@@ -246,6 +246,18 @@ It understands fan ovens (`fan 160`), °F (`400f`), gas marks and doneness
 `250 g flour` gives cups back); `cook convert` alone is the table, and
 `cook convert 350f` converts oven temperatures.
 
+`cook calorie chicken` lists every kind of chicken, raw and cooked, with
+calories, protein, fat and carbohydrate per 100 g; `cook calorie chicken
+breast` narrows it down, and one food (`cook calorie chicken breast skinless
+raw 250g`, or a tap on its row) shows everything: energy, fat (saturated),
+carbohydrate (sugars), fibre, salt, cholesterol, then 9 minerals and 13
+vitamins with the share of the daily value, and household portions. Add
+`raw` or `cooked` to choose, and a weight (`150g`, `8 oz`) to scale. The
+365 foods (meat, fish, eggs, dairy, grains, legumes, vegetables, fruit,
+nuts, oils, sweets, snacks like crisps and chocolate, drinks, condiments)
+come from the USDA National Nutrient Database for Standard Reference (SR28,
+public domain); the table loads only when first used.
+
 **Bounce links**: `bounce <url>` gives a link to this page that sends whoever
 opens it on to the address. The address travels inside the link (packed, and
 compressed when that helps), so nothing is stored and it works for anyone;
@@ -305,6 +317,12 @@ npm run test:tz                                  # unit tests in six time zones 
 NODE_PATH=$(npm root -g) npm run test:e2e        # the real page in Chromium (needs Playwright, and jsqr below)
 npm i --no-save jsqr@1.4.0 && node --test tests/qr.test.mjs   # QR codes read back by an independent decoder
 ```
+
+The nutrition table is generated: list foods in `tools/nutrition-foods.mjs`
+(each by its USDA NDB number, which FoodData Central also shows for "SR Legacy"
+foods) and run `node tools/build-nutrition.mjs <SR28 data directory>` (the
+`data/` of the npm package `fda-nutrient-database`, or USDA's sr28abbr.zip).
+The tests check the result against the list and against itself.
 
 Safari-only behaviour (⌘T focus, storage eviction) can't be covered by these;
 see the acceptance tests in the plan and run them by hand.

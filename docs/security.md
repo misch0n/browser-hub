@@ -68,10 +68,15 @@ asserts the policy; update it deliberately, never to make a test pass.
 - No personal data, tokens or keys in the repository. The test fixtures hold
   only throwaway certificates (no private keys).
 
-## Origin (open question)
+## Origin (decided: shared, for now)
 
 Every project site under `<user>.github.io` shares one origin and therefore
 one `localStorage`. Another Pages project on the same account could read the
-notes and the sync token. The fix is a custom domain or a dedicated GitHub
-account/organisation for the hub. The owner was asked and said "not yet";
-it stays open in [todo.md](todo.md#waiting-on-the-owner).
+notes and the sync token. The fix would be a custom domain or a dedicated
+GitHub account/organisation for the hub.
+
+Decided 6 October 2026: "no separate domain for now" ([D15](decisions.md)).
+The risk is accepted because only the owner's own projects share the origin.
+Consequences for agents: never add pages to this account's Pages sites that run
+third-party code, and keep the hub's CSP strict. Raise it with the owner again
+if either changes, or before the hub stores anything more sensitive.

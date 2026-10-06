@@ -18,9 +18,8 @@ How to use this file:
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
 - Last verified 6 October 2026: unit tests in six time zones, decoder tests
-  and 57 e2e checks pass locally. CI was green on `224fa36` (Mermaid). The
-  next commit, `15ed8fd`, failed on a timing race in the e2e sync check,
-  fixed alongside this documentation.
+  and 57 e2e checks pass; CI green on `e87922e` (which also fixed the flaky
+  e2e sync check that failed `15ed8fd`).
 - Command reference: [commands.md](commands.md) (generated from the code).
 
 ## In progress
@@ -29,7 +28,8 @@ Nothing.
 
 ## Ready
 
-Do in order; each is safe to do without asking.
+Do in order. Each is safe to start without asking, unless its entry says
+otherwise. The owner may reorder.
 
 1. **Run the e2e suite in WebKit on CI as well as Chromium.**
    *Why:* the target browser is Safari; only Chromium is tested today.
@@ -46,23 +46,22 @@ Do in order; each is safe to do without asking.
 3. **CI calls the npm scripts** (`npm run setup`, `test:tz`, `test:decoders`,
    `test:e2e`) so commands live in one place. *Done when:* the workflow uses
    them and stays green.
-4. **A favicon** (an SVG `›` prompt glyph in the accent colour). Removes the
-   404 every page load causes, and is the first step if Home Screen
-   install is ever approved. *Done when:* linked in `index.html`, stamped by
-   the build, served by the e2e server.
+4. **iOS notifications** (approved 6 Oct 2026). Follow
+   [plan 001](plans/001-ios-notifications.md); its step 0 asks the owner four
+   questions (sender, what notifies, quiet hours, icon) with proposed defaults,
+   so **ask before building**. Step 1 (icons, favicon, manifest) also removes
+   the favicon 404 every page load causes.
 
 ## Waiting on the owner
 
 Decisions only the owner can make. Don't start these; mention them if relevant.
 
-- **Isolated origin** (custom domain or dedicated account): other `github.io`
-  projects share the hub's storage, including the sync token.
-  Owner: "not yet". See [security.md](security.md#origin-open-question).
-- **iOS notifications**: parked; findings and options in
-  [exploration/ios-notifications.md](exploration/ios-notifications.md).
 - **Manual checks in real Safari and on an iPhone**: the list in
-  [testing.md](testing.md#by-hand-in-real-safari-not-automatable-here) has
-  never been confirmed. Only the owner's devices can run them.
+  [testing.md](testing.md#by-hand-in-safari-and-on-the-iphone) has never been
+  run. Only the owner's devices can; record results there.
+
+Decided recently (no longer waiting): no separate domain for now
+([D15](decisions.md)); iOS notifications go ahead ([D16](decisions.md)).
 
 ## Ideas
 

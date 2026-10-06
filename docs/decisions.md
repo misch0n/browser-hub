@@ -86,3 +86,18 @@ Any agent must be able to pick up the next task without rediscovery. →
 `AGENTS.md` entry point (Claude's `CLAUDE.md` imports it), `docs/` as the
 single place for plans, todo, decisions, deferrals and explorations; the
 command reference is generated from code and a unit test fails on drift.
+
+**D15. No separate domain for now** (6 Oct 2026, active)
+The hub shares the `misch0n.github.io` origin, and so its `localStorage`
+(notes, tasks, the sync token), with every other Pages project on the
+account. Owner: "no separate domain for now." → Accepted risk: only the
+owner's own Pages projects share the origin, so the exposure is to code in
+those projects (or anything they load). Keep the hub's CSP strict, and don't
+publish other Pages projects on this account that run third-party code.
+Revisit if that changes, or before storing anything more sensitive than today.
+
+**D16. iOS notifications approved as a todo** (6 Oct 2026, active)
+Owner: "ios notifications as todo" (it was parked as an exploration). → Planned in
+[plans/001-ios-notifications.md](plans/001-ios-notifications.md); the
+plan's first step settles its open questions with the owner (sender, what
+notifies, quiet hours, icon), with proposed defaults.

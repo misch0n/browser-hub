@@ -1,6 +1,8 @@
 # iOS notifications
 
-Status: **parked** (6 Oct 2026, owner: "Not now. Mark it for exploration.")
+Status: **approved** (6 Oct 2026, owner: "ios notifications as todo"; earlier the
+same day: "Not now. Mark it for exploration."). Work is planned in
+[plans/001-ios-notifications.md](../plans/001-ios-notifications.md).
 
 ## Question
 
@@ -42,6 +44,8 @@ to the homescreen?"
    synced data (useless without the private key). No new service. Timing:
    schedules run every 5 minutes at best and are often 5–30 minutes late, so
    fine for "due today" and a morning summary, poor for "at 14:00 sharp".
+   Cost: private repos get 2,000 free Actions minutes a month (GitHub Free);
+   a check every 30 minutes uses about 1,440, every 15 minutes about 2,880.
 3. **Option 1 + a Cloudflare Worker on a one-minute cron.** Punctual and
    free, but another account, and it needs read access to the data repo (its
    own fine-grained token).

@@ -8,13 +8,12 @@ it to [todo.md](todo.md) (or write an [exploration](exploration/README.md) first
 
 | Idea | Decided | Owner's answer | Notes |
 | --- | --- | --- | --- |
-| Persistent storage request (`navigator.storage.persist()`) and an extra backup (e.g. a private Gist) | 5 Oct 2026 | "skip for now" | Sync to the private repo now covers backup. |
+| An extra backup (e.g. a private Gist) and showing in the backup widget whether storage is persistent | 5 Oct 2026 | "skip for now" | Persistence is requested silently at start-up (`main.js`) and `device` shows whether it was granted; sync to the private repo covers backup. |
 | Working hours per time zone (`tz hours nyc 08-16`) for the overlap view | 5 Oct 2026 | "defer" | Overlap still assumes 09:00–17:00 everywhere. |
-| Custom domain / dedicated account for an isolated origin | 5 Oct 2026 | "not yet" | Security-relevant: see [security.md](security.md#origin-open-question). Kept as an open question in todo. |
+| Custom domain / dedicated account for an isolated origin | 5 Oct, confirmed 6 Oct 2026 | "not yet", then "no separate domain for now" | Accepted risk, see [D15](decisions.md) and [security.md](security.md#origin-decided-shared-for-now). |
 | Sync with Apple Calendar, Reminders and Notes | 5 Oct 2026 | "dropping that feature for the time being… if it turns into a painpoint" | Options researched: [exploration/apple-sync.md](exploration/apple-sync.md). |
 | `timer` / `pomodoro` / `stopwatch` with notifications | 5 Oct 2026 | "Easier on the phone but not a bad idea. Defer." | Browsers only fire timers reliably while the tab is open. |
 | Internet-backed tools: weather widget, currency in `units`, GitHub PRs/issues (`gh prs`) | 5 Oct 2026 | "all. without the internet ones." | The network tools since widened the CSP (D10), so these are technically possible now; still not requested. |
-| Notifications on iOS (Home Screen web app, Web Push) | 6 Oct 2026 | "Not now. Mark it for exploration." | [exploration/ios-notifications.md](exploration/ios-notifications.md). |
 
 ## Left out for technical reasons
 

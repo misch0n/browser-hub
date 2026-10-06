@@ -464,5 +464,5 @@ all of them pass. In the repository settings, **Pages → Source** must be
 **GitHub Actions**.
 
 All project sites under `<user>.github.io` share one origin and therefore one
-`localStorage`, including the sync token: see "Origin" in
-[docs/security.md](docs/security.md) before storing anything sensitive.
+`localStorage`, including the sync token. The hub stays on the shared origin
+for now (an accepted risk): see "Origin" in [docs/security.md](docs/security.md).

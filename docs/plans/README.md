@@ -7,7 +7,11 @@ is enough.
 
 ## Active
 
-None. (Add `NNN-short-name.md` here and link it from todo.md.)
+| Plan | Status |
+| --- | --- |
+| [001 · iOS notifications](001-ios-notifications.md) | approved, not started |
+
+New plans: `NNN-short-name.md`, listed here and linked from todo.md.
 
 ## Archive
 

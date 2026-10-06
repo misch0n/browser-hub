@@ -6,7 +6,7 @@
 > collections. Current behaviour: the [README](../../../README.md) and
 > [architecture.md](../../architecture.md). Its open questions and Safari
 > acceptance tests live on in [todo.md](../../todo.md) and
-> [testing.md](../../testing.md#by-hand-in-real-safari-not-automatable-here).
+> [testing.md](../../testing.md#by-hand-in-safari-and-on-the-iphone).
 
 # New-Tab Control Center — v1 Spec
 

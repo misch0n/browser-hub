@@ -5,6 +5,9 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 6 October 2026
 
+- Decisions recorded: no separate domain for now (D15); iOS notifications
+  approved and planned ([plan 001](plans/001-ios-notifications.md), D16). Manual
+  Safari and iPhone checks written out with steps and expected results.
 - Documentation for agents and contributors: `AGENTS.md`, `docs/` (architecture,
   conventions, security, testing, recipes, todo, decisions, deferred,
   exploration, plans); command reference generated from the code and checked

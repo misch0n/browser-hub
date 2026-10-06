@@ -5,6 +5,9 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 6 October 2026
 
+- First manual run in Safari and on the iPhone: focus on ⌘T, Back, fresh files
+  after deploys, Mac keys, copy, sync and history across devices, iPhone
+  keyboard, double tap and layout confirmed; nothing failed.
 - Decisions recorded: no separate domain for now (D15); iOS notifications
   approved and planned ([plan 001](plans/001-ios-notifications.md), D16). Manual
   Safari and iPhone checks written out with steps and expected results.

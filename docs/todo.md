@@ -56,9 +56,13 @@ otherwise. The owner may reorder.
 
 Decisions only the owner can make. Don't start these; mention them if relevant.
 
-- **Manual checks in real Safari and on an iPhone**: the list in
-  [testing.md](testing.md#by-hand-in-safari-and-on-the-iphone) has never been
-  run. Only the owner's devices can; record results there.
+- **Remaining manual checks in Safari and on the iPhone** (first run 6 Oct
+  2026, nothing failed): Mac downloads (M5), Safari engine features (M6–M8),
+  storage after a week (M10, check after 14 Oct), and on the iPhone the key bar
+  and text size (P3), long paste (P5), clip (P6), QR scan (P7) and Mermaid
+  (P8). List and results in
+  [testing.md](testing.md#by-hand-in-safari-and-on-the-iphone). Only the
+  owner's devices can run them.
 
 Decided recently (no longer waiting): no separate domain for now
 ([D15](decisions.md)); iOS notifications go ahead ([D16](decisions.md)).

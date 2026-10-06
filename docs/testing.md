@@ -100,8 +100,9 @@ fixed before anything else.
 The automated tests run in Chromium, partly emulating a phone. They can't
 cover Safari's own engine (WebKit), its address bar and storage policies, a
 real iPhone keyboard, or the real GitHub API. These checks can only run on
-the owner's devices. None has been run yet. Record the result and the date
-in the last column; anything that fails becomes a todo item.
+the owner's devices. Record the result and the date in the last column;
+anything that fails becomes a todo item. First run: 6 October 2026 (no
+failures; rows without a result haven't been tried yet).
 
 Part of this list (engine features: crypto, compression, canvas, layout)
 will also be covered by running the e2e suite in WebKit on CI (todo item 1).
@@ -111,27 +112,27 @@ The rest stays manual.
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
-| M1 | New tab focus | Safari Settings → General: Homepage = the hub, New windows/tabs open with Homepage. Press ⌘T and type at once | Typing goes into the prompt without a click. The known risk is that Safari keeps focus in the address bar, which the page can't take back | |
-| M2 | Back from a redirect | Run `g weather`, then press Back | The prompt is focused and empty; ↑ recalls `g weather` | |
-| M3 | Fresh files after a deploy | After a push goes live, open a new tab (no hard reload) | The new version, with no mix of old styles and new page | |
-| M4 | Mac keys | Ctrl+A/E/W/U/K/Y, Option+B/F, Ctrl+R, Tab, → in the prompt; `keys` | Each edits as listed, labelled ⌃ and ⌥; Option+B doesn't type "∫" | |
-| M5 | Copy and downloads | A copy button; `export`; the SVG/PNG buttons on `qr`, `barcode` and a `mermaid` drawing | Clipboard holds the text; files land in Downloads and open correctly | |
-| M6 | Web Crypto in WebKit | `crypt keygen ed25519`, `crypt encrypt hi` then decrypt, `jwt sign HS256 {"a":1}`, `hmac sha256 k m` | All succeed (Ed25519 needs Safari 17 or later) | |
-| M7 | Mermaid | `mermaid`, edit the code, then the PNG button | Drawing updates as you type; the PNG isn't blank (Safari is strictest about drawing SVG into a canvas) | |
-| M8 | Bounce links | `bounce https://example.com`, open the link in a private window | Shows the destination and waits for a tap (compression APIs need Safari 16.4 or later) | |
-| M9 | Real sync | `sync setup <you>/<repo>` with a real fine-grained token; add a task | `sync ✓`; the private repo gets `browser-hub/data.json`; the task appears on the iPhone after its sync | |
-| M10 | Storage eviction | Use the hub normally for 8+ days | Data and the token survive. If they're wiped, sync restores the data and `sync token` asks again (the owner's rule) | |
+| M1 | New tab focus | Safari Settings → General: Homepage = the hub, New windows/tabs open with Homepage. Press ⌘T and type at once | Typing goes into the prompt without a click. The known risk is that Safari keeps focus in the address bar, which the page can't take back | ✓ 6 Oct 2026 |
+| M2 | Back from a redirect | Run `g weather`, then press Back | The prompt is focused and empty; ↑ recalls `g weather` | ✓ 6 Oct 2026 |
+| M3 | Fresh files after a deploy | After a push goes live, open a new tab (no hard reload) | The new version, with no mix of old styles and new page | ✓ 6 Oct 2026 |
+| M4 | Mac keys | Ctrl+A/E/W/U/K/Y, Option+B/F, Ctrl+R, Tab, → in the prompt; `keys` | Each edits as listed, labelled ⌃ and ⌥; Option+B doesn't type "∫" | ✓ 6 Oct 2026 |
+| M5 | Copy and downloads | A copy button; `export`; the SVG/PNG buttons on `qr`, `barcode` and a `mermaid` drawing | Clipboard holds the text; files land in Downloads and open correctly | copy ✓ 6 Oct 2026; downloads not yet |
+| M6 | Web Crypto in WebKit | `crypt keygen ed25519`, `crypt encrypt hi` then decrypt, `jwt sign HS256 {"a":1}`, `hmac sha256 k m` | All succeed (Ed25519 needs Safari 17 or later) | not yet |
+| M7 | Mermaid | `mermaid`, edit the code, then the PNG button | Drawing updates as you type; the PNG isn't blank (Safari is strictest about drawing SVG into a canvas) | not yet |
+| M8 | Bounce links | `bounce https://example.com`, open the link in a private window | Shows the destination and waits for a tap (compression APIs need Safari 16.4 or later) | not yet |
+| M9 | Real sync | `sync setup <you>/<repo>` with a real fine-grained token; add a task | `sync ✓`; the private repo gets `browser-hub/data.json`; the task appears on the iPhone after its sync | ✓ 6 Oct 2026 (owner: "session sync between devices" works) |
+| M10 | Storage eviction | Use the hub normally for 8+ days | Data and the token survive. If they're wiped, sync restores the data and `sync token` asks again (the owner's rule) | running since 6 Oct 2026; check after 14 Oct |
 
 ### iPhone, Safari
 
 | # | Check | How | Expect | Result |
 | --- | --- | --- | --- | --- |
-| P1 | Keyboard and focus | Open the hub, tap the prompt, type; tap the output; tap the prompt again | The prompt rests on top of the keyboard; tapping outside hides the keyboard; no zoom on focus | |
-| P2 | Double tap as Tab | Type `ta`, then tap `s` twice quickly | Both s's go and it completes to `tasks` | |
+| P1 | Keyboard and focus | Open the hub, tap the prompt, type; tap the output; tap the prompt again | The prompt rests on top of the keyboard; tapping outside hides the keyboard; no zoom on focus | ✓ 6 Oct 2026 |
+| P2 | Double tap as Tab | Type `ta`, then tap `s` twice quickly | Both s's go and it completes to `tasks` | ✓ 6 Oct 2026 |
 | P3 | Key bar and text size | The **keys** button; `font bigger`, `font reset` | Esc, Tab, arrows and Ctrl act on the prompt without dropping the keyboard; text size changes and is remembered | |
-| P4 | Phone layout | `help`, `tasks`, `csv` (paste a table), `cook calorie chicken` | Nothing squeezed or wider than the screen; rows tappable | |
+| P4 | Phone layout | `help`, `tasks`, `csv` (paste a table), `cook calorie chicken` | Nothing squeezed or wider than the screen; rows tappable | ✓ 6 Oct 2026 |
 | P5 | Long paste | Paste 20 lines after `n ` | A `[Pasted text #1 +20 lines]` placeholder; the note keeps the lines | |
-| P6 | Clip across devices | `clip key` (same passphrase) on both; `clip hello` on the Mac; `clip` on the iPhone | The text arrives with a copy button and is gone after 15 minutes | |
+| P6 | Clip across devices | `clip key` (same passphrase) on both; `clip hello` on the Mac; `clip` on the iPhone | The text arrives with a copy button and is gone after 15 minutes | not yet |
 | P7 | Scanning | `qr https://example.com` on the Mac; point the iPhone camera at the screen | The camera offers the link | |
 | P8 | Mermaid on the phone | `mermaid`, edit, PNG | Editor stacks above the drawing; PNG saves (to Files or Photos) | |
-| P9 | Visual history | Run a few commands on the Mac, then open the hub on the iPhone | They show, tagged with the Mac's name; `session show current` filters | |
+| P9 | Visual history | Run a few commands on the Mac, then open the hub on the iPhone | They show, tagged with the Mac's name; `session show current` filters | ✓ 6 Oct 2026 |

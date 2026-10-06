@@ -46,6 +46,19 @@ async function check(name, fn) {
     const u = route.request().url();
     if (u.startsWith(base)) return route.continue();
     if (u.startsWith('https://api.github.com/')) return github(route);
+    // The network tools' services, faked: DNS over HTTPS, ipify, and a CORS echo server.
+    const json = (body) => route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (u.startsWith('https://cloudflare-dns.com/dns-query?')) {
+      const q = new URL(u).searchParams;
+      return json({ Status: 0, AD: false, Answer: q.get('type') === 'A' ? [{ name: q.get('name') + '.', type: 1, TTL: 300, data: '192.0.2.10' }] : [] });
+    }
+    if (u.startsWith('https://api.ipify.org')) return json({ ip: '198.51.100.23' });
+    if (u.startsWith('https://api64.ipify.org')) return json({ ip: '2001:db8::23' });
+    if (u.startsWith('https://echo.test/')) return json({ path: new URL(u).pathname, method: route.request().method() });
+    // A server without CORS headers: fulfilled responses skip the browser's CORS check, so refuse the cors attempt (it carries Origin) here.
+    if (u.startsWith('https://nocors.test/')) {
+      return route.request().allHeaders().then((h) => (h.origin ? route.abort('failed') : route.fulfill({ status: 200, contentType: 'text/html', body: 'hidden' })));
+    }
     external.push(u);
     return route.fulfill({ status: 200, contentType: 'text/html', body: '<title>external</title>external page' });
   });
@@ -61,8 +74,9 @@ async function check(name, fn) {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => {
     // The browser logs every 4xx response; GitHub's 404 (no sync file yet) and
-    // 401 (the revoked-token test) are expected answers, handled by the page.
-    if (m.type() === 'error' && !(m.location().url || '').startsWith('https://api.github.com/')) errors.push(m.text());
+    // 401 (the revoked-token test) are expected answers, handled by the page; so
+    // is the refused CORS attempt of the network test.
+    if (m.type() === 'error' && !/^https:\/\/(api\.github\.com|nocors\.test)\//.test(m.location().url || '')) errors.push(m.text());
   });
   await page.goto(base);
 
@@ -86,8 +100,9 @@ async function check(name, fn) {
 
   await check('CSP meta blocks outbound connections and inline scripts', async () => {
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
-    assert.match(csp, /connect-src https:\/\/api\.github\.com;/); // sync only, nothing else
-    assert.equal(await page.evaluate(() => fetch('https://example.com/').then(() => false, () => true)), true);
+    // https anywhere (sync, and the network tools), plain http only to this machine.
+    assert.match(csp, /connect-src https: http:\/\/localhost:\* http:\/\/127\.0\.0\.1:\*;/);
+    assert.equal(await page.evaluate(() => fetch('http://example.com/', { mode: 'no-cors' }).then(() => false, () => true)), true);
     const ran = await page.evaluate(() => new Promise((resolve) => {
       const s = document.createElement('script');
       s.textContent = 'window.__inlineRan = true';
@@ -582,6 +597,26 @@ async function check(name, fn) {
     await page.waitForFunction(() => /Features/.test([...document.querySelectorAll('.turn')].pop().innerText));
     assert.match(await lastText(), /window\s+1440 × 900/);
     assert.match(await lastText(), /✓ Web Crypto/);
+  });
+
+  await check('network: request reads a CORS answer, says when one is hidden; dns over HTTPS; ip', async () => {
+    await send('request https://echo.test/zen');
+    await page.waitForFunction(() => /CORS/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 10000 });
+    assert.match(await lastText(), /^200/m);
+    assert.match(await lastText(), /"path": "\/zen"/);
+    assert.equal(await lastTone(), 'ok');
+    await send('request nocors.test');
+    await page.waitForFunction(() => /Reachable|Unreachable/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 10000 });
+    assert.match(await lastText(), /Reachable[\s\S]*doesn’t let pages from other sites read the answer/);
+    await send('request example.com port 25');
+    assert.match(await lastText(), /port 25 \(SMTP\) is on the browsers’ blocked list/);
+    await send('dns example.com a');
+    await page.waitForFunction(() => /192\.0\.2\.10/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 10000 });
+    assert.match(await lastText(), /example\.com · 1 record · Cloudflare/);
+    await send('ip');
+    await page.waitForFunction(() => /198\.51\.100\.23/.test([...document.querySelectorAll('.turn')].pop().innerText), null, { timeout: 10000 });
+    assert.match(await lastText(), /IPv6\s+2001:db8::23/);
+    assert.ok(!(await page.evaluate(() => localStorage.getItem('cc:log') || '')).includes('198.51.100.23'));
   });
 
   await check('font: bigger and smaller on this device, applied before the first paint', async () => {

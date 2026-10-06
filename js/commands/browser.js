@@ -73,7 +73,7 @@ export default function register(add) {
       out.line([[f.filter((x) => x.ok).map((x) => '✓ ' + x.name).join('   '), 'ok']]);
       const missing = f.filter((x) => !x.ok);
       if (missing.length) out.line([[missing.map((x) => '✗ ' + x.name).join('   '), 'faint']]);
-      out.dim('Read on this page; nothing is sent · ua reads user-agent strings');
+      out.dim('Read on this page; nothing is sent · ua reads user-agent strings · ip shows your public address');
     },
   });
 }

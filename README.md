@@ -44,6 +44,7 @@ still work.
 | Developer | `json`, `csv`, `base`, `escape`, `cidr`, `url`, `regex`, `diff`, `cron`, `color` |
 | Security | `crypt`, `cert`, `jwt`, `hmac`, `hash`, `pw` |
 | Web | `http`, `mime`, `ua`, `device` |
+| Network | `request`, `ping`, `dns`, `ip` |
 | Text | `text`, `count`, `case` |
 | Share | `clip`, `bounce` |
 | Chance | `random`, `roll` |
@@ -218,8 +219,7 @@ created offline under the same id get renumbered. When GitHub refuses the token
 (it expired or was revoked), sync pauses and says so; `sync token` enters a new
 one. `sync` shows the state (also the `sync ✓` button under the prompt),
 `sync now` syncs right away, `sync off` forgets the token on this device. Sync
-refuses public repositories. The page may only connect to `api.github.com`
-(its Content Security Policy blocks everything else).
+refuses public repositories. The token is only ever sent to `api.github.com`.
 
 **Snippets** are named pieces of text you paste often (a signature, an
 address, a command): `snip sig` shows one with a copy button. **Later** keeps
@@ -293,6 +293,32 @@ version, reduced Android strings). `device` shows the screen and window,
 pixel ratio, colour scheme and input, language and time zone, CPU threads,
 memory, graphics, network hints, storage use and which web platform features
 are here (`device features` for just those).
+
+**Network**, within what a web page may do. A browser speaks HTTP(S) only:
+it can't ping (ICMP), open raw TCP or UDP connections, or ask DNS itself, and
+it refuses some ports outright (SSH, SMTP, IMAP and others on the Fetch
+standard's blocked list). The commands say so instead of guessing.
+`request <url | host[:port][/path]>` makes one request (`GET` by default, or
+`HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`; `port`, `path`, `scheme`,
+`timeout`, `header "Name: value"` and `body <text>` as options): the scheme and
+port are inferred when left out (and said so), and the answer shows status,
+time, the browser's timing phases where the server allows it, the headers a page
+may see and the body. A server that answers without CORS headers is reported
+as reachable, with its status and body hidden by the browser; a request that
+fails can't say why (DNS, refused, TLS or nothing listening look the same to
+a page). From the https page, plain `http://` addresses are blocked as mixed
+content, except `localhost`. `ping <host>` sends a few `HEAD` requests and
+gives min/avg/max. `dns <name> [types]` asks Cloudflare (or `via google`) over
+HTTPS for A, AAAA, CNAME, MX, TXT and NS by default, any type by name, and PTR
+for an IP; tap a value to follow it. `ip` gives your public IPv4 and IPv6
+from ipify.org, `ip more` (or `ip <address>`) the place, time zone and network
+from ipapi.co; those services see the address they're asked about, and `ip`
+stays out of the shared history.
+
+To allow this, the page's Content Security Policy permits connections to any
+`https:` address and to `http://localhost` / `http://127.0.0.1` (it used to
+allow only `api.github.com`). Scripts still only load from the page itself, so
+no other code can use that access.
 
 **QR codes**: `qr <text>` draws one for a link or any text, made on the page
 (nothing is sent anywhere), always dark on white so phones can scan it in any

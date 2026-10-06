@@ -4,7 +4,8 @@ import { dueSeg, tagSegs, dayLabel, longDate } from '../core/format.js';
 import { repeatLabel } from '../core/repeat.js';
 import { oneValue } from '../core/args.js';
 
-// One grammar for everything you keep: notes, tasks, events, snippets, links to read later and aliases.
+// One grammar for everything you keep: notes, tasks, events, snippets, links to read later,
+// your foods, diagrams and aliases (zones and widgets bring their own adapters).
 //
 //   tasks                          list them
 //   tasks add <text>               add one

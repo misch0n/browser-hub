@@ -5,6 +5,9 @@ import { agenda, eventDays, sortEvents } from '../core/agenda.js';
 import { parseICS } from '../lib/ics.js';
 import { oneValue } from '../core/args.js';
 
+// cal, agenda, today, events and ev: the month grid, what's coming, the daily
+// summary (pinned card), and events in the shared grammar; ics files import here.
+
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 const MONTHS_FULL = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];

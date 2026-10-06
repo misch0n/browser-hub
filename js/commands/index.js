@@ -27,17 +27,25 @@ import { createRecords } from './records.js';
 import { removes } from '../core/undo.js';
 
 // Built-in commands. Each def is
-//   { name, group, desc, usage: [...], examples?: [...], complete?(prevArgs), run(ctx, rest),
+//   { name, group, desc, usage: [...], examples?: [...], complete?(prevArgs) -> [{ value, label? }],
+//     run(ctx, rest),
 //     noUndo? (never an undo step), private? (kept out of the shared history), noHistory? (not
 //     kept for ↑ either), ephemeral? (not in the shared history, and gone from the screen when
-//     the next command runs: help), hidden? (an older
-//     name: still works, not listed) }
-// and talks to the page only through ctx:
-//   ctx.out     structured output for this command (see ui/transcript.js); table rows
-//               are arrays of cells, or { section } for a full-width group heading
-//   ctx.data    collections + mutate/allocId (never localStorage directly)
-//   ctx.store, ctx.now(), ctx.setInput(text), ctx.clearOutput(),
-//   ctx.pickFile(accept), ctx.download(name, text, mime), ctx.revealPanel(show)
+//     the next command runs: help), hidden? (an older name: still works, not listed) }
+// `group` is the category help lists it under; docs/commands.md is generated from these defs
+// (npm run docs). Commands talk to the page only through ctx (built in main.js):
+//   ctx.out            structured output (ui/transcript.js): head, table, kv, fields, code, value, …;
+//                      table rows are arrays of cells, or { section } for a full-width heading
+//   ctx.data           collections: state, mutate(col, fn), allocId(prefix) (never localStorage)
+//   ctx.store          getLocal/setLocal/removeLocal: values kept on this device only
+//   ctx.now()          the clock (fixed in tests)
+//   ctx.pasted         the full texts of the paste placeholders in the input, in order
+//   ctx.askSecret(label) -> Promise<text>: masked input, never echoed or kept ('' when cancelled)
+//   ctx.setInput(text) put text in the prompt     ctx.navigateAfter = url: open it once recorded
+//   ctx.pickFile(accept) -> Promise<File|null>    ctx.download(name, text, mime)
+//   ctx.fetch, ctx.env  the network and the browser globals, when tests replace them
+//   ctx.device, ctx.os, ctx.pageURL, ctx.sync, ctx.records, ctx.clearOutput(at, message),
+//   ctx.revealPanel(show), ctx.fontScale()/setFontScale(f), ctx.logView/setLogView, ctx.setDeviceName
 // A run() that opens a file picker must reach it synchronously (before any await).
 export function createCommands(getCtx) {
   const defs = [];

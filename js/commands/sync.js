@@ -1,8 +1,8 @@
 import { relative } from '../lib/misc.js';
 import { REPO_RE, syncDir, FILE_NAME } from '../sync.js';
 
-// sync: keep notes, tasks, events, aliases and settings in a file in a
-// private GitHub repository. The token stays on this device.
+// sync: keep everything that syncs (core/merge.js SYNCED) in one file in a
+// private GitHub repository, in a directory of its own. The token stays on this device.
 
 const HOW = [
   'Use a private GitHub repository: a new one, or one you share with other projects (the hub keeps to its own directory)',

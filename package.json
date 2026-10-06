@@ -2,11 +2,14 @@
   "name": "browser-hub",
   "private": true,
   "type": "module",
-  "description": "Command-line new-tab page. No build step; this file only configures the tests.",
+  "description": "Command-line new-tab page. No build step and no runtime dependencies; this file only configures the tests.",
   "scripts": {
+    "setup": "npm install --no-save --no-package-lock playwright@1.56.1 jsqr@1.4.0 @zxing/library@0.21.3",
     "test": "node --test tests/unit.test.js",
     "test:tz": "node tests/run-tz.mjs",
+    "test:decoders": "node --test tests/qr.test.mjs tests/barcode.test.mjs tests/x509.test.mjs",
     "test:e2e": "node tests/e2e.cjs",
-    "test:all": "node tests/run-tz.mjs && node tests/e2e.cjs"
+    "test:all": "node tests/run-tz.mjs && node --test tests/qr.test.mjs tests/barcode.test.mjs tests/x509.test.mjs && node tests/e2e.cjs",
+    "docs": "node tools/docs-commands.mjs --write"
   }
 }

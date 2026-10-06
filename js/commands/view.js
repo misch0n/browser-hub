@@ -1,5 +1,7 @@
 import { THEMES, WIDGETS, isTheme, isWidget } from '../core/catalog.js';
 
+// theme, widgets, font: how the page looks on this device (widgets and theme sync).
+
 export default function register(add, { st, usage, records }) {
   add({
     name: 'theme', group: 'View', desc: 'list colour themes, or switch theme',

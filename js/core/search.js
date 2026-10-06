@@ -1,5 +1,5 @@
-// Search across everything: notes, tasks, events, your aliases and engines,
-// built-in commands and command history. Pure: documents in, ranked groups out.
+// Search across everything: notes, tasks, events, snippets, links to read,
+// diagrams, your aliases and engines, built-in commands and command history. Pure: documents in, ranked groups out.
 //
 // Queries:
 //   flour milk          every word must match, in any field (any case)

@@ -1,3 +1,13 @@
+> **Archived: superseded.** This is the original v1 spec (5 October 2026),
+> kept for its reasoning. Much of it no longer describes the hub: it now
+> syncs through GitHub, makes network requests (CSP in
+> [security.md](../../security.md)), has did-you-mean, uses the
+> `<noun> <id> <verb>` grammar instead of `t done <id>`, and stores more
+> collections. Current behaviour: the [README](../../../README.md) and
+> [architecture.md](../../architecture.md). Its open questions and Safari
+> acceptance tests live on in [todo.md](../../todo.md) and
+> [testing.md](../../testing.md#by-hand-in-real-safari-not-automatable-here).
+
 # New-Tab Control Center — v1 Spec
 
 Oct 5, 2026 · @Mihail

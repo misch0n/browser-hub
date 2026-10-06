@@ -1,5 +1,6 @@
-// Browser tests for the real page. Needs Playwright + Chromium:
-//   NODE_PATH=$(npm root -g) node tests/e2e.cjs
+// Browser tests for the real page, against the deployable build. Needs
+// `npm run setup` (Playwright, jsQR, ZXing) and Chromium; run: npm run test:e2e.
+// Harness notes and gotchas: docs/testing.md.
 // Starts its own static server; never touches the network (navigations are intercepted).
 const http = require('http');
 const fs = require('fs');
@@ -879,7 +880,11 @@ async function check(name, fn) {
     // The token is revoked: sync pauses, says so once, and a new token resumes it.
     gh.revoke('tok-a');
     await send('sync now');
-    assert.match(await lastText(), /refused the token/);
+    // Wait for this command's own reply (a network round trip; the "Sync paused" notice says the same words).
+    await page.waitForFunction(() => {
+      const turn = [...document.querySelectorAll('article.turn')].filter((t) => (t.querySelector('.you-text') || {}).textContent === 'sync now').pop();
+      return turn && /refused the token/.test(turn.innerText);
+    }, null, { timeout: 5000 });
     await page.waitForFunction(() => /Sync paused/.test(document.getElementById('turns').innerText));
     assert.equal(await page.locator('#status-sync').textContent(), 'sync !');
     await send('sync token');

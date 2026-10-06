@@ -3337,3 +3337,10 @@ test('diagrams sync between devices, renumbered on a clash', async () => {
   // The draft stays on its device.
   assert.equal(JSON.stringify(gh.state.repos).includes('diagram-draft'), false);
 });
+
+// ---- docs ------------------------------------------------------------------------------
+
+test('docs: the command reference (docs/commands.md, the README table) matches the code', async () => {
+  const { staleDocs } = await import('../tools/docs-commands.mjs');
+  assert.deepEqual(staleDocs(), [], 'run: node tools/docs-commands.mjs --write');
+});

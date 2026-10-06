@@ -1,4 +1,4 @@
-// Editable fields of notes, tasks, events, snippets, links and aliases. Pure: reading the
+// Editable fields of notes, tasks, events, snippets, links, foods, diagrams and aliases. Pure: reading the
 // command, checking the new value and producing the changed record. Commands
 // in commands/records.js do the saving and printing.
 //

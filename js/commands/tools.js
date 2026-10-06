@@ -5,6 +5,8 @@ import { encodeQR } from '../lib/qr.js';
 import { encodeBarcode, BARCODE_TYPES, barcodeWidth } from '../lib/barcode.js';
 import { uuid, b64encode, b64decode, prettyJson, parseEpochInput, fmtUTC, fmtLocal, relative } from '../lib/misc.js';
 
+// calc, epoch, uuid, b64, json, units, qr, barcode: small offline tools.
+
 export default function register(add, { st, usage }) {
   add({
     name: 'calc', group: 'Tools', desc: 'arithmetic with ^ % ( ), sqrt, round, sin, ln, pi …',

@@ -7,6 +7,9 @@ import { describe } from '../core/undo.js';
 import { sessions } from '../core/log.js';
 import { relative } from '../lib/misc.js';
 
+// help, keys, undo, redo, clear, session, history, export, import: commands
+// about the hub itself rather than your data.
+
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 

@@ -362,6 +362,24 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 
 .qr-wrap { margin: 4px 0; }
+
+/* JSON tree */
+.jt { margin: 4px 0; padding: 6px 1ch; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; }
+.jt-kids { padding-left: 2.2ch; border-left: 1px dotted var(--border); margin-left: 0.5ch; }
+.jt-row { white-space: pre; }
+.jt-node > summary { cursor: pointer; white-space: pre; list-style: none; }
+.jt-node > summary::-webkit-details-marker { display: none; }
+.jt-node > summary::before { content: '▸ '; color: var(--faint); }
+.jt-node[open] > summary::before { content: '▾ '; }
+.jt-node[open] > summary .jt-count { display: none; }
+
+/* data table: sortable, filterable */
+.dt { margin: 4px 0; }
+.dt-bar { display: flex; align-items: center; gap: 1.5ch; margin-bottom: 4px; }
+.dt-filter { font: inherit; color: var(--fg); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 4px; padding: 1px 0.8ch; min-width: 0; flex: 0 1 28ch; }
+.dt-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.dt-th::after { content: attr(data-sort); margin-left: 0.5ch; color: var(--accent); }
+.dt-num { text-align: right; }
 .bounce-go { margin: 6px 0 2px; }
 .bounce-continue {
   display: inline-block;
@@ -881,7 +899,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
    font is under 16px. Keep the fields at 16px there (the ghost layer inherits
    the same size, so completion stays aligned) instead of disabling zoom. */
 @media (pointer: coarse) {
-  .prompt-box, #palette-input, .edit-input { font-size: max(16px, calc(16px * var(--scale))); }
+  .prompt-box, #palette-input, .edit-input, .dt-filter { font-size: max(16px, calc(16px * var(--scale))); }
   body { touch-action: manipulation; } /* no double-tap zoom on buttons */
 }
 

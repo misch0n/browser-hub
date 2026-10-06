@@ -9,7 +9,7 @@ const MAX_TURNS = 400;
 
 // The Out methods that draw something: recorded, so a turn can be stored in
 // the shared history and drawn again later, on any device.
-const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'swatch'];
+const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'swatch', 'jsonTree', 'dataTable'];
 const plain = (v) => JSON.parse(JSON.stringify(v === undefined ? null : v));
 
 // The scrolling conversation: each command is a turn with the echoed input
@@ -239,6 +239,72 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
           row.appendChild(h('span', { class: 'swatch-item' }, svg, it.label ? h('span', { class: 'swatch-label', text: it.label }) : null));
         }
         push(row);
+      },
+      // JSON as a tree: objects and arrays fold open and shut (two levels open to start).
+      jsonTree(text) {
+        let v;
+        try { v = JSON.parse(text); } catch (e) { return line('not valid JSON', 'err'); }
+        const LIMIT = 200;
+        const leaf = (x) => (x === null ? h('span', { class: 't-faint', text: 'null' })
+          : typeof x === 'string' ? h('span', { class: 't-ok', text: JSON.stringify(x) })
+            : typeof x === 'number' ? h('span', { class: 't-num', text: String(x) })
+              : h('span', { class: 't-accent', text: String(x) }));
+        const node = (key, x, depth) => {
+          const label = key === null ? null : h('span', { class: 'jt-key ' + (typeof key === 'number' ? 't-faint' : 't-id'), text: typeof key === 'number' ? String(key) : JSON.stringify(key) });
+          if (x === null || typeof x !== 'object') return h('div', { class: 'jt-row' }, label, label ? h('span', { class: 't-dim', text: ': ' }) : null, leaf(x));
+          const entries = Array.isArray(x) ? x.map((y, i) => [i, y]) : Object.entries(x);
+          const brackets = Array.isArray(x) ? ['[', ']'] : ['{', '}'];
+          const summary = h('summary', null, label, label ? h('span', { class: 't-dim', text: ': ' }) : null,
+            h('span', { class: 't-dim', text: brackets[0] }), h('span', { class: 'jt-count t-faint', text: ' ' + entries.length + (Array.isArray(x) ? ' items ' : ' keys ') + brackets[1] }));
+          const d = h('details', { class: 'jt-node', open: depth < 2 }, summary);
+          const kids = h('div', { class: 'jt-kids' });
+          for (const [k, y] of entries.slice(0, LIMIT)) kids.appendChild(node(k, y, depth + 1));
+          if (entries.length > LIMIT) kids.appendChild(h('div', { class: 'jt-row t-faint', text: '… ' + (entries.length - LIMIT) + ' more' }));
+          d.appendChild(kids);
+          return d;
+        };
+        push(h('div', { class: 'jt' }, node(null, v, 0)));
+      },
+      // A table to explore: tap a column to sort by it (again: the other way), type to filter.
+      dataTable(spec) {
+        const { columns, rows, numeric = [] } = spec;
+        const SHOW = 500;
+        let sortCol = -1, desc = false, filter = '';
+        const num = (s) => Number(String(s).replace(',', '.').replace(/%$/, ''));
+        const tbody = h('tbody');
+        const count = h('div', { class: 'dt-count t-faint' });
+        const heads = columns.map((c, i) => h('th', { class: 'dt-th' + (numeric[i] ? ' dt-num' : ''), title: 'Sort by ' + c, tabindex: '0' }, c));
+        const draw = () => {
+          let list = rows.map((r, i) => [r, i]);
+          if (filter) {
+            const words = filter.toLowerCase().split(/\s+/).filter(Boolean);
+            list = list.filter(([r]) => { const t = r.join(' ').toLowerCase(); return words.every((w) => t.includes(w)); });
+          }
+          if (sortCol >= 0) {
+            const coll = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+            list.sort(([a, ia], [b, ib]) => {
+              const x = a[sortCol], y = b[sortCol];
+              let c = numeric[sortCol] ? (x === '' ? 1 : y === '' ? -1 : num(x) - num(y)) : coll.compare(x, y);
+              if (desc) c = -c;
+              return c || ia - ib;
+            });
+          }
+          tbody.textContent = '';
+          for (const [r] of list.slice(0, SHOW)) tbody.appendChild(h('tr', null, ...r.map((c, i) => h('td', { class: numeric[i] ? 't-num dt-num' : null, text: c }))));
+          heads.forEach((th, i) => { th.setAttribute('aria-sort', i === sortCol ? (desc ? 'descending' : 'ascending') : 'none'); th.dataset.sort = i === sortCol ? (desc ? '▼' : '▲') : ''; });
+          count.textContent = (filter ? list.length + ' of ' : '') + rows.length + ' rows' + (list.length > SHOW ? ' · showing the first ' + SHOW : '');
+        };
+        heads.forEach((th, i) => {
+          const sortBy = () => { if (sortCol === i) desc = !desc; else { sortCol = i; desc = false; } draw(); };
+          th.addEventListener('click', sortBy);
+          th.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sortBy(); } });
+        });
+        const input = h('input', { type: 'search', class: 'dt-filter', placeholder: 'Filter rows', 'aria-label': 'Filter rows', autocomplete: 'off', spellcheck: 'false' });
+        input.addEventListener('input', () => { filter = input.value; draw(); });
+        input.addEventListener('keydown', (e) => e.stopPropagation());
+        draw();
+        push(h('div', { class: 'dt' }, h('div', { class: 'dt-bar' }, input, count),
+          h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl dt-table' }, h('thead', null, h('tr', null, ...heads)), tbody))));
       },
       calendar(spec) {
         push(h('div', { class: 'cal-wrap' }, monthGrid(spec)));

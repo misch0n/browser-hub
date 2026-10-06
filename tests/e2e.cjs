@@ -503,6 +503,46 @@ async function check(name, fn) {
     await prompt.fill('');
   });
 
+  await check('json tree folds; csv sorts by column and filters; jwt verifies with a pasted key', async () => {
+    await send('json tree {"user":{"name":"Ana","tags":["a","b"],"age":30,"admin":false,"pet":null}}');
+    const tree = lastTurn().locator('.jt');
+    assert.equal(await tree.locator('details[open]').count(), 2);
+    assert.equal(await tree.locator('.t-num').first().textContent(), '30');
+    assert.equal(await tree.locator('.t-faint', { hasText: 'null' }).count(), 1);
+    await tree.locator('details details > summary').first().click(); // fold "user"
+    assert.equal(await tree.locator('details[open]').count(), 1);
+    const paste = (text) => prompt.evaluate((el, t) => {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', t);
+      return el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, text);
+    await type('csv ');
+    await paste('name;age;city\nbob;30;Sofia\nalice;25;Varna\ncarol;41;Ruse');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('article.turn:last-child .dt');
+    const t = lastTurn();
+    assert.match(await t.innerText(), /3 rows × 3 columns · semicolon-separated/);
+    const col = (i) => t.locator('tbody tr td:nth-child(' + i + ')').allInnerTexts();
+    await t.locator('th', { hasText: 'age' }).click();
+    assert.deepEqual(await col(2), ['25', '30', '41']);
+    await t.locator('th', { hasText: 'age' }).click();
+    assert.deepEqual(await col(2), ['41', '30', '25']);
+    await t.locator('.dt-filter').fill('car');
+    assert.deepEqual(await col(1), ['carol']);
+    assert.match(await t.locator('.dt-count').textContent(), /1 of 3 rows/);
+    // A token signed with a key pair; the public key pasted after it.
+    const { publicKey, privateKey } = require('crypto').generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const b64 = (x) => Buffer.from(x).toString('base64url');
+    const input = b64(JSON.stringify({ alg: 'ES256', typ: 'JWT' })) + '.' + b64(JSON.stringify({ sub: 'e2e' }));
+    const token = input + '.' + b64(require('crypto').sign('sha256', Buffer.from(input), { key: privateKey, dsaEncoding: 'ieee-p1363' }));
+    await prompt.focus();
+    await type('jwt verify ' + token + ' ');
+    await paste(publicKey.export({ type: 'spki', format: 'pem' }));
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Signature valid/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await lastText(), /✓ Signature valid · ES256/);
+  });
+
   await check('font: bigger and smaller on this device, applied before the first paint', async () => {
     const size = () => page.evaluate(() => parseFloat(getComputedStyle(document.body).fontSize));
     const before = await size();

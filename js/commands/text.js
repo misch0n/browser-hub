@@ -7,7 +7,7 @@ const n2s = (n) => BigInt(n).toLocaleString('en');
 
 export default function register(add, { usage }) {
   add({
-    name: 'pw', group: 'Tools', private: true, noUndo: true, // a fresh password never goes into the shared history
+    name: 'pw', group: 'Security', private: true, noUndo: true, // a fresh password never goes into the shared history
     desc: 'a random password, passphrase or PIN, made on this device',
     usage: ['pw [length]', 'pw words [count]', 'pw pin [digits]', 'pw simple [length]'],
     examples: ['pw', 'pw 32', 'pw words', 'pw words 8', 'pw pin', 'pw simple 16'],

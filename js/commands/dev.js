@@ -3,6 +3,7 @@ import { longDate } from '../core/format.js';
 import { tokenize } from '../core/args.js';
 import { highlight } from '../core/search.js';
 import { relative } from '../lib/misc.js';
+import { ALGS, verifyJwt, signJwt } from '../lib/jose.js';
 import { md5, decodeJWT, diffLists, diffView, parseCron, cronNext, describeCron, parseColor, toHex, toHsl, contrast } from '../lib/dev.js';
 
 // Developer tools: hash, jwt, url, regex, diff, cron, color. All offline.
@@ -19,7 +20,7 @@ const when = (d, now) => [[longDate(toISO(d), toISO(now)) + ' ' + pad2(d.getHour
 
 export default function register(add, { usage }) {
   add({
-    name: 'hash', group: 'Developer', private: true, // the text may be a secret: not in the shared history
+    name: 'hash', group: 'Security', private: true, // the text may be a secret: not in the shared history
     desc: 'MD5 and SHA checksums of text',
     usage: ['hash <text>', 'hash md5|sha1|sha256|sha384|sha512 <text>'],
     examples: ['hash hello', 'hash sha256 hello'],
@@ -44,17 +45,71 @@ export default function register(add, { usage }) {
   });
 
   add({
-    name: 'jwt', group: 'Developer', private: true, noHistory: true, // a token is a credential: kept nowhere
-    desc: 'decode a JSON Web Token: header, claims, expiry (signature not checked)',
-    usage: ['jwt <token>'],
+    name: 'jwt', group: 'Security', private: true, noHistory: true, // a token is a credential: kept nowhere
+    desc: 'decode a JSON Web Token, check its signature, or sign one (HS, RS, PS, ES, EdDSA)',
+    usage: ['jwt <token>', 'jwt <token> <key>', 'jwt verify <token> [key]', 'jwt sign <alg> <payload JSON> [key]'],
+    examples: ['jwt eyJhbGciOi…', 'jwt verify eyJhbGciOi…   (HS: asks for the secret, hidden)', 'jwt verify eyJhbGciOi… <paste a PEM or JWK public key>',
+      'jwt sign HS256 {"sub":"me"}', 'jwt sign ES256 {"sub":"me"} <paste a PKCS#8 private key>'],
+    complete: (prev) => (prev.length === 0 ? [{ value: 'verify' }, { value: 'sign' }]
+      : prev[0] === 'sign' && prev.length === 1 ? Object.keys(ALGS).map((a) => ({ value: a })) : []),
     async run(ctx, rest) {
       const { out } = ctx;
-      if (!rest.trim()) return usage(ctx, this);
+      const text = rest.trim();
+      if (!text) return usage(ctx, this);
+      const m = /^(verify|sign)(?:\s+([\s\S]*))?$/i.exec(text);
+      const mode = m ? m[1].toLowerCase() : 'decode';
+      const body = m ? (m[2] || '').trim() : text;
+      const ask = (alg) => ctx.askSecret('Shared secret for ' + alg + ' (hidden; hex:… or base64:… for binary)');
+
+      if (mode === 'sign') {
+        const s = /^(\S+)\s+([\s\S]+)$/.exec(body);
+        if (!s) return usage(ctx, this);
+        const alg = Object.keys(ALGS).find((a) => a.toLowerCase() === s[1].toLowerCase());
+        if (!alg) return out.err('Unknown algorithm ' + s[1] + ' (' + Object.keys(ALGS).join(', ') + ')');
+        // The payload is the JSON object at the start; anything after it is the key.
+        let payload = null, keyText = '';
+        const src = s[2];
+        for (let i = src.indexOf('}'); i >= 0; i = src.indexOf('}', i + 1)) {
+          try { payload = JSON.parse(src.slice(0, i + 1)); keyText = src.slice(i + 1).trim(); break; } catch (e) { /* keep looking */ }
+        }
+        if (!payload || typeof payload !== 'object') return out.err('The payload is a JSON object: jwt sign ' + alg + ' {"sub":"me"}');
+        if (!keyText) {
+          if (ALGS[alg].kind !== 'hmac') return out.err(alg + ' signs with a private key: paste it (PEM PRIVATE KEY or JWK) after the payload');
+          keyText = await ask(alg);
+          if (!keyText) return out.head('Cancelled', 'dim');
+        }
+        try {
+          const token = await signJwt(payload, alg, keyText);
+          out.head([['Signed', 'ok'], [' · ' + alg + ' · ' + token.length + ' characters', 'dim']], 'ok');
+          out.value(token);
+          out.dim('Made on this page with Web Crypto; not kept in history');
+        } catch (e) {
+          out.err(e.message);
+        }
+        return;
+      }
+
+      const parts = /^(\S+)(?:\s+([\s\S]+))?$/.exec(body);
+      if (!parts) return usage(ctx, this);
       let t;
       try {
-        t = decodeJWT(rest);
+        t = decodeJWT(parts[1]);
       } catch (e) {
         return out.err(e.message);
+      }
+      let keyText = (parts[2] || '').trim();
+      let check = null;
+      const alg = t.header.alg;
+      if (mode === 'verify' || keyText) {
+        if (!keyText && ALGS[alg] && ALGS[alg].kind === 'hmac') {
+          keyText = await ask(alg);
+          if (!keyText) return out.head('Cancelled', 'dim');
+        }
+        if (!keyText) {
+          check = { valid: false, alg, reason: ALGS[alg] ? 'paste the public key (PEM or JWK) after the token' : 'unsupported algorithm ' + alg };
+        } else {
+          try { check = await verifyJwt(parts[1], keyText); } catch (e) { check = { valid: false, alg, reason: e.message }; }
+        }
       }
       const now = ctx.now();
       const p = t.payload || {};
@@ -62,7 +117,13 @@ export default function register(add, { usage }) {
       const exp = time('exp'), nbf = time('nbf');
       const state = exp && exp <= now ? ['expired ' + relative(exp, now), 'err'] : nbf && nbf > now ? ['not valid until ' + relative(nbf, now), 'warn']
         : exp ? ['valid, expires ' + relative(exp, now), 'ok'] : ['no expiry', 'dim'];
-      out.head([['JWT', 'strong'], [' · ' + (t.header.alg || 'no alg') + ' · ', 'dim'], state], state[1] === 'err' ? 'err' : state[1] === 'warn' ? 'warn' : 'ok');
+      const sig = check ? (check.valid ? [' · signature ✓', 'ok'] : [' · signature ✗', 'err']) : ['', ''];
+      const tone = check && !check.valid ? 'err' : state[1] === 'err' ? 'err' : state[1] === 'warn' ? 'warn' : 'ok';
+      out.head([['JWT', 'strong'], [' · ' + (alg || 'no alg') + ' · ', 'dim'], state, sig], tone);
+      if (check) {
+        out.line(check.valid ? [['✓ Signature valid', 'ok strong'], [' · ' + check.alg + ', checked with Web Crypto on this page', 'dim']]
+          : [['✗ Signature not valid', 'err strong'], [' · ' + check.reason, 'dim']]);
+      }
       const times = [['iat', 'issued'], ['nbf', 'not before'], ['exp', 'expires'], ['auth_time', 'signed in']].filter(([k]) => time(k));
       const who = [['sub', 'subject'], ['iss', 'issuer'], ['aud', 'audience']].filter(([k]) => p[k] !== undefined);
       if (times.length || who.length) {
@@ -73,7 +134,7 @@ export default function register(add, { usage }) {
       out.code(JSON.stringify(t.header, null, 2), 'json');
       out.section('Payload');
       out.code(JSON.stringify(p, null, 2), 'json');
-      out.dim('The signature is not checked: that needs the key. Not kept in history.');
+      out.dim((check ? '' : 'Signature not checked: jwt verify <token> [key] · ') + 'Not kept in history');
     },
   });
 

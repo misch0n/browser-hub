@@ -41,8 +41,10 @@ still work.
 | Snippets | `snippets` (`snip`) |
 | Read later | `later` |
 | Tools | `zones`, `tz`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `pw` |
-| Text | `count`, `case` |
-| Developer | `cidr`, `hash`, `jwt`, `url`, `regex`, `diff`, `cron`, `color` |
+| Developer | `json`, `csv`, `base`, `escape`, `cidr`, `url`, `regex`, `diff`, `cron`, `color` |
+| Security | `jwt`, `hmac`, `hash`, `pw` |
+| Web | `http`, `mime` |
+| Text | `text`, `count`, `case` |
 | Share | `clip`, `bounce` |
 | Chance | `random`, `roll` |
 | Kitchen | `cook target`, `cook oven`, `cook convert`, `cook calorie` |
@@ -248,6 +250,24 @@ browser's secure random numbers; it never goes into the shared history.
 as camelCase, snake_case, kebab-case, Title Case and the rest; `cidr` takes an
 IPv4 or IPv6 range or address apart (`cidr 10.0.0.0/22 10.0.3.9` says
 whether the address is inside).
+
+**More developer tools**: `json` colours keys, strings, numbers, booleans and
+null, points at the line and column of an error, and has `json tree` (folds
+open and shut) and `json min`. `csv` shows pasted CSV as a table: the delimiter
+is worked out (comma, semicolon, tab, pipe), a header row detected, columns sort
+when tapped and a box filters the rows; `csv json` converts. `jwt verify`
+checks a token's signature with Web Crypto on the page: HS256/384/512 with a
+shared secret (asked for hidden), RS, PS and ES 256/384/512 and EdDSA with a
+pasted PEM (public key, PKCS#1, or certificate) or JWK; `jwt sign` makes one.
+`base` converts between binary, octal, decimal, hex and any base 2–36 with
+BigInt, and shows the value in 8/16/32/64 bits (two's complement, bytes in
+both orders). `text` dedupes, sorts (numeric, descending, unique), reverses,
+trims, finds and replaces (literal or /regex/ with $1), counts, changes case and
+makes lorem ipsum. `hmac` gives HMAC-SHA-1/256/384/512 in hex and base64 with a
+text, hex: or base64: key. `escape` writes a string or a /regex/flags correctly
+for JavaScript, Python, Java, C#, Go, PHP, Ruby, Rust and JSON, with raw and
+verbatim forms and each language's flags. `http` and `mime` are searchable
+references (`http 4xx`, `http rate limit`, `mime docx`, `mime image/*`).
 
 **QR codes**: `qr <text>` draws one for a link or any text, made on the page
 (nothing is sent anywhere), always dark on white so phones can scan it in any

@@ -66,22 +66,43 @@ export default function register(add, { st, usage }) {
   });
 
   add({
-    name: 'json', group: 'Tools', desc: 'validate and pretty-print JSON',
-    usage: ['json <text>'],
+    name: 'json', group: 'Tools', desc: 'validate and pretty-print JSON, in colour, as a tree, or minified',
+    usage: ['json <text>', 'json tree <text>', 'json min <text>'],
+    examples: ['json {"a":1,"b":[true,null,"x"]}', 'json tree <paste>', 'json min <paste>'],
+    complete: (prev) => (prev.length === 0 ? [{ value: 'tree', label: 'collapsible' }, { value: 'min', label: 'minified' }] : []),
     async run(ctx, rest) {
       const { out } = ctx;
-      if (!rest) return usage(ctx, this);
-      let pretty;
+      const m = /^(tree|min|minify)\s+([\s\S]+)$/i.exec(rest.trim());
+      const mode = m ? m[1].toLowerCase() : 'pretty';
+      const text = m ? m[2] : rest;
+      if (!text.trim()) return usage(ctx, this);
+      let v;
       try {
-        pretty = prettyJson(rest);
+        v = JSON.parse(text);
       } catch (e) {
-        return out.err('Invalid JSON: ' + e.message);
+        // Where it went wrong, with the line and column.
+        const pos = /position (\d+)/.exec(e.message);
+        if (pos) {
+          const at = Number(pos[1]);
+          const before = text.slice(0, at);
+          const lineNo = before.split('\n').length, col = at - before.lastIndexOf('\n');
+          out.err('Invalid JSON at line ' + lineNo + ', column ' + col + ': ' + e.message.replace(/ in JSON at position \d+.*$/, ''));
+          out.code(text.split('\n')[lineNo - 1].slice(Math.max(0, col - 40), col + 40) + '\n' + ' '.repeat(Math.min(col - 1, 40)) + '^');
+        } else {
+          out.err('Invalid JSON: ' + e.message);
+        }
+        return;
       }
-      const v = JSON.parse(rest);
       const kind = Array.isArray(v) ? plural(v.length, 'item') + ' (array)'
         : v && typeof v === 'object' ? plural(Object.keys(v).length, 'key') + ' (object)' : typeof v;
       out.head([['Valid JSON', 'ok'], [' · ' + kind, 'dim']]);
-      out.code(pretty, 'json');
+      if (mode === 'tree') return out.jsonTree(text);
+      if (mode !== 'pretty') {
+        const min = JSON.stringify(v);
+        out.dim(text.length + ' → ' + min.length + ' characters');
+        return out.value(min);
+      }
+      out.code(prettyJson(text), 'json');
     },
   });
 

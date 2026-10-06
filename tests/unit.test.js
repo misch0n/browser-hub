@@ -418,6 +418,8 @@ function recorder() {
     value: (text) => { lines.push('= ' + text); lines.copied = text; }, // the page's value() also marks it copyable
     copyable: (text) => { lines.copied = text; },
     qr: (text, ecl) => lines.push('QR ' + ecl + ' ' + text),
+    jsonTree: (text) => lines.push('JSONTREE ' + text),
+    dataTable: (spec) => lines.push('DATATABLE ' + JSON.stringify(spec)),
     swatch: (items) => lines.push('SWATCH ' + items.map((i) => i.color + (i.text ? ' ' + i.text.value + ' ' + i.text.color : '') + (i.label ? ' ' + i.label : '')).join(' | ')),
     calendar: (spec) => lines.push('CAL ' + spec.year + '-' + spec.month + ' marks=' + spec.marks.sort((a, b) => a - b).join(',')),
   };
@@ -2604,4 +2606,183 @@ test('completion offers the next input where it is known', async () => {
   // Tab on an empty argument with one known choice completes it; with several, the second Tab lists them.
   assert.deepEqual(C.applyTab('units 5 km ', env), { input: 'units 5 km to ' });
   assert.ok(C.applyTab('agenda ', env).list.length === 3);
+});
+
+test('developer tools 2: JWT signatures, bases, text, CSV, escaping, references', async () => {
+  const J = await import('../js/lib/jose.js');
+  const nodeCrypto = await import('node:crypto');
+  // The jwt.io example token, signed by someone else with HS256.
+  const jwtio = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+  assert.deepEqual(await J.verifyJwt(jwtio, 'your-256-bit-secret'), { valid: true, alg: 'HS256' });
+  assert.deepEqual(await J.verifyJwt(jwtio, 'wrong secret'), { valid: false, alg: 'HS256', reason: 'the signature does not match this key' });
+  assert.equal((await J.verifyJwt(jwtio, 'hex:' + Buffer.from('your-256-bit-secret').toString('hex'))).valid, true);
+  for (const alg of ['HS384', 'HS512']) {
+    const t = await J.signJwt({ sub: 'me' }, alg, 'k3y');
+    assert.deepEqual(await J.verifyJwt(t, 'k3y'), { valid: true, alg });
+  }
+  // RSA, RSA-PSS, EC, Ed25519: tokens signed by Node's own crypto verify with our code, ours with Node's.
+  const b64u = (b) => Buffer.from(b).toString('base64url');
+  const nodeToken = (alg, sign) => { const input = b64u(JSON.stringify({ alg, typ: 'JWT' })) + '.' + b64u(JSON.stringify({ sub: 'n' })); return input + '.' + b64u(sign(input)); };
+  const rsa = nodeCrypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const pemOf = (k, type) => k.export({ type, format: 'pem' });
+  for (const [alg, hash] of [['RS256', 'sha256'], ['RS384', 'sha384'], ['RS512', 'sha512']]) {
+    const t = nodeToken(alg, (input) => nodeCrypto.sign(hash, Buffer.from(input), rsa.privateKey));
+    for (const pub of [pemOf(rsa.publicKey, 'spki'), pemOf(rsa.publicKey, 'pkcs1'), JSON.stringify(rsa.publicKey.export({ format: 'jwk' }))]) {
+      assert.deepEqual(await J.verifyJwt(t, pub), { valid: true, alg }, alg);
+    }
+    for (const priv of [pemOf(rsa.privateKey, 'pkcs8'), pemOf(rsa.privateKey, 'pkcs1'), JSON.stringify(rsa.privateKey.export({ format: 'jwk' }))]) {
+      const ours = await J.signJwt({ sub: 'o' }, alg, priv);
+      const [h, p, s] = ours.split('.');
+      assert.ok(nodeCrypto.verify(hash, Buffer.from(h + '.' + p), rsa.publicKey, Buffer.from(s, 'base64url')), alg + ' signed by us');
+    }
+  }
+  const ps = await J.signJwt({ sub: 'p' }, 'PS256', pemOf(rsa.privateKey, 'pkcs8'));
+  assert.equal((await J.verifyJwt(ps, pemOf(rsa.publicKey, 'spki'))).valid, true);
+  for (const [alg, curve, hash] of [['ES256', 'prime256v1', 'sha256'], ['ES384', 'secp384r1', 'sha384'], ['ES512', 'secp521r1', 'sha512']]) {
+    const ec = nodeCrypto.generateKeyPairSync('ec', { namedCurve: curve });
+    const t = nodeToken(alg, (input) => nodeCrypto.sign(hash, Buffer.from(input), { key: ec.privateKey, dsaEncoding: 'ieee-p1363' }));
+    assert.deepEqual(await J.verifyJwt(t, pemOf(ec.publicKey, 'spki')), { valid: true, alg });
+    assert.deepEqual(await J.verifyJwt(t, JSON.stringify(ec.publicKey.export({ format: 'jwk' }))), { valid: true, alg });
+    const ours = await J.signJwt({ sub: 'e' }, alg, pemOf(ec.privateKey, 'pkcs8'));
+    const [h, p, s] = ours.split('.');
+    assert.ok(nodeCrypto.verify(hash, Buffer.from(h + '.' + p), { key: ec.publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(s, 'base64url')), alg);
+    // Tampered payload: invalid.
+    const bad = [h, b64u(JSON.stringify({ sub: 'admin' })), s].join('.');
+    assert.equal((await J.verifyJwt(bad, pemOf(ec.publicKey, 'spki'))).valid, false);
+  }
+  const ed = nodeCrypto.generateKeyPairSync('ed25519');
+  const edTok = nodeToken('EdDSA', (input) => nodeCrypto.sign(null, Buffer.from(input), ed.privateKey));
+  assert.deepEqual(await J.verifyJwt(edTok, pemOf(ed.publicKey, 'spki')), { valid: true, alg: 'EdDSA' });
+  // Wrong kinds of keys are explained.
+  await assert.rejects(J.verifyJwt(nodeToken('RS256', () => Buffer.alloc(256)), pemOf(rsa.privateKey, 'pkcs8')), /give the public key/);
+  await assert.rejects(J.signJwt({}, 'RS256', pemOf(rsa.publicKey, 'spki')), /give the private key/);
+  await assert.rejects(J.signJwt({}, 'ES256', JSON.stringify(nodeCrypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'jwk' }))), /private key/);
+  assert.equal((await J.verifyJwt(b64u('{"alg":"none"}') + '.' + b64u('{}') + '.', 'x')).valid, false);
+  await assert.rejects(J.verifyJwt('a.b', 'x'), /three parts/);
+
+  // Bases.
+  const B = await import('../js/lib/numbase.js');
+  assert.deepEqual(B.parseNumber('0xff'), { value: 255n, base: 16 });
+  assert.deepEqual(B.parseNumber('-0b1010'), { value: -10n, base: 2 });
+  assert.deepEqual(B.parseNumber('zz', 36), { value: 1295n, base: 36 });
+  assert.deepEqual(B.parseNumber('1_000_000'), { value: 1000000n, base: 10 });
+  assert.throws(() => B.parseNumber('12', 2), /'2' is not a base-2 digit/);
+  assert.equal(B.toBase(2n ** 100n, 16), '1' + '0'.repeat(25));
+  assert.equal(B.toBase(1000n, 7), '2626');
+  assert.deepEqual([B.fitWidth(255n), B.fitWidth(256n), B.fitWidth(-128n), B.fitWidth(-129n), B.fitWidth(2n ** 64n)], [8, 16, 8, 16, 128]);
+  const v = B.widthView(-2n, 16);
+  assert.deepEqual([v.unsigned, v.signed, v.hex, v.bytesBE, v.bytesLE], [65534n, -2n, 'fffe', 'ff fe', 'fe ff']);
+  assert.equal(B.widthView(0x12345678n, 32).bytesLE, '78 56 34 12');
+  assert.throws(() => B.widthView(256n, 8), /doesn't fit in 8 bits/);
+
+  // Text.
+  const T = await import('../js/lib/textops.js');
+  assert.deepEqual(T.dedupe('a\nb\na\nB'), { text: 'a\nb\nB', removed: 1 });
+  assert.equal(T.sortLines('b\nA\nc10\nc9'), 'A\nb\nc9\nc10');
+  assert.equal(T.sortLines('10 x\n2 y\n33 z', { numeric: true, desc: true }), '33 z\n10 x\n2 y');
+  assert.equal(T.sortLines('b\na\nb\n', { unique: true }), 'a\nb');
+  assert.equal(T.trimText('  a  \n\n\n  b\n\n'), 'a\n\nb');
+  assert.deepEqual(T.replaceText('a.b.c', '.', '-'), { text: 'a-b-c', count: 2 });
+  assert.deepEqual(T.replaceText('4px 8px', '/(\\d+)px/g', '$1rem'), { text: '4rem 8rem', count: 2 });
+  assert.deepEqual(T.stats('one two\nthree ✓'), { lines: 2, words: 4, characters: 15, bytes: 17 });
+  assert.equal(T.lorem(5, 'words'), 'Lorem ipsum dolor sit amet');
+  assert.equal(T.lorem(2, 'paragraphs').split('\n\n').length, 2);
+  assert.equal(T.lorem(3, 'sentences').split('. ').length, 3);
+
+  // CSV.
+  const V = await import('../js/lib/csv.js');
+  assert.deepEqual(V.parseDelimited('a,"b ""q"", c",d\n1,"2\nline",3\n', ','), [['a', 'b "q", c', 'd'], ['1', '2\nline', '3']]);
+  assert.equal(V.detectDelimiter('a;b;c\n1;2,5;3\n4;5;6'), ';');
+  assert.equal(V.detectDelimiter('a\tb\n1\t2'), '\t');
+  assert.equal(V.detectDelimiter('a|b|c\n1|2|3'), '|');
+  assert.equal(V.detectDelimiter('name,age\nbob,30'), ',');
+  const c = V.readCsv('name,age,city\nbob,30,Sofia\nalice,25,"Plovdiv, BG"');
+  assert.deepEqual([c.header, c.columns, c.numeric, c.rows[1][2]], [true, ['name', 'age', 'city'], [false, true, false], 'Plovdiv, BG']);
+  assert.equal(V.readCsv('1,2\n3,4').header, false);
+  assert.equal(V.readCsv('a,b\n1', {}).rows[0][1], ''); // short rows padded
+
+  // Escaping.
+  const E = await import('../js/lib/escape.js');
+  const lit = Object.fromEntries(E.literals('a\\b "c" it\'s').map((x) => [x.lang, x.code]));
+  assert.equal(lit.js, '"a\\\\b \\"c\\" it\'s"');
+  assert.equal(JSON.parse(lit.json), 'a\\b "c" it\'s');
+  assert.equal(lit.python, "'a\\\\b \"c\" it\\'s'");
+  assert.equal(lit.csharp, '"a\\\\b \\"c\\" it\'s"   or   @"a\\b ""c"" it\'s"');
+  assert.equal(lit.go, '"a\\\\b \\"c\\" it\'s"   or   `a\\b "c" it\'s`');
+  assert.equal(lit.rust, '"a\\\\b \\"c\\" it\'s"   or   r#"a\\b "c" it\'s"#');
+  const rx = E.readRegex('/a\\/b\\d+/gi');
+  assert.deepEqual(rx, { source: 'a/b\\d+', flags: 'gi' });
+  const code = Object.fromEntries(E.regexCode(rx.source, rx.flags).map((x) => [x.lang, x.code]));
+  assert.equal(code.python, "re.compile(r'a/b\\d+', re.IGNORECASE)");
+  assert.equal(code.java, 'Pattern.compile("a/b\\\\d+", Pattern.CASE_INSENSITIVE)');
+  assert.equal(code.go, 'regexp.MustCompile(`(?i)a/b\\d+`)');
+  assert.equal(code.php, "preg_match('#a/b\\\\d+#i', $subject)");
+  assert.equal(code.rust, 'Regex::new(r"(?i)a/b\\d+").unwrap()');
+  assert.ok(E.regexCode('x', 's').find((x) => x.lang === 'ruby').code === '/x/m'); // JavaScript s is Ruby m
+  assert.throws(() => E.regexCode('x', 'q'), /unknown flag q/);
+  // The JavaScript output is valid JavaScript for the same pattern.
+  assert.equal(new Function('return ' + code.js.split('   or   ')[1])().source, new RegExp('a/b\\d+').source);
+
+  // References.
+  const R = await import('../js/lib/reference.js');
+  assert.deepEqual(R.findStatus('404').map((r) => r[1]), ['Not Found']);
+  assert.ok(R.findStatus('4xx').every((r) => r[0] >= 400 && r[0] < 500) && R.findStatus('4xx').length > 20);
+  assert.deepEqual(R.findStatus('rate limit').map((r) => r[0]), [429]);
+  assert.equal(new Set(R.HTTP_STATUS.map((r) => r[0])).size, R.HTTP_STATUS.length);
+  assert.deepEqual(R.findMime('png'), [{ ext: 'png', type: 'image/png', by: 'extension' }]);
+  assert.deepEqual(R.findMime('photo.JPG'), [{ ext: 'jpg', type: 'image/jpeg', by: 'extension' }]);
+  assert.deepEqual(R.findMime('image/jpeg'), [{ type: 'image/jpeg', exts: ['jpg', 'jpeg', 'jpe'], by: 'type' }]);
+  assert.ok(R.findMime('video/*').length >= 8);
+  assert.deepEqual(R.findMime('nope/none'), []);
+});
+
+test('developer tools 2: the commands', async () => {
+  const app = await makeApp();
+  // jwt verify: the secret asked for (hidden); a pasted key after the token; sign.
+  const jwtio = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+  let answer = 'your-256-bit-secret';
+  app.ctx.askSecret = async () => answer;
+  const ok = await app.run('jwt verify ' + jwtio);
+  assert.equal(ok[0], '# JWT · HS256 · no expiry · signature ✓');
+  assert.equal(ok[1], '✓ Signature valid · HS256, checked with Web Crypto on this page');
+  answer = 'nope';
+  const bad = await app.run('jwt verify ' + jwtio);
+  assert.equal(bad.tone, 'err');
+  assert.equal(bad[1], '✗ Signature not valid · the signature does not match this key');
+  assert.equal((await app.run('jwt ' + jwtio + ' your-256-bit-secret'))[1], '✓ Signature valid · HS256, checked with Web Crypto on this page');
+  answer = 'k';
+  const signed = await app.run('jwt sign HS256 {"sub":"me","n":1}');
+  assert.match(signed[0], /^# Signed · HS256 · \d+ characters$/);
+  const tok = signed[1].slice(2);
+  assert.equal((await app.run('jwt ' + tok + ' k'))[1].slice(0, 17), '✓ Signature valid');
+  assert.match((await app.run('jwt sign RS256 {"a":1}'))[0], /^err: RS256 signs with a private key/);
+  assert.match((await app.run('jwt sign XX1 {}'))[0], /^err: Unknown algorithm XX1/);
+  assert.equal(app.commands.byName.get('jwt').noHistory, true);
+
+  assert.deepEqual((await app.run('base 255')).slice(0, 5), ['# 255 · read as base 10 · 8 bits of magnitude', 'binary: 1111 1111', 'octal: 377', 'decimal: 255', 'hex: FF']);
+  assert.ok((await app.run('base -2 bits 16')).includes('bytes, little-endian: FE FF'));
+  assert.equal((await app.run('base 12 from 2'))[0], "err: '2' is not a base-2 digit");
+  assert.equal((await app.run('base 1000 to 7')).copied, '2626');
+  assert.equal((await app.run('text dedupe a\nb\na'))[0], '# Deduplicated · 1 duplicate removed · 2 lines left');
+  assert.deepEqual((await app.run('text replace "a b" x a b c a b')).slice(0, 2), ['# Replaced · 2 matches', 'x c x']);
+  assert.deepEqual(await app.run('text upper hello world'), ['# Upper case', 'HELLO WORLD']);
+  assert.match((await app.run('text frobnicate x'))[0], /^# Usage · text/);
+  const h = await app.run('hmac sha256 key The quick brown fox jumps over the lazy dog');
+  assert.equal(h[2], '= f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8'); // the published example
+  assert.equal(h[4], '= 97yD9DBThCSxMpjmqm+xQ+9NWaFJRhdZl0edvC0aPNg=');
+  assert.equal((await app.run('hmac sha1 hex:0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b "Hi There"'))[2], '= b617318655057264e28bc0b6fb378c8ef146be00'); // RFC 2202
+  assert.equal(app.commands.byName.get('hmac').private, true);
+  const esc = await app.run('escape /^\\d{3}$/i');
+  assert.ok(esc.includes('Python | re.compile(r\'^\\d{3}$\', re.IGNORECASE)'));
+  assert.deepEqual((await app.run('http 418')).slice(0, 1), ["# 418 I'm a teapot · Client error"]);
+  assert.ok((await app.run('http 3xx')).includes('## 3xx Redirection'));
+  assert.deepEqual(await app.run('mime png'), ['# .png is', '= image/png', 'dim: Also .apng'].slice(0, 2));
+  const csv = await app.run('csv name,age\nbob,30\nalice,25');
+  assert.equal(csv[0], '# 2 rows × 2 columns · comma-separated · first row is the header');
+  assert.match(csv[1], /^DATATABLE /);
+  const jtree = await app.run('json tree {"a":[1,2]}');
+  assert.deepEqual(jtree, ['# Valid JSON · 1 key (object)', 'JSONTREE {"a":[1,2]}']);
+  const bad2 = await app.run('json {"a": 1,, }');
+  assert.equal(bad2[0], 'err: Invalid JSON at line 1, column 9: Expected double-quoted property name');
+  assert.equal((await app.run('json min {"a": 1}'))[2], '= {"a":1}');
 });

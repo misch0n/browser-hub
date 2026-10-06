@@ -32,10 +32,11 @@ export default function register(add, helpers) {
       out.head([['Help', 'strong'], [' · ' + shown.length + ' commands · tap one for everything about it', 'dim']]);
       // One row per command, by category; the tag says what kind of name it is.
       const rows = [];
-      let group = null;
-      for (const d of shown) {
-        if (d.group !== group) { group = d.group; rows.push({ section: [[group, ''], ['  ', ''], ['⚙ built-in', 'k-cmd']] }); }
-        rows.push([[[d.name, 'accent', { run: 'help ' + d.name }]], [[d.desc, 'dim']]]);
+      const groups = new Map(); // categories in the order they first appear
+      for (const d of shown) groups.set(d.group, [...(groups.get(d.group) || []), d]);
+      for (const [group, list] of groups) {
+        rows.push({ section: [[group, ''], ['  ', ''], ['⚙ built-in', 'k-cmd']] });
+        for (const d of list) rows.push([[[d.name, 'accent', { run: 'help ' + d.name }]], [[d.desc, 'dim']]]);
       }
       rows.push({ section: [['Your search engines', ''], ['  ', ''], ['⌕ engine', 'k-engine']] });
       if (!engines.length) rows.push([[['none yet', 'faint']], [['alias <name> <url with {}>', 'dim']]]);

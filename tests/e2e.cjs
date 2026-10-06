@@ -444,6 +444,16 @@ async function check(name, fn) {
     assert.match(await lastText(), /Minerals[\s\S]*selenium[\s\S]*Vitamins[\s\S]*niacin/);
   });
 
+  await check('roll: one of each die, tap a die to roll it again; random numbers', async () => {
+    await send('roll');
+    assert.equal(await lastTurn().locator('tr.tr-run').count(), 7);
+    await lastTurn().locator('tr.tr-run', { hasText: 'd20' }).click();
+    await page.waitForFunction(() => /^roll d20$/.test([...document.querySelectorAll('.turn .you-text')].pop().textContent));
+    assert.match(await lastText(), /d20 = \d+/);
+    await send('random 1-49 x6 unique');
+    assert.match(await lastTurn().locator('.value-text').textContent(), /^(\d+, ){5}\d+$/);
+  });
+
   await check('address bar: ?q= opens aliases and searches; built-ins are only pre-filled', async () => {
     assert.match(await page.locator('link[rel=search]').getAttribute('href'), /^opensearch\.xml/);
     const xml = fs.readFileSync(path.join(root, 'opensearch.xml'), 'utf8'); // the built copy
@@ -1037,7 +1047,7 @@ async function check(name, fn) {
     const send2 = async (c) => { await tp.locator('#prompt').fill(c); await tp.keyboard.press('Enter'); await tp.waitForTimeout(80); };
     await send2('alias gh https://github.com/ https://github.com/{} --path');
     await send2('t a task with a fairly long description that has to wrap somewhere due:tomorrow #home');
-    for (const c of ['help', 'keys', 'alias ls', 'tasks', 'tz', 'theme', 'widgets', 'help alias', 'agenda', 'cook target', 'cook oven', 'cook oven chicken 500g', 'cook convert', 'cook calorie chocolate', 'cook calorie 05062']) await send2(c);
+    for (const c of ['help', 'keys', 'alias ls', 'tasks', 'tz', 'theme', 'widgets', 'help alias', 'agenda', 'cook target', 'cook oven', 'cook oven chicken 500g', 'cook convert', 'cook calorie chocolate', 'cook calorie 05062', 'roll', 'roll stats']) await send2(c);
     const bad = await tp.evaluate(() => {
       const out = [];
       for (const t of document.querySelectorAll('.tbl')) {

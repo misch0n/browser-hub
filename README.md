@@ -44,6 +44,7 @@ still work.
 | Text | `count`, `case` |
 | Developer | `cidr`, `hash`, `jwt`, `url`, `regex`, `diff`, `cron`, `color` |
 | Share | `clip`, `bounce` |
+| Chance | `random`, `roll` |
 | Kitchen | `cook target`, `cook oven`, `cook convert`, `cook calorie` |
 | Aliases & engines | `aliases` (`alias`), `engine` |
 | View | `theme`, `widgets` |
@@ -257,6 +258,15 @@ vitamins with the share of the daily value, and household portions. Add
 nuts, oils, sweets, snacks like crisps and chocolate, drinks, condiments)
 come from the USDA National Nutrient Database for Standard Reference (SR28,
 public domain); the table loads only when first used.
+
+**Chance**: `random` gives 1–100; `random 50`, `random 10-20`, `random -5..5`
+and `random 0.5-2.5` set the band (decimals as written), `random 6 digits`
+the length, and `x6` and `unique` draw several (`random 1-49 x6 unique`).
+`roll` rolls one of each D&D die (d4 d6 d8 d10 d12 d20 d100; tap one to roll it
+again), `roll d6` just that one, and dice notation works: `roll 2d6+3`,
+`roll d20+5 adv` (or `dis`), `roll 4d6kh3` (keep the highest three), `roll d%`.
+`roll stats` rolls six ability scores (4d6, lowest dropped). Both use the
+browser's secure random numbers, without bias.
 
 **Bounce links**: `bounce <url>` gives a link to this page that sends whoever
 opens it on to the address. The address travels inside the link (packed, and

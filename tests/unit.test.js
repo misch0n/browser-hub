@@ -2341,3 +2341,85 @@ test('cook calorie: a table for many, everything for one, scaled to a weight', a
   assert.ok(groups.some((l) => /^Poultry \| Chicken breast, Chicken breast with skin/.test(l)));
   for (const alias of ['calories', 'kcal', 'nutrition', 'macros']) assert.match((await app.run('cook ' + alias + ' apple raw'))[0], /^# Apple · raw · per 100 g$/);
 });
+
+test('chance: unbiased integers, random options, dice notation and rolls', async () => {
+  const Ch = await import('../js/lib/chance.js');
+  // A fake random source: 53-bit draws built from pairs of 32-bit values.
+  const fake = (pairs) => { const q = pairs.flat(); return { getRandomValues: (a) => { a[0] = q.shift(); a[1] = q.shift(); return a; } }; };
+  assert.equal(Ch.randomInt(1, 6, fake([[0, 0]])), 1);
+  assert.equal(Ch.randomInt(1, 6, fake([[0, 5]])), 6);
+  assert.equal(Ch.randomInt(1, 6, fake([[0x1fffff, 0xffffffff], [0, 2]])), 3); // past the last whole multiple: drawn again
+  assert.throws(() => Ch.randomInt(0, 2 ** 53 + 1), /too large/);
+  for (let i = 0; i < 2000; i++) { const v = Ch.randomInt(-3, 3); assert.ok(v >= -3 && v <= 3 && Number.isInteger(v)); }
+  const seen = new Set(Array.from({ length: 600 }, () => Ch.randomInt(1, 6)));
+  assert.equal(seen.size, 6);
+
+  const r = (s) => { const o = Ch.readRandom(s); return o.error || [o.min, o.max, o.places, o.count, o.unique, o.digits]; };
+  assert.deepEqual(r(''), [1, 100, 0, 1, false, null]);
+  assert.deepEqual(r('50'), [1, 50, 0, 1, false, null]);
+  assert.deepEqual(r('10-20'), [10, 20, 0, 1, false, null]);
+  assert.deepEqual(r('20 to 10'), [10, 20, 0, 1, false, null]);
+  assert.deepEqual(r('-5..5'), [-5, 5, 0, 1, false, null]);
+  assert.deepEqual(r('0.5-2.25'), [0.5, 2.25, 2, 1, false, null]);
+  assert.deepEqual(r('6 digits'), [100000, 999999, 0, 1, false, 6]);
+  assert.deepEqual(r('length 4 x3'), [1000, 9999, 0, 3, false, 4]);
+  assert.deepEqual(r('1-49 x6 unique'), [1, 49, 0, 6, true, null]);
+  assert.deepEqual(r('5 times 1..10'), [1, 10, 0, 5, false, null]);
+  assert.equal(r('1-3 x5 unique'), 'only 3 different numbers fit between 1 and 3');
+  assert.equal(r('banana'), "didn't understand 'banana'");
+  assert.equal(r('20 digits'), 'between 1 and 15 digits');
+  const lotto = Ch.drawRandom(Ch.readRandom('1-49 x6 unique'));
+  assert.equal(new Set(lotto).size, 6);
+  assert.ok(lotto.every((v) => v >= 1 && v <= 49));
+  assert.ok(Ch.drawRandom(Ch.readRandom('0.5-2.5 x50')).every((v) => v >= 0.5 && v <= 2.5 && Math.round(v * 10) === v * 10));
+  assert.equal(Ch.fmtRandom(42, { digits: 4 }), '0042');
+
+  const d = (s) => { const x = Ch.readDice(s); return x.error || Ch.diceText(x); };
+  assert.deepEqual(['d20', '2d6+3', '2d6 - 1', 'd%', '1d8+1d6+2', '4d6kh3', '4d6dl1', '2d20kl1', 'd20+5 adv', 'd20 dis', 'd20 adv + d4'].map(d),
+    ['d20', '2d6+3', '2d6-1', 'd100', 'd8+d6+2', '4d6kh3', '4d6kh3', '2d20kl1', 'd20+5 with advantage', 'd20 with disadvantage', 'd20+d4 with advantage']);
+  assert.match(d('2d6 3'), /put \+ or -/);
+  assert.match(d('d1'), /2 to 1,000 sides/);
+  assert.match(d('101d6'), /1 and 100 dice/);
+  assert.match(d('2d6 adv'), /one d20/);
+  assert.match(d('5'), /no dice/);
+  assert.match(d('4d6kh5'), /keep between 1 and 4/);
+  // Rolls with known dice: keep the highest 3 of 4, advantage keeps the better d20.
+  const seq = (vals) => fake(vals.map((v) => [0, v - 1]));
+  const k = Ch.rollDice(Ch.readDice('4d6kh3'), seq([3, 1, 6, 1]));
+  assert.equal(k.total, 10);
+  assert.deepEqual(k.terms[0].rolls, [{ v: 3, kept: true }, { v: 1, kept: true }, { v: 6, kept: true }, { v: 1, kept: false }]);
+  assert.equal(Ch.rollDice(Ch.readDice('d20+5 adv'), seq([7, 15])).total, 20);
+  assert.equal(Ch.rollDice(Ch.readDice('d20 dis'), seq([7, 15])).total, 7);
+  assert.equal(Ch.rollDice(Ch.readDice('2d6-1'), seq([4, 3])).total, 6);
+  assert.equal(Ch.rollDice(Ch.readDice('d8-d4'), seq([5, 3])).total, 2);
+});
+
+test('random and roll commands', async () => {
+  const app = await makeApp();
+  const one = await app.run('random 10-20');
+  assert.equal(one[0], '# Random number · 10 to 20');
+  assert.ok(+one.copied >= 10 && +one.copied <= 20);
+  const lotto = await app.run('random 1-49 x6 unique');
+  assert.equal(lotto[0], '# 6 different numbers · 1 to 49');
+  const nums = lotto[1].slice(2).split(', ').map(Number);
+  assert.deepEqual(nums, nums.slice().sort((a, b) => a - b));
+  assert.match((await app.run('random 4 digits'))[1], /^= \d{4}$/);
+  assert.match((await app.run('random nonsense'))[0], /^err: didn't understand/);
+
+  const all = await app.run('roll');
+  assert.equal(all[0], '# One of each · d4 d6 d8 d10 d12 d20 d100 · tap one to roll it again');
+  assert.deepEqual(all.slice(1).map((l) => l.split(' | ')[0]), ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100']);
+  for (const l of all.slice(1)) { const [die, v] = l.split(' | '); assert.ok(+v >= 1 && +v <= +die.slice(1), l); }
+  const d6 = await app.run('roll d6');
+  assert.match(d6[0], /^# d6 = [1-6]$/);
+  assert.equal(d6.length, 1);
+  const two = await app.run('roll 2d6+3');
+  assert.match(two[0], /^# 2d6\+3 = (\d+)$/);
+  assert.match(two[1], /^\[[1-6] [1-6]\] \+ 3$/);
+  const stats = await app.run('roll stats');
+  assert.match(stats[0], /^# Ability scores · 4d6, lowest dropped · (\d+, ){5}\d+ · total \d+$/);
+  assert.equal(stats.length, 7);
+  assert.match((await app.run('roll d20 adv'))[0], /^# d20 with advantage = \d+/);
+  assert.match((await app.run('roll 2d6 adv'))[0], /^err: advantage needs one d20/);
+  assert.equal(app.data.steps().undo.length, 0);
+});

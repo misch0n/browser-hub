@@ -422,6 +422,33 @@ sync file for ever:
   one, a clip stays on the device it was made on.
 - Never kept: not in the shared history, ↑ recall, undo, `find` or `export`.
 
+## Deferred
+
+Left out on purpose, with the reason; each could be added later.
+
+- **Certificate checking.** `cert` decodes but doesn't verify signatures, chains
+  or revocation: without the platform's trust store a page would be guessing,
+  and a wrong "trusted" is worse than none.
+- **Long RSA messages.** `crypt encrypt rsa` takes what one RSA-OAEP block holds
+  (190 bytes with a 2048-bit key). Encrypting more would need a hybrid
+  format (an AES key wrapped with RSA) that only this hub could read.
+- **Other key formats.** SEC1 `EC PRIVATE KEY` and passphrase-protected
+  `ENCRYPTED PRIVATE KEY` files aren't read; `crypt` names the `openssl`
+  command that converts them to PKCS#8.
+- **WebSocket, raw TCP/UDP and ICMP.** `request` and `ping` only speak HTTP(S).
+  Browsers allow nothing lower; a WebSocket check could come later.
+- **Telling failures apart.** A page can't tell DNS failure, a refused
+  connection, a bad TLS certificate and a CORS refusal apart beyond the
+  no-cors retry; `request` says so rather than guessing.
+- **A device database for `ua`.** Models are named only when the string says
+  so (Samsung, Pixel and a few others); today's reduced user agents hide the
+  rest, and a full list would go stale.
+- **Synced editor drafts.** The Mermaid editor's unsaved draft stays on the
+  device; only kept diagrams sync, so a half-typed change never overwrites
+  another device's.
+- **Geolocation without a third party.** `ip more` asks ipapi.co, whose
+  free tier limits requests per day; there's no offline alternative.
+
 ## Code layout
 
 No build step; the page loads native ES modules. The one dependency, Mermaid,

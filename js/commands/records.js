@@ -1,4 +1,4 @@
-import { KINDS, fieldName, parseFieldEdit, findRecord, applyField } from '../core/records.js';
+import { KINDS, fieldName, fieldsOfItem, parseFieldEdit, findRecord, applyField } from '../core/records.js';
 import { parseId, todayISO } from '../core/util.js';
 import { dueSeg, tagSegs, dayLabel, longDate } from '../core/format.js';
 import { repeatLabel } from '../core/repeat.js';
@@ -60,6 +60,7 @@ function display(kind, field, item, today) {
     case 'alias.template': return item.template ? [[item.template, 'url']] : none;
     case 'alias.escape': return [[item.escape, 'dim']];
     case 'alias.name': return [[item.name, 'accent']];
+    case 'alias.command': return [[item.command, 'strong']];
     default: return [[String(item[field]), 'pre']]; // line breaks kept
   }
 }
@@ -90,7 +91,7 @@ export function createRecords({ st, isBuiltin }) {
     const today = todayISO(ctx.now());
     out.head(opts.head || [[label(kind) + ' ', 'dim'], [keyOf(kind, item), kind === 'alias' ? 'accent' : 'id']]);
     out.fields([
-      ...fieldsOf(kind).map((f) => [f, display(kind, f, item, today),
+      ...fieldsOfItem(kind, item).map((f) => [f, display(kind, f, item, today),
         { command: ref + ' edit ' + f, current: k.fields[f].raw(item), open: opts.open === f }]),
       ...extras(kind, item, today),
     ]);
@@ -102,9 +103,9 @@ export function createRecords({ st, isBuiltin }) {
     const { out } = ctx;
     const k = KINDS[kind];
     const field = fieldName(kind, fieldArg);
-    if (!field) {
-      out.err(label(kind)[0].toUpperCase() + label(kind).slice(1) + 's have no field ' + fieldArg);
-      out.dim('Fields: ' + fieldsOf(kind).join(', '));
+    if (!field || !fieldsOfItem(kind, item).includes(field)) {
+      out.err((item.command ? 'Aliases that run a command' : label(kind)[0].toUpperCase() + label(kind).slice(1) + 's') + ' have no field ' + fieldArg);
+      out.dim('Fields: ' + fieldsOfItem(kind, item).join(', '));
       return;
     }
     const ref = refOf(kind, item);
@@ -183,14 +184,14 @@ export function createRecords({ st, isBuiltin }) {
   // and widgets bring their own.
   function adapterFor(kind) {
     return {
-      noun: NOUNS[kind].noun, label: label(kind), fields: fieldsOf(kind),
+      noun: NOUNS[kind].noun, label: label(kind), fields: fieldsOf(kind), fieldsFor: (item) => fieldsOfItem(kind, item),
       target: (word, bare) => target(kind, word, bare),
       key: (item) => keyOf(kind, item),
       show: (ctx, item, opts) => show(ctx, kind, item, opts),
       setField: (ctx, item, field, value) => setField(ctx, kind, item, field, value),
       remove: (ctx, item) => remove(ctx, kind, item),
       ids: () => (kind === 'alias'
-        ? st().aliases.entries.map((e) => ({ value: e.name, label: e.template ? 'engine' : 'alias' }))
+        ? st().aliases.entries.map((e) => ({ value: e.name, label: e.command ? 'runs ' + e.command : e.template ? 'engine' : 'alias' }))
         : kind === 'snippet' ? st().snippets.items.map((x) => ({ value: x.name, label: x.text.split('\n')[0].slice(0, 50) }))
           : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || x.url || x.name || '').slice(0, 50) }))),
     };
@@ -249,7 +250,7 @@ export function createRecords({ st, isBuiltin }) {
     if (prev.length === 0) return [{ value: 'add' }, ...(spec.first || []), ...A.ids()];
     const t = A.target(prev[0], true);
     if (prev.length === 1 && t && t.item) return ['edit', ...Object.keys(spec.verbs || {}), 'rm'].map((v) => ({ value: v }));
-    if (prev.length === 2 && prev[1] === 'edit' && t && t.item) return A.fields.map((f) => ({ value: f }));
+    if (prev.length === 2 && prev[1] === 'edit' && t && t.item) return (A.fieldsFor ? A.fieldsFor(t.item) : A.fields).map((f) => ({ value: f }));
     return [];
   }
 

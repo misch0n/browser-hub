@@ -20,7 +20,7 @@ function firstTokenCandidates(env) {
   const all = env.defs.map((d) => ({ value: d.name, label: d.desc, kind: d.group, group: 0 }));
   for (const e of env.entries) {
     if (builtinNames.has(e.name)) continue; // shadowed: inactive
-    all.push({ value: e.name, label: e.template || e.base, kind: e.template ? 'engine' : 'alias', group: 1 });
+    all.push({ value: e.name, label: e.command || e.template || e.base, kind: e.command ? 'command' : e.template ? 'engine' : 'alias', group: 1 });
   }
   return all.sort((a, b) =>
     a.group - b.group ||

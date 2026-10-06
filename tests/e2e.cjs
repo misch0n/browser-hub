@@ -394,6 +394,47 @@ async function check(name, fn) {
     await page.keyboard.press('Escape');
   });
 
+  await check('a page opened from the prompt waits a second; Esc cancels it; command aliases run and show in help', async () => {
+    // Waits: nothing has opened half a second in, the hint says how to stop it.
+    const before = external.length;
+    await type('gh wait/here');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(400);
+    assert.equal(external.length, before);
+    assert.match(await page.locator('#hint').innerText(), /opening github\.com in 1 s\s+esc cancels/);
+    await page.waitForURL(/github\.com\/wait\/here/, { timeout: 3000 });
+    await page.goBack();
+    await page.waitForSelector('#prompt');
+    // Esc in time: it stays here, and the turn says so (kept in the history).
+    const n = external.length;
+    await type('vitosha weather');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(200);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(1300);
+    assert.equal(external.length, n);
+    assert.match(await lastText(), /Cancelled: google\.com not opened/);
+    // A command alias runs its command; the turn shows what ran.
+    await send('alias groc tasks add {} #groceries');
+    assert.match(await page.locator('#hint').innerText(), /^(?![\s\S]*opening)/);
+    await type('groc oat milk');
+    assert.match(await page.locator('#hint').innerText(), /your command alias groc\s+↵ runs tasks add oat milk #groceries/);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /Added task/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await lastText(), /Added task[\s\S]*→ tasks add oat milk #groceries/);
+    // Help: short names and your aliases after the command, one row.
+    await send('help');
+    const row = await page.locator('#turns .turn').last().locator('tr', { hasText: 'groc' }).first().innerText();
+    assert.match(row, /^tasks, t, groc↗/);
+    // From the address bar it is only put in the prompt, like any built-in: a link can't add a task.
+    const tasksBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.length);
+    await page.goto(base + '?q=groc%20bread');
+    await page.waitForFunction(() => document.getElementById('prompt').value === 'groc bread');
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.length), tasksBefore);
+    await prompt.fill('');
+    await send('aliases groc rm');
+  });
+
   await check('snippets copy; later saves links and opens one once it is in the history', async () => {
     await send('snip sig Cheers, M');
     await send('snippets');

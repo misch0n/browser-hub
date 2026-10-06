@@ -108,3 +108,13 @@ build. → [todo.md](todo.md) splits tasks into Dev (the only source of "the
 next task"), Research (findings and questions, only on request) and
 Confirmation (verifying what's built, only on request). iOS notifications
 became a research task (amends D16); WebKit on CI became a confirmation task.
+
+**D18. Command aliases; pages opened from the prompt wait a second** (6 Oct 2026, active)
+Owner: aliases for commands with placeholders, listed next to their command;
+"a redirecting alias … should wait for 1 second … escape should cancel". →
+An alias whose first word is a built-in runs it (same table, same grammar, same
+placeholders, text inserted as typed, no aliases of aliases). Built-in short
+names carry `aliasOf`. Every page opened from the prompt (aliases, searches,
+`later <id> open`) waits one second; Esc or another command cancels. The
+address bar and bounce links don't wait (they were asked for by a click or a
+browser search).

@@ -25,9 +25,8 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 6 October 2026: unit tests in six time zones, decoder tests
-  and 57 e2e checks pass; CI green on `e87922e` (which also fixed the flaky
-  e2e sync check that failed `15ed8fd`).
+- Last verified 6 October 2026: unit tests (90) in six time zones, decoder
+  tests and 58 e2e checks pass.
 - Command reference: [commands.md](commands.md) (generated from the code).
 
 ## In progress

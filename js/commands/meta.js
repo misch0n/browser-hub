@@ -6,6 +6,7 @@ import { SHORTCUT_GROUPS, keyLabel, isApple } from '../core/keys.js';
 import { describe } from '../core/undo.js';
 import { sessions } from '../core/log.js';
 import { relative } from '../lib/misc.js';
+import { commandOf } from '../core/aliases.js';
 
 // help, keys, undo, redo, clear, session, history, export, import: commands
 // about the hub itself rather than your data.
@@ -23,23 +24,46 @@ export default function register(add, helpers) {
     async run(ctx, rest) {
       const { out } = ctx;
       if (rest) {
-        const def = byName.get(rest.toLowerCase());
-        if (!def) return out.err("No built-in command '" + rest + "'");
-        return helpers.fullHelp(ctx, def);
+        const name = rest.trim().toLowerCase();
+        const def = byName.get(name);
+        if (def) return helpers.fullHelp(ctx, def);
+        // Your command alias: what it runs, then that command's help.
+        const e = st().aliases.entries.find((x) => x.name === name && x.command);
+        const target = e && byName.get(commandOf(e));
+        if (!target) return out.err("No built-in command '" + rest.trim() + "'");
+        out.line([[e.name, 'accent', { run: 'aliases ' + e.name }], ['↗', 'k-alias'], [' your alias: runs ', 'dim'], [e.command, 'strong']]);
+        return helpers.fullHelp(ctx, target);
       }
       const doc = st().aliases;
+      const byNameSort = (a, b) => (a.name < b.name ? -1 : 1);
       const mine = doc.entries.filter((e) => !isBuiltin(e.name));
-      const engines = mine.filter((e) => e.template).sort((a, b) => (a.name < b.name ? -1 : 1));
-      const aliases = mine.filter((e) => !e.template).sort((a, b) => (a.name < b.name ? -1 : 1));
-      const shown = defs.filter((x) => !x.hidden);
+      const engines = mine.filter((e) => e.template).sort(byNameSort);
+      // A command alias is listed next to the one command it runs; one whose
+      // command is no longer built in is listed with the other aliases, as broken.
+      const rootOf = (name) => { const d = byName.get(name); return d && d.aliasOf ? d.aliasOf : name; };
+      const commandAliases = new Map(); // root command -> [entries]
+      const broken = [];
+      for (const e of mine.filter((x) => x.command).sort(byNameSort)) {
+        const d = byName.get(commandOf(e));
+        if (d && !d.hidden) commandAliases.set(rootOf(d.name), [...(commandAliases.get(rootOf(d.name)) || []), e]);
+        else broken.push(e);
+      }
+      const aliases = mine.filter((e) => !e.template && !e.command).sort(byNameSort);
+      // One row per command: its short names (aliasOf) and your command aliases follow it.
+      const shown = defs.filter((x) => !x.hidden && !x.aliasOf);
+      const shortNames = (d) => defs.filter((x) => x.aliasOf === d.name && !x.hidden);
       out.head([['Help', 'strong'], [' · ' + shown.length + ' commands · tap one for everything about it', 'dim']]);
-      // One row per command, by category; the tag says what kind of name it is.
       const rows = [];
       const groups = new Map(); // categories in the order they first appear
       for (const d of shown) groups.set(d.group, [...(groups.get(d.group) || []), d]);
       for (const [group, list] of groups) {
         rows.push({ section: [[group, ''], ['  ', ''], ['⚙ built-in', 'k-cmd']] });
-        for (const d of list) rows.push([[[d.name, 'accent', { run: 'help ' + d.name }]], [[d.desc, 'dim']]]);
+        for (const d of list) {
+          const names = [[d.name, 'accent', { run: 'help ' + d.name }]];
+          for (const x of shortNames(d)) names.push([', ', 'faint'], [x.name, 'accent', { run: 'help ' + x.name }]);
+          for (const e of commandAliases.get(d.name) || []) names.push([', ', 'faint'], [e.name, 'accent', { run: 'aliases ' + e.name }], ['↗', 'k-alias']);
+          rows.push([names, [[d.desc, 'dim']]]);
+        }
       }
       rows.push({ section: [['Your search engines', ''], ['  ', ''], ['⌕ engine', 'k-engine']] });
       if (!engines.length) rows.push([[['none yet', 'faint']], [['alias <name> <url with {}>', 'dim']]]);
@@ -47,11 +71,13 @@ export default function register(add, helpers) {
         rows.push([[[e.name, 'accent', { run: 'aliases ' + e.name }]], [[e.template, 'url'], [e.name === doc.defaultEngine ? '  ★ default' : '', 'accent']]]);
       }
       rows.push({ section: [['Your aliases', ''], ['  ', ''], ['↗ alias', 'k-alias']] });
-      if (!aliases.length) rows.push([[['none yet', 'faint']], [['alias <name> <url>', 'dim']]]);
+      if (!aliases.length && !broken.length) rows.push([[['none yet', 'faint']], [['alias <name> <url> · alias <name> <command>', 'dim']]]);
       for (const e of aliases) rows.push([[[e.name, 'accent', { run: 'aliases ' + e.name }]], [[e.base, 'url']]]);
+      for (const e of broken) rows.push([[[e.name, 'accent', { run: 'aliases ' + e.name }]], [[e.command, 'dim'], ["  broken: '" + commandOf(e) + "' is not a command", 'warn']]]);
       out.table(null, rows, { stack: true });
       out.dim('Notes, tasks, events, snippets, links and aliases share one grammar: tasks · tasks add <text> · tasks <id> · tasks <id> edit · tasks <id> rm');
-      out.dim('Anything else is searched with ' + doc.defaultEngine + ' · Tab completes, Tab again lists the choices · keys (or ?) for shortcuts');
+      out.dim('Names after a comma run the same command; ↗ marks your own (alias <name> <command>) · anything else is searched with ' + doc.defaultEngine);
+      out.dim('Tab completes, Tab again lists the choices · keys (or ?) for shortcuts');
     },
   });
 

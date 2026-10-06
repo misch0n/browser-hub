@@ -1,7 +1,8 @@
-import { buildUrl } from './aliases.js';
+import { buildUrl, expandCommand, commandOf } from './aliases.js';
 
 // Every input resolves to exactly one outcome:
-//   builtin  - run a built-in command in the page
+//   builtin  - run a built-in command in the page (also what a command alias
+//              expands to: then `alias` is its name and `expanded` the command line)
 //   redirect - open an alias / engine target
 //   search   - fill an engine's template: `<engine> <phrase>`, or the whole
 //              input on the default engine when nothing else matched (fallback)
@@ -16,6 +17,14 @@ function dispatch(input, env) {
   if (env.isBuiltin(head)) return { kind: 'builtin', name: head, rest };
 
   const entry = env.entries.find((e) => e.name === head);
+  if (entry && entry.command) {
+    const target = commandOf(entry);
+    if (!env.isBuiltin(target)) return { kind: 'error', message: "'" + entry.name + "' runs '" + target + "', which is not a built-in command" };
+    const x = expandCommand(entry, rest);
+    if (x.error) return { kind: 'error', message: x.error };
+    const em = /^(\S+)(?:\s+([\s\S]*))?$/.exec(x.input);
+    return { kind: 'builtin', name: em[1].toLowerCase(), rest: em[2] || '', alias: entry.name, expanded: x.input };
+  }
   if (entry) {
     const r = buildUrl(entry, rest);
     if (r.error) return { kind: 'error', message: r.error };

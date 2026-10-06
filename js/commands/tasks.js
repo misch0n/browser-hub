@@ -141,7 +141,7 @@ export default function register(add, { st, records }) {
   });
 
   add({
-    name: 't', group: 'Tasks', desc: 'short for tasks; t <text> adds a task',
+    name: 't', group: 'Tasks', aliasOf: 'tasks', desc: 'short for tasks; t <text> adds a task',
     usage: ['t <text> [due:<date>] [every:<rule>] [#tag]', 't "<text that starts like a command>"', 't <id> [edit [<field> [<value>]] | done | rm]'],
     examples: ['t buy flour due:tomorrow #home', 't pay rent every:month due:2026-11-01', 't "done: write the report"', 't t3 done', 't t3 edit due fri'],
     complete: (prev) => records.complete('task', prev, { verbs: spec.verbs, first }),

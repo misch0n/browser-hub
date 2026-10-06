@@ -67,7 +67,7 @@ export default function register(add, { st, records }) {
   });
 
   add({
-    name: 'snip', group: 'Snippets', desc: 'short for snippets: snip <name> shows one to copy, snip <name> <text> adds one',
+    name: 'snip', group: 'Snippets', aliasOf: 'snippets', desc: 'short for snippets: snip <name> shows one to copy, snip <name> <text> adds one',
     usage: ['snip <name>', 'snip <name> <text>', 'snip <name> [edit [<field> [<value>]] | rm]'],
     examples: ['snip addr 1 Long Street, Sofia', 'snip addr', 'snip addr edit text 2 Long Street, Sofia'],
     complete: (prev) => records.complete('snippet', prev),

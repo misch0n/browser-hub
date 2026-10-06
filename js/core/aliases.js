@@ -1,7 +1,12 @@
-import { tokenize } from './args.js';
+import { tokenize, quote } from './args.js';
 
 // Aliases and search engines share one table: an engine is an alias with a template.
-// Entry: { name, base, template?, escape: 'query' | 'path' }
+// Entry: { name, base, template?, escape: 'query' | 'path' }   opens a page
+//     or { name, command }                                     runs a built-in command
+//
+// A command alias names a built-in and what to pass it: `groc` = `tasks add {} #groceries`
+// runs `tasks add milk #groceries` for `groc milk`. Its target must be a built-in,
+// never another alias, so aliases can't loop.
 //
 // Template placeholders: {} is everything typed after the name; {1}, {2} … are
 // single arguments (quotes group words), and the last one used also takes any
@@ -73,6 +78,19 @@ function nameError(name, isBuiltin) {
   return null;
 }
 
+// The built-in command a command alias runs (its first word), lower case.
+const commandOf = (entry) => (entry && typeof entry.command === 'string' ? (entry.command.trim().split(/\s+/)[0] || '').toLowerCase() : null);
+
+// Returns an error string, or null when `command` is a usable command alias body.
+function commandError(command, isBuiltin) {
+  if (typeof command !== 'string' || !command.trim()) return 'the command is missing';
+  if (command.length > 500) return 'the command is too long (500 characters at most)';
+  if (/[\t\n\r\f\v]/.test(command)) return 'the command must be one line';
+  const head = commandOf({ command });
+  if (!isBuiltin(head)) return "'" + head + "' is not a built-in command (an alias can run a command, not another alias)";
+  return null;
+}
+
 // Checks an untrusted entry (from the prompt or an imported file). Returns
 // { entry } with a clean copy, or { error }.
 function validateEntry(raw, isBuiltin) {
@@ -80,6 +98,12 @@ function validateEntry(raw, isBuiltin) {
   const name = typeof raw.name === 'string' ? raw.name.toLowerCase() : '';
   const err = nameError(name, isBuiltin) || (RESERVED.includes(name) ? "'" + name + "' is reserved" : null);
   if (err) return { error: err };
+  if (raw.command !== undefined && raw.command !== null) {
+    const command = typeof raw.command === 'string' ? normalizeTemplate(raw.command.trim()) : raw.command;
+    const cErr = commandError(command, isBuiltin);
+    if (cErr) return { error: 'command: ' + cErr };
+    return { entry: { name, command } };
+  }
   const baseErr = urlError(raw.base, false);
   if (baseErr) return { error: 'base: ' + baseErr };
   const entry = { name, base: raw.base, escape: raw.escape === 'path' ? 'path' : 'query' };
@@ -119,4 +143,22 @@ function buildUrl(entry, rest) {
   return { url };
 }
 
-export { SHIPPED_DEFAULT, RESERVED, starters, urlError, nameError, validateEntry, buildUrl, siteRoot, arity, normalizeTemplate };
+// A command alias with what was typed after its name -> { input } (the command
+// line to run) or { error }. Text goes in as typed; with no placeholder it is appended.
+function expandCommand(entry, rest) {
+  const template = entry.command;
+  const n = arity(template);
+  if (!/\{[1-9]?\}/.test(template)) return { input: rest ? template + ' ' + rest : template };
+  if (!rest) return { error: "'" + entry.name + "' needs something for its placeholder: " + template };
+  let args = [];
+  if (n) {
+    const toks = tokenize(rest);
+    if (toks.length < n) return { error: "'" + entry.name + "' needs " + n + ' arguments, got ' + toks.length + ': ' + template };
+    // Single words keep their quotes when they need them, so the command reads them as one.
+    args = toks.slice(0, n).map((t) => (/\s/.test(t.text) || t.quoted ? quote(t.text) : t.text));
+    if (toks.length > n) args[n - 1] = rest.slice(toks[n - 1].start).trim();
+  }
+  return { input: template.replace(PLACEHOLDER, (m, i) => (i ? args[+i - 1] : rest)).replace(/[ ]{2,}/g, ' ').trim() };
+}
+
+export { SHIPPED_DEFAULT, RESERVED, starters, urlError, nameError, validateEntry, buildUrl, siteRoot, arity, normalizeTemplate, commandOf, commandError, expandCommand };

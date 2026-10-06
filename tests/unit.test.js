@@ -455,6 +455,11 @@ async function makeApp(storage) {
   const run = async (input) => {
     const rec = recorder();
     const res = dispatch(input, { isBuiltin: commands.isBuiltin, entries: data.state.aliases.entries, defaultEngine: data.state.aliases.defaultEngine });
+    if (res.kind === 'error') { // as main.js reports it
+      const r = ['err: ' + res.message];
+      Object.defineProperty(r, 'tone', { value: 'err', enumerable: false });
+      return r;
+    }
     assert.equal(res.kind, 'builtin', input);
     ctx = Object.assign(base, { out: rec.out });
     await commands.run(res.name, res.rest, ctx);
@@ -1483,12 +1488,18 @@ test('help, history', async () => {
   assert.ok(help.includes('## View  ⚙ built-in'));
   assert.ok(help.includes('## Aliases & engines  ⚙ built-in'));
   assert.ok(help.includes('theme | switch colour theme') || help.some((l) => /^theme \| /.test(l)));
-  assert.ok(help.some((l) => /^tasks \| /.test(l)));
+  // A command's short names follow it after a comma; they get no row of their own.
+  assert.ok(help.some((l) => /^tasks, t \| /.test(l)));
+  assert.ok(help.some((l) => /^notes, n \| /.test(l)));
+  assert.ok(help.some((l) => /^events, ev \| /.test(l)));
+  assert.ok(help.some((l) => /^snippets, snip \| /.test(l)));
+  assert.ok(help.some((l) => /^aliases, alias \| /.test(l)));
+  assert.ok(!help.some((l) => /^t \| /.test(l)));
   assert.ok(!help.some((l) => /^tasks add /.test(l))); // names, not every form
   assert.ok(help.includes('## Your search engines  ⌕ engine'));
   assert.ok(help.some((l) => /^g \| https:\/\/www\.google\.com\/search\?q=\{\}  ★ default$/.test(l)));
   assert.ok(help.includes('## Your aliases  ↗ alias'));
-  assert.ok(help.includes('none yet | alias <name> <url>'));
+  assert.ok(help.includes('none yet | alias <name> <url> · alias <name> <command>'));
   await app.run('alias mail https://mail.example.com/');
   assert.ok((await app.run('help')).includes('mail | https://mail.example.com/'));
   // keys: labelled for the platform.
@@ -3343,4 +3354,62 @@ test('diagrams sync between devices, renumbered on a clash', async () => {
 test('docs: the command reference (docs/commands.md, the README table) matches the code', async () => {
   const { staleDocs } = await import('../tools/docs-commands.mjs');
   assert.deepEqual(staleDocs(), [], 'run: node tools/docs-commands.mjs --write');
+});
+
+// ---- command aliases --------------------------------------------------------------------
+
+test('command aliases: defined like URL aliases, run a built-in with placeholders, listed next to it', async () => {
+  const A = await import('../js/core/aliases.js');
+  const isB = (n) => ['tasks', 'zones', 'notes'].includes(n);
+  assert.deepEqual(A.validateEntry({ name: 'groc', command: 'tasks add %s #groceries' }, isB), { entry: { name: 'groc', command: 'tasks add {} #groceries' } });
+  assert.match(A.validateEntry({ name: 'x', command: 'gh org' }, isB).error, /'gh' is not a built-in command \(an alias can run a command, not another alias\)/);
+  assert.match(A.validateEntry({ name: 'x', command: 'tasks\nrm' }, isB).error, /one line/);
+  assert.match(A.validateEntry({ name: 'tasks', command: 'notes' }, isB).error, /built-in command/);
+  assert.deepEqual(A.expandCommand({ name: 'mv', command: 'zones {1} edit name {2}' }, 'tokyo "Kenji team"'), { input: 'zones tokyo edit name "Kenji team"' });
+  assert.deepEqual(A.expandCommand({ name: 'mv', command: 'zones {1} edit name {2}' }, '"new york" Bob'), { input: 'zones "new york" edit name Bob' });
+  assert.match(A.expandCommand({ name: 'mv', command: 'zones {1} edit name {2}' }, 'tokyo').error, /needs 2 arguments, got 1/);
+  assert.deepEqual(A.expandCommand({ name: 'tt', command: 'tasks' }, 't3 done'), { input: 'tasks t3 done' });
+
+  const app = await makeApp();
+  const add = await app.run('alias groc tasks add {} #groceries');
+  assert.deepEqual(add.slice(0, 2), ['# Added groc  runs tasks', 'runs: tasks add {} #groceries']);
+  assert.equal(add.tone, 'ok');
+  await app.run('aliases add tt tasks');
+  // Running one runs the target with the placeholders filled (main.js also prints → <command>; see e2e).
+  assert.equal((await app.run('groc oat milk'))[0], '# Added task t1');
+  assert.deepEqual([app.data.state.tasks.items[0].text, app.data.state.tasks.items[0].tags], ['oat milk', ['groceries']]);
+  await app.run('tt t1 done');
+  assert.equal(app.data.state.tasks.items[0].done, true);
+  assert.equal((await app.run('groc'))[0], "err: 'groc' needs something for its placeholder: tasks add {} #groceries");
+  // Shown with its own fields; edited like everything else; can't be the default engine.
+  const show = await app.run('aliases groc');
+  assert.equal(show[0], '# groc  command alias  ');
+  assert.deepEqual(show.slice(1, 3), ['name: groc  [aliases groc edit name = groc]', 'command: tasks add {} #groceries  [aliases groc edit command = tasks add {} #groceries]']);
+  assert.equal((await app.run('aliases groc edit command tasks add {} #shop'))[0], '# Updated aliases groc command');
+  assert.equal(app.data.state.aliases.entries.find((e) => e.name === 'groc').command, 'tasks add {} #shop');
+  assert.match((await app.run('aliases groc edit base https://x.org/'))[0], /^err: Aliases that run a command have no field base/);
+  assert.match((await app.run('aliases groc edit command gh x'))[0], /^err: command: 'gh' is not a built-in command/);
+  assert.equal((await app.run('aliases groc default'))[0], "err: 'groc' runs a command, so it can't be a search engine");
+  assert.match((await app.run('alias groc notes --force'))[0], /^# Updated groc  runs notes/);
+  // Help lists it next to the command it runs, marked as yours; help <alias> explains it.
+  const help = await app.run('help');
+  assert.ok(help.some((l) => /^notes, n, groc↗ \| /.test(l)), help.find((l) => l.startsWith('notes')));
+  assert.ok(help.some((l) => /^tasks, t, tt↗ \| /.test(l)));
+  assert.deepEqual((await app.run('help tt')).slice(0, 2), ['tt↗ your alias: runs tasks', '# tasks · list, add, show, edit, complete and remove tasks']);
+  // An alias whose command is no longer built in is listed as broken (an imported one, say).
+  await app.data.mutate('aliases', (d) => { d.entries.push({ name: 'old', command: 'gone x' }); });
+  assert.ok((await app.run('help')).includes("old | gone x  broken: 'gone' is not a command"));
+  assert.equal((await app.run('old 1'))[0], "err: 'old' runs 'gone', which is not a built-in command");
+  // Listed among aliases, and found.
+  const list = await app.run('aliases');
+  assert.match(list[0], /1 command alias|3 command aliases/);
+  assert.ok(list.includes('groc | your command alias | notes | '));
+  assert.ok((await app.run('find groc')).some((l) => /groc/.test(l)));
+  // Import validates the same way.
+  const { merge: mergeImport } = await import('../js/core/importer.js');
+  const other = await makeApp();
+  const cur = {};
+  for (const k of Object.keys(DEFAULTS)) cur[k] = other.data.state[k];
+  const imp = mergeImport(cur, { schema: 1, collections: { aliases: { entries: [{ name: 'groc', command: 'tasks add {}' }, { name: 'bad', command: 'nope' }] } } }, other.commands.isBuiltin, () => MON);
+  assert.deepEqual(imp.collections.aliases.entries.filter((e) => e.command), [{ name: 'groc', command: 'tasks add {}' }]);
 });

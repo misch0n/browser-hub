@@ -18,7 +18,8 @@ follow them without asking. Where a rule came from the owner, it's marked ★.
   open their item, values can be tapped and edited in place. Every tap runs a
   real command, so the transcript and history show exactly what happened.
 - ★ **Help:** `help` lists commands by category, one line each, with a ⚙
-  built-in tag (⌕ engines, ↗ aliases). `help <command>` and a command run
+  built-in tag (⌕ engines, ↗ aliases). Names for the same command share its
+  line after a comma (`tasks, t, groc↗`). `help <command>` and a command run
   without enough input show the full usage. Tapping a command in help opens
   its full help. Help is ephemeral: not in the shared history, gone after
   the next command.

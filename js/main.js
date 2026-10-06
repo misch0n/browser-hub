@@ -181,6 +181,28 @@ const dispatchEnv = () => ({
   defaultEngine: state.aliases.defaultEngine,
 });
 
+// Pages opened from the prompt (aliases, searches, later <id> open) wait a
+// moment, so a mistyped alias can be stopped: Esc, or running another command,
+// cancels. The address bar (?q=) and bounce links still go straight away.
+const OPEN_DELAY = 1000;
+let pendingOpen = null; // { url, cancel() }
+
+function waitToOpen(url) {
+  if (pendingOpen) pendingOpen.cancel();
+  return new Promise((resolve) => {
+    const done = (go) => { clearTimeout(timer); pendingOpen = null; paintHint(); resolve(go); };
+    const timer = setTimeout(() => done(true), OPEN_DELAY);
+    pendingOpen = { url, cancel: () => done(false) };
+    paintHint();
+  });
+}
+// true when there was something to cancel.
+function cancelOpen() {
+  if (!pendingOpen) return false;
+  pendingOpen.cancel();
+  return true;
+}
+
 // Called straight from the Enter key handler: nothing before a built-in's
 // run() may await, so file pickers still count as user-initiated.
 // `shown`: what the transcript echoes when it differs from what runs (a paste
@@ -189,6 +211,7 @@ function run(raw, shown, pasted) {
   const input = raw.trim();
   const echoed = (shown || raw).trim();
   if (!input) return Promise.resolve();
+  cancelOpen(); // another command: whatever was about to open doesn't
   // On a phone the drawer covers the output; get it out of the way of the result.
   if (root.classList.contains('drawer-open')) setDrawer(false);
   const res = dispatch(input, dispatchEnv());
@@ -207,9 +230,15 @@ function run(raw, shown, pasted) {
 
   if (res.kind === 'builtin') {
     const ctx = ctxFor(out, pasted);
+    // A command alias: the turn says what it ran, so the history shows it.
+    if (res.alias) out.line([['→ ', 'faint'], [res.expanded, 'dim']]);
     // A command that opens a page (later <id> open) does it once it is in the history.
-    return commands.run(res.name, res.rest, ctx).then(record).then(() => {
-      if (ctx.navigateAfter && /^https?:\/\//i.test(ctx.navigateAfter)) return saved.then(() => ctxBase.navigate(ctx.navigateAfter));
+    return commands.run(res.name, res.rest, ctx).then(async () => {
+      const url = ctx.navigateAfter && /^https?:\/\//i.test(ctx.navigateAfter) ? ctx.navigateAfter : null;
+      const go = url ? await waitToOpen(url) : false;
+      if (url && !go) out.warn('Cancelled: ' + siteOf(url) + ' not opened');
+      await record();
+      if (go) { await saved; ctxBase.navigate(url); }
     });
   }
   if (res.kind === 'error') { out.err(res.message); return record(); }
@@ -231,7 +260,10 @@ function run(raw, shown, pasted) {
   if (res.note) out.warn(res.note);
   out.dim(res.url);
   // History is written before leaving, so ↑ recalls the command after Back.
-  return Promise.all([saved, record()]).then(() => ctxBase.navigate(target.href));
+  return waitToOpen(target.href).then((go) => {
+    if (!go) out.warn('Cancelled: ' + siteOf(target.href) + ' not opened');
+    return Promise.all([saved, record()]).then(() => { if (go) ctxBase.navigate(target.href); });
+  });
 }
 
 // ---- prompt -------------------------------------------------------------------
@@ -239,8 +271,14 @@ function run(raw, shown, pasted) {
 const completionEnv = () => ({ defs: commands.defs.filter((d) => !d.hidden), entries: state.aliases.entries, history: state.history.items });
 
 const hintEl = $('hint');
+// The hint for what's in the prompt now (the prompt repaints it as you type).
+function paintHint() {
+  hintEl.textContent = '';
+  hintEl.appendChild(rich(describe($('prompt').value, '', null, null, null)));
+}
 
 function describe(v, ghost, hist, search, secret) {
+  if (pendingOpen && !v.trim() && !secret) return [['opening ', 'faint'], [siteOf(pendingOpen.url), 'accent'], [' in 1 s', 'faint'], ['   esc', 'accent'], [' cancels', 'faint']];
   if (secret) return [['hidden input', 'accent'], [' · not shown, not kept in history · ↵ saves · esc cancels', 'faint']];
   if (search) {
     return [['history search ', 'faint'], ['“' + search.query + '”', 'strong'], [': ', 'faint'],
@@ -255,6 +293,7 @@ function describe(v, ghost, hist, search, secret) {
   const tab = ghost ? [['   tab', 'accent'], [' → ' + v.trim().split(/\s+/).pop() + ghost, 'faint']] : [];
   if (res.kind === 'builtin') {
     const def = commands.byName.get(res.name);
+    if (res.alias) return [kindSeg('command'), [' ', ''], [res.alias, 'accent'], ['  ↵ runs ', 'faint'], [res.expanded, 'strong'], ...tab];
     return [kindSeg(def.group), [' ', ''], [res.name, 'accent'], [' · ' + def.desc, 'faint'], ...tab];
   }
   if (res.kind === 'redirect') return [kindSeg('alias'), [' ', ''], [res.name, 'accent'], ['  ↵ open ', 'faint'], [res.url, 'url'], ...tab];
@@ -287,6 +326,7 @@ const prompt = createPrompt({
   doubleTapTab: () => touchQuery.matches,
   onShortcuts: () => run('keys'),
   onEscape() {
+    if (cancelOpen()) return true;
     if (root.classList.contains('drawer-open')) { setDrawer(false); return true; }
     return false;
   },
@@ -374,7 +414,7 @@ const palette = createPalette({
     const items = commands.defs.filter((d) => !d.hidden).map((d) => ({ name: d.name, desc: d.desc, kind: d.group, section: 'Built-in · ' + d.group, insert: d.name + ' ' }));
     const mine = state.aliases.entries.filter((e) => !commands.isBuiltin(e.name)).sort((a, b) => (a.name < b.name ? -1 : 1));
     for (const e of mine.filter((x) => x.template)) items.push({ name: e.name, desc: e.template, kind: 'engine', section: 'Your search engines', insert: e.name + ' ' });
-    for (const e of mine.filter((x) => !x.template)) items.push({ name: e.name, desc: e.base, kind: 'alias', section: 'Your aliases', insert: e.name + ' ' });
+    for (const e of mine.filter((x) => !x.template)) items.push({ name: e.name, desc: e.command || e.base, kind: e.command ? 'command' : 'alias', section: 'Your aliases', insert: e.name + ' ' });
     for (const t of THEMES) items.push({ name: 'theme ' + t.id, desc: t.desc, kind: 'theme', section: 'Themes', run: true });
     for (const w of WIDGETS) {
       const isOn = state.settings.widgets.includes(w.id);
@@ -488,6 +528,11 @@ document.addEventListener('click', (e) => {
 });
 
 window.addEventListener('focus', autoFocus);
+
+// Esc cancels a page about to open, wherever the focus is (the prompt handles its own).
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && e.target !== $('prompt') && cancelOpen()) e.preventDefault();
+});
 
 window.addEventListener('pageshow', (e) => {
   // Also fires when Safari restores the page from the back-forward cache:

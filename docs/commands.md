@@ -782,31 +782,32 @@ Examples: `ip` · `ip more` · `ip 1.1.1.1` · `ip 2606:4700:4700::1111`
 
 ### `aliases`
 
-list, add, show, edit and remove your aliases and search engines
+list, add, show, edit and remove your aliases, search engines and command aliases
 
 ```
 aliases [filter]
-aliases add <name> <url> [template] [--path] [--force]
+aliases add <name> <url> [template] [--path] [--force] | <name> <command>
 aliases <name>
 aliases <name> edit [<field> [<value>]]
 aliases <name> default
 aliases <name> rm
 ```
 
-Examples: `aliases` · `aliases add gh https://github.com/ https://github.com/{} --path` · `aliases add yt https://www.youtube.com/results?search_query={}` · `aliases add jira https://jira.example.com/browse/{1}-{2}` · `aliases add bug https://jira.example.com/issues/?jql=project="APP" AND text ~ "%s"` · `aliases gh` · `aliases gh edit` · `aliases gh edit template https://github.com/search?q={}` · `aliases ddg default` · `aliases gh rm`
+Examples: `aliases` · `aliases add gh https://github.com/ https://github.com/{} --path` · `aliases add yt https://www.youtube.com/results?search_query={}` · `aliases add jira https://jira.example.com/browse/{1}-{2}` · `aliases add bug https://jira.example.com/issues/?jql=project="APP" AND text ~ "%s"` · `aliases add groc tasks add {} #groceries` · `aliases add tt tasks` · `aliases add rename zones {1} edit name {2}` · `aliases gh` · `aliases gh edit` · `aliases gh edit template https://github.com/search?q={}` · `aliases groc edit command tasks add {} #shop` · `aliases ddg default` · `aliases gh rm`
 
 ### `alias`
 
-short for aliases; alias <name> <url> adds one
+short for aliases; alias <name> <url or command> adds one
 
 ```
 alias <name> <url>
 alias <name> <url with {} or %s> [--path]
 alias <name> <base> <template> [--path] [--force]
+alias <name> <command> [{} | {1} {2} …] [--force]
 alias <name> [edit [<field> [<value>]] | default | rm]
 ```
 
-Examples: `alias gh https://github.com/ https://github.com/{} --path` · `alias w https://en.wikipedia.org/w/index.php?search=%s` · `alias gh edit template https://github.com/{}`
+Examples: `alias gh https://github.com/ https://github.com/{} --path` · `alias w https://en.wikipedia.org/w/index.php?search=%s` · `alias gh edit template https://github.com/{}` · `alias groc tasks add {} #groceries` · `alias tt tasks`
 
 ### `engine`
 

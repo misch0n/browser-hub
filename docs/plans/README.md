@@ -18,6 +18,7 @@ New plans: `NNN-short-name.md`, listed here and linked from todo.md.
 | Plan | Outcome |
 | --- | --- |
 | [v1 spec](archive/v1-spec.md) | Built on 5 October 2026, then superseded by later work. |
+| [002 · Command aliases, help listing, redirect delay](archive/002-command-aliases-and-redirect-delay.md) | Done 6 October 2026. |
 
 When a plan is done, move it to `archive/`, set its status to done, and note
 the commits in [changelog.md](../changelog.md).

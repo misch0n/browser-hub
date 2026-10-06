@@ -53,8 +53,11 @@ asserts the policy; update it deliberately, never to make a test pass.
   it can run.
 - Navigation only to `http:`/`https:` URLs (aliases are checked on define,
   edit, import and load; `main.js` checks again before `location.assign`).
-- Links from outside can't change data: `?q=` runs aliases and searches, but
-  built-in commands are only placed in the prompt to wait for Enter.
+- Links from outside can't change data: `?q=` runs URL aliases and searches,
+  but built-in commands and command aliases are only placed in the prompt to
+  wait for Enter (an e2e check covers both).
+- A command alias runs only a built-in (never another alias) and gets that
+  command's flags (private, no history).
 - Bounce links are signed with a key in synced settings; unsigned or foreign
   links show the destination and wait for a tap (no open redirect).
 - Everything imported, synced or fetched is untrusted: shapes checked, sizes

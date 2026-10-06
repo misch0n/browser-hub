@@ -146,7 +146,7 @@ export function merge(current, file, isBuiltin, now) {
     const r = validateEntry(raw, isBuiltin);
     if (r.error) { lines.push("skipped alias '" + label + "': " + r.error); continue; }
     const existing = out.aliases.entries.find((x) => x.name === r.entry.name);
-    if (existing) { lines.push("skipped alias '" + r.entry.name + "': already exists (" + existing.base + ')'); continue; }
+    if (existing) { lines.push("skipped alias '" + r.entry.name + "': already exists (" + (existing.command || existing.base) + ')'); continue; }
     out.aliases.entries.push(r.entry);
     aliasesAdded++;
   }

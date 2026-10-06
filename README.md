@@ -66,8 +66,10 @@ Every command, its forms and examples: [docs/commands.md](docs/commands.md)
 (or `help <command>` in the page).
 
 `help` lists every command by category, one line each (its name and what it
-does), tagged ⚙ built-in, with your engines (⌕) and aliases (↗) after them; tap
-a command for `help <command>`, everything about it: every form and examples.
+does), tagged ⚙ built-in, with your engines (⌕) and aliases (↗) after them.
+Names that run the same command share its line after a comma: `tasks, t, groc↗`
+(the short names, then your command aliases, marked ↗). Tap a name for
+`help <name>`, everything about it: every form and examples.
 A command run without what it needs shows the same. Tab completes the next
 word wherever the choices are known (subcommands, months, units, dice, foods
 to look up, ids and fields), and Tab again lists them; the list goes as soon
@@ -173,6 +175,24 @@ then `jira APP 42`. Templates may contain spaces and quotes, pasted as they
 are: `alias bug https://jira.example.com/issues/?jql=project="APP" AND text ~ "%s"`.
 `alias edit <name>` puts the whole definition in the prompt. `import` also
 reads an xsearch export (a JSON object of name to URL).
+
+**Command aliases** run a command in the page instead of opening one: when
+the word after the name is a built-in command, the alias runs it.
+`alias groc tasks add {} #groceries`, then `groc oat milk` runs
+`tasks add oat milk #groceries`; `alias tt tasks` makes `tt t3 done` run
+`tasks t3 done` (with no placeholder, what you type is added at the end);
+`alias rename zones {1} edit name {2}` takes two words (quote one with spaces).
+The turn shows what ran (`→ tasks add oat milk #groceries`), and `help` lists
+the alias next to its command. A command alias can only run a built-in, never
+another alias; one whose command no longer exists is listed as broken. Change
+it with `aliases groc edit command …`. From the address bar it is only put in
+the prompt, like any built-in.
+
+**Opening pages waits a second.** An alias, a search or `later <id> open`
+typed at the prompt says "opening github.com in 1 s · esc cancels" under the
+prompt, then goes: Esc (or the key bar's Esc, or running another command)
+stops it, and the turn says it was cancelled. Links from the address bar and
+bounce links open straight away.
 
 **Pasting**: a paste of several lines (or a very long one) shows as a
 placeholder, `[Pasted text #1 +12 lines]`, as in Claude's CLI. Move the cursor

@@ -191,7 +191,7 @@ export default function register(add, helpers) {
   });
 
   add({
-    name: 'ev', group: 'Calendar', desc: 'short for events; ev <date> … adds an event',
+    name: 'ev', group: 'Calendar', aliasOf: 'events', desc: 'short for events; ev <date> … adds an event',
     usage: ['ev <date> [HH:MM] <title>', 'ev <id> [edit [<field> [<value>]] | rm]'],
     examples: ['ev fri 19:30 dinner at Mia\'s', 'ev 2026-12-24 Christmas Eve', 'ev e2 edit time 20:00', 'ev e2 rm'],
     complete: (prev) => records.complete('event', prev),

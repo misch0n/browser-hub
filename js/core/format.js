@@ -79,6 +79,7 @@ export function bytes(n) {
 const GROUP_LABELS = { 'Aliases & engines': 'links' };
 export function kindSeg(kind) {
   if (kind === 'alias') return ['your alias', 'k-alias'];
+  if (kind === 'command') return ['your command alias', 'k-alias'];
   if (kind === 'engine') return ['your engine', 'k-engine'];
   if (kind === 'theme' || kind === 'widget') return [kind, 'k-set'];
   return [GROUP_LABELS[kind] || String(kind).toLowerCase(), 'k-cmd'];

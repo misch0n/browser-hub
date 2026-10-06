@@ -233,6 +233,8 @@ export const KINDS = {
   },
   alias: {
     col: 'aliases', cmd: 'alias', label: 'alias',
+    // A command alias has a name and a command; one that opens a page, the rest.
+    fieldsFor: (x) => (x && x.command ? ['name', 'command'] : ['name', 'base', 'template', 'escape']),
     fields: {
       name: { aliases: [], raw: (x) => x.name, parse: (v) => ({ value: v.trim().toLowerCase() }) },
       base: { aliases: ['url'], raw: (x) => x.base, parse: (v) => ({ value: v.trim() }) },
@@ -241,6 +243,7 @@ export const KINDS = {
         raw: (x) => x.template || 'none',
         parse: (v) => ({ value: NONE.test(v.trim()) ? null : v.trim() }),
       },
+      command: { aliases: ['runs', 'cmd'], raw: (x) => x.command || 'none', parse: (v) => ({ value: v.trim() }) },
       escape: {
         aliases: [],
         raw: (x) => x.escape,
@@ -252,6 +255,9 @@ export const KINDS = {
     },
   },
 };
+
+// The fields one record has (a kind's fieldsFor, else all of them).
+export const fieldsOfItem = (kind, item) => (KINDS[kind].fieldsFor ? KINDS[kind].fieldsFor(item) : Object.keys(KINDS[kind].fields));
 
 // The canonical field name for `name` (or one of its aliases), or null.
 export function fieldName(kind, name) {
@@ -283,6 +289,9 @@ export function findRecord(kind, state, target) {
 // env: { now(), isBuiltin(name), state }
 export function applyField(kind, item, field, value, env) {
   const spec = KINDS[kind].fields[field];
+  if (!fieldsOfItem(kind, item).includes(field)) {
+    return { error: (item.command ? 'an alias that runs a command' : 'this ' + KINDS[kind].label) + ' has no field ' + field + ' (fields: ' + fieldsOfItem(kind, item).join(', ') + ')' };
+  }
   const r = spec.parse(String(value), env);
   if (r.error) return { error: field + ' ' + r.error };
   const next = JSON.parse(JSON.stringify(item));

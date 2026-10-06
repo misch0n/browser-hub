@@ -49,7 +49,7 @@ export default function register(add, { st, records }) {
   });
 
   add({
-    name: 'n', group: 'Notes', desc: 'short for notes; n <text> adds a note',
+    name: 'n', group: 'Notes', aliasOf: 'notes', desc: 'short for notes; n <text> adds a note',
     usage: ['n <text>', 'n "<text that starts like a command>"', 'n <id> [edit [<field> [<value>]] | rm]'],
     examples: ['n call the plumber about the boiler', 'n "rm the weeds"', 'n n3 edit text call the plumber today'],
     complete: (prev) => records.complete('note', prev),

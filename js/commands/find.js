@@ -75,7 +75,7 @@ export default function register(add, { st, defs, isBuiltin }) {
             case 'links': {
               const a = doc.alias;
               return [[...highlight(a.name, hits.name, 'accent').map((s) => [s[0], s[1], { run: doc.run }])],
-                [kindSeg(a.template ? 'engine' : 'alias'), ['  ', ''], ...hl(a.template || a.base, hits.url, 'url')], []];
+                [kindSeg(a.command ? 'command' : a.template ? 'engine' : 'alias'), ['  ', ''], ...hl(a.command || a.template || a.base, hits.url, a.command ? 'dim' : 'url')], []];
             }
             case 'commands':
               return [[...highlight(doc.def.name, hits.name, 'accent').map((s) => [s[0], s[1], { run: doc.run }])],

@@ -62,6 +62,8 @@ Large files to **search, not read**: `js/lib/nutrition-data.js` (generated,
   - `ephemeral`: shown, then removed when the next command runs (`help`, `keys`).
   - `noUndo`: never an undo step.
   - `hidden`: an older name that still works but isn't listed.
+  - `aliasOf: '<command>'`: a short name for that command (`n`, `t`, `ev`,
+    `snip`, `alias`); `help` shows it after the command, not on its own line.
 - Each area file exports `register(add, helpers)`; `helpers` is
   `{ st, usage, fullHelp, isBuiltin, defs, byName, records }`. `usage(ctx, def)`
   prints the command's full help headed "Usage", which is what a command does
@@ -103,6 +105,14 @@ own adapters to the same router. A tapped value runs the matching
 `<noun> <id> edit <field> <value>` command, so history shows every change as a
 command.
 
+### Aliases
+
+`js/core/aliases.js` holds one table: URL aliases and engines (opened with
+`location.assign` after `main.js`'s one-second wait, which Esc cancels) and
+command aliases, which `core/dispatch.js` expands into the built-in they name
+(`{ kind: 'builtin', name, rest, alias, expanded }`). A command alias can't
+name another alias, so expansion is one step and can't loop.
+
 ## Output
 
 Commands describe results; `js/ui/transcript.js` draws them. The `out` methods:
@@ -129,7 +139,7 @@ migrations (`SCHEMA`, `MIGRATIONS`) and repair of damaged documents.
 | Collection | Holds | Synced | Undo | Id |
 | --- | --- | --- | --- | --- |
 | `meta` | schema, id counters, last export | yes (counters) | – | – |
-| `aliases` | alias/engine entries, default engine | yes | yes | name |
+| `aliases` | alias/engine entries `{ name, base, template?, escape }`, command aliases `{ name, command }`, default engine | yes | yes | name |
 | `notes`, `tasks`, `events` | items | yes | yes | `n`, `t`, `e` |
 | `snippets`, `later`, `foods`, `diagrams` | items | yes | yes | `s`, `l`, `f`, `d` |
 | `settings` | theme, widgets, zones, summary, name, bounce keys | yes (per key) | yes | – |

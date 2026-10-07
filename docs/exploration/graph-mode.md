@@ -2,7 +2,7 @@
 
 Status: **open** (experimental feature, built 7 Oct 2026; refined from the
 owner's design note of the same day). What's built follows
-[plan 003](../plans/003-graph-mode-refinement.md); this file keeps the design
+[plan 003](../plans/archive/003-graph-mode-refinement.md) (D20); this file keeps the design
 thinking, including the parts deliberately not built yet.
 
 ## The owner's design note (7 Oct 2026, condensed)

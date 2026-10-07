@@ -3536,30 +3536,34 @@ test('graph mode: typos resolve to their node; free text is never changed; ambig
   assert.deepEqual(fanOf(v), fanOf(G.graphView('graph ', env)));
   assert.equal(v.fan[v.sel].value, 'color'); // a tie in the best tier: the first in order
   assert.deepEqual(v.fan.filter((f) => f.match).map((f) => f.value), ['color', 'config', 'cook', 'count', 'cron']);
-  assert.equal(G.accept('graph co convert', v, fanOf(v).indexOf('cook')), 'graph cook convert');
+  assert.equal(G.take('graph co convert', v, 'cook'), 'graph cook convert');
   assert.equal(G.graphView('graph cook c', env).ambiguous, true); // calorie or convert
   assert.equal(G.graphView('graph cook c', env).run, null);
 });
 
-test('graph mode: Tab takes a node, Backspace steps back a word', async () => {
+test('graph mode is additive: Tab and ghost text complete the command as normal mode does; a tap puts a node in', async () => {
   const app = await makeApp();
   const env = graphEnv(app);
+  const cenv = { defs: app.commands.defs, entries: app.data.state.aliases.entries, history: [] };
+  // Completion sees through `graph `: the same candidates as for the command alone.
+  assert.deepEqual(C.complete('graph cook co', cenv), C.complete('cook co', cenv));
+  assert.deepEqual(C.applyTab('graph cook conv', cenv), { input: 'graph cook convert ' });
+  assert.deepEqual(C.applyTab('graph tsks', cenv), { input: 'graph tasks ' }); // did you mean, too
+  assert.deepEqual(C.applyTab('graph cook c', cenv), C.applyTab('cook c', cenv)); // a list: the same list
+  assert.deepEqual(C.applyTab('graph :s', cenv), { input: 'graph :sort ' }); // the graph command's own word
+  assert.deepEqual(C.complete('graph ', cenv).candidates, []);
+  // A tapped word takes the word at the cursor and moves on; a branch of letters stays open.
   let text = 'graph cook ';
   let v = G.graphView(text, env);
-  assert.equal(G.accept(text, v, v.sel), 'graph cook calorie '); // nothing typed: the first in order
-  text = G.accept(text, v, fanOf(v).indexOf('convert'));
-  assert.equal(text, 'graph cook convert ');
+  assert.equal(G.take(text, v, 'convert'), 'graph cook convert ');
+  assert.equal(G.take('graph cook c', G.graphView('graph cook c', env), 'co', false), 'graph cook co');
+  text = 'graph cook convert 2';
   v = G.graphView(text, env);
-  assert.equal(G.accept(text, v, 0), null); // a placeholder with nothing typed: type it
-  text += '2';
-  v = G.graphView(text, env);
-  assert.equal(G.accept(text, v, v.sel), 'graph cook convert 2 ');
-  v = G.graphView('graph cook conv', env);
-  assert.equal(G.accept('graph cook conv', v, v.sel), 'graph cook convert ');
-  assert.equal(G.back('graph cook convert '), 'graph cook ');
-  assert.equal(G.back('graph cook '), 'graph ');
-  assert.equal(G.back('graph '), null); // the next Backspace eats the space: normal mode
-  assert.equal(G.back('graph cook conv'), null); // inside a word: a normal Backspace
+  assert.equal(G.take(text, v, '3'), 'graph cook convert 3 '); // a recent value
+  // An earlier word picked from its list: that word changes, what followed goes.
+  v = G.graphView('graph cook convert 2 ', env);
+  assert.equal(G.pick('graph cook convert 2 ', v, 1, v.columns[1].items.findIndex((it) => it.value === 'oven')), 'graph cook oven ');
+  assert.equal(G.pick('graph cook convert 2 ', v, 3, 0), null); // the column being typed in: a placeholder is typed, not tapped
 });
 
 test('graph mode: ranked by match, then use or a to z; counts per node path', async () => {

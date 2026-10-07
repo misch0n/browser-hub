@@ -2,8 +2,8 @@ import { readPrefs, PREFS_KEY, SORTS } from '../core/graph.js';
 
 // graph: graph mode of the prompt (experimental; core/graph.js reads the
 // grammar, ui/graph.js draws it). Typing `graph ` before a command turns the
-// prompt into a map of what can come next; Enter runs the command exactly as
-// without it. The command itself only explains the mode and sets its ranking:
+// screen above the prompt into a map of what can come next, beside an
+// unchanged input; Enter runs the command exactly as without it. The command itself only explains the mode and sets its ranking:
 //   graph                   what graph mode is, and the prompt put into it
 //   graph :sort [freq|alpha] how the fan is ranked on this device
 // Use counts and the ranking are kept on this device only (store key 'graph').
@@ -36,11 +36,9 @@ export default function register(add) {
       if (rest.trim()) return out.err('Graph mode runs commands from the prompt: type graph, a space, then the command');
       out.head([['Graph mode', 'strong'], [' · experimental · a map of every command as you type it', 'dim']]);
       out.table(null, [
-        [[['graph <command>', 'accent']], [['the prompt shows the path so far and everything that can come next', 'dim']]],
-        [[['↑ ↓ · tab', 'accent']], [['choose a next step · take it (or tap it)', 'dim']]],
-        [[['backspace', 'accent']], [['after a word: back one step', 'dim']]],
-        [[['↵', 'accent']], [['runs the command, exactly as without graph', 'dim']]],
-        [[['esc', 'accent']], [['back to the normal prompt, keeping the command', 'dim']]],
+        [[['graph <command>', 'accent']], [['above the prompt: the path so far, the other choices at each word, and the letter tree of what can come next', 'dim']]],
+        [[['typing · tab · ↑↓ · esc', 'accent']], [['as always: the input is the normal prompt; tap a word or value to put it in', 'dim']]],
+        [[['↵', 'accent']], [['runs the command, exactly as without graph (typos put right)', 'dim']]],
       ], { stack: true });
       out.dim('Typos and half-remembered words still find their place; ranked ' + (prefs.sort === 'freq' ? 'by use' : 'a to z') + ' (graph :sort)');
       ctx.setInput('graph ');

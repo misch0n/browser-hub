@@ -10,7 +10,6 @@ is enough.
 | Plan | Status |
 | --- | --- |
 | [001 · iOS notifications](001-ios-notifications.md) | draft; research task first |
-| [003 · Graph mode refinement](003-graph-mode-refinement.md) | in progress |
 
 New plans: `NNN-short-name.md`, listed here and linked from todo.md.
 
@@ -20,6 +19,7 @@ New plans: `NNN-short-name.md`, listed here and linked from todo.md.
 | --- | --- |
 | [v1 spec](archive/v1-spec.md) | Built on 5 October 2026, then superseded by later work. |
 | [002 · Command aliases, help listing, redirect delay](archive/002-command-aliases-and-redirect-delay.md) | Done 6 October 2026. |
+| [003 · Graph mode refinement](archive/003-graph-mode-refinement.md) | Done 7 October 2026 (D20). |
 
 When a plan is done, move it to `archive/`, set its status to done, and note
 the commits in [changelog.md](../changelog.md).

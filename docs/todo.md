@@ -25,17 +25,18 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 7 October 2026: unit tests (98) in six time zones, decoder
-  tests and 59 e2e checks pass.
-- Graph mode (`graph <command>`) is an experiment the owner asked to try; its
-  ranking switch (`graph :sort freq|alpha`) is there to compare both orders.
+- Last verified 7 October 2026: unit tests (99) in six time zones, decoder
+  tests and 60 e2e checks pass.
+- Graph mode (`graph <command>`) is an experiment the owner asked to try,
+  refined to the owner's design note (D20); its ranking switch
+  (`graph :sort freq|alpha`) is there to compare both orders. Its open
+  questions (backward pane, ring, convergence) wait for the owner to try it:
+  [exploration/graph-mode.md](exploration/graph-mode.md).
 - Command reference: [commands.md](commands.md) (generated from the code).
 
 ## In progress
 
-- **Graph mode refinement** (owner's design note, 7 Oct 2026; started 7 Oct).
-  Plan and progress log: [plan 003](plans/003-graph-mode-refinement.md);
-  design: [exploration/graph-mode.md](exploration/graph-mode.md).
+Nothing.
 
 ## Dev
 

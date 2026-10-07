@@ -104,28 +104,32 @@ command or alias gets a "did you mean" in the hint, and Tab fixes it. The
 **copy** button at the right of the prompt copies the latest result (a `calc`
 answer, a `uuid`, pretty JSON …).
 
-**Graph mode** (experimental) shows a command as a path through a map while
-you type it. Start the line with `graph ` and an overlay covers the screen
-above the prompt (nothing under it changes). Each word of the command is a
-column: the word it resolved to sits on a highlighted centre line, and the
-words that sort before and after it are shown above and below, so the centre
-line reads as the command (`cook › convert › 2 <amount:number> › cups <measure> › …`).
-The last column is the word you're typing: its closest match moves onto the
-centre line as you type, the others stay around it (dimmed if they don't
-match). Once a word is settled, the next column opens with what can follow:
-subcommands, known values (ids, fields, foods, months) or typed placeholders
-for the rest (`<amount:number>`, `<text>`); free text stays in one column.
-Typos and half-remembered words still find their place (`graph cok convrt`
-reads as `cook convert`, and Enter runs the corrected command); free text is
-never changed, and a word that could be several things waits until you pick
-one. **↑/↓** move along the column, **Tab** (or a tap) takes the word on the
-centre line, tapping a word in an earlier column swaps it (and drops what
-followed), **Backspace** right after a word steps back one, **Enter** runs the
-command exactly as without `graph` and stays in graph mode, **Esc** (or
-deleting `graph `) goes back to the normal prompt with the command kept.
-Columns are ordered by how often you take each word (counted on this device),
-or a to z with `graph :sort alpha` (`graph :sort freq` switches back); among
-equally close matches the first in that order is chosen. `graph` alone explains it.
+**Graph mode** (experimental) shows where a command is in a map of all
+commands while you type it. Start the line with `graph ` and an overlay covers
+the screen above the prompt; the prompt itself works exactly as always (ghost
+text, Tab, ↑/↓ history, Backspace, Esc), so the map only adds to it.
+
+- The **path** at the top reads as the command so far, each word as it
+  resolved (`cook › convert (convrt) › 2 <amount:number> › …`).
+- The **forward pane** is the tree of what can come next, rooted at the cursor:
+  the words that can stand here, letter by letter (`c` → `alorie`, `onvert`),
+  each with what follows it (`convert › <amount:number> <temperature>`; ↵ marks a
+  word that completes a command). Near the cursor is large and sharp, further
+  out smaller; big branches far away fold (`c… 14`). It narrows as you type,
+  and the closest match is marked. Words reached only through a typo are shown
+  apart (`typo? convert`). Where a value goes, it shows its shape
+  (`<amount:number>`, free text) and values you typed there before.
+- The **backward pane** lists, for every word already passed, the other
+  choices there, a to z, with yours marked.
+
+Tap a word to put it in (a folded branch puts in its letters), a value to
+use it again, a word in the backward pane to swap it (what followed goes).
+**Enter** runs the command exactly as without `graph`, with typos put right
+(`graph cok convrt` runs `cook convert`); free text is never changed, and a
+word that could be several things runs as typed. You stay in graph mode, and
+↑ brings earlier commands back in it. Words are ordered by how often you take
+each (counted on this device), or a to z with `graph :sort alpha`
+(`graph :sort freq` switches back). `graph` alone explains it.
 
 `tz` shows the time across your zones; `tz 15:00 tokyo` shows 15:00 Tokyo
 time across them (any zone, by city, IANA name or your name for it). Manage the

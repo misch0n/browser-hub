@@ -1203,11 +1203,11 @@ async function check(name, fn) {
     await prompt.fill('');
   });
 
-  await check('graph mode: an overlay of columns, best match on the centre line, Enter runs as normal mode does, Esc leaves', async () => {
+  await check('graph mode: an overlay beside an unchanged input (path, siblings, letter tree at the cursor); Enter runs as normal mode does', async () => {
     const graph = page.locator('#graph');
-    const path = () => page.locator('#graph .g-col .g-center .g-val').allInnerTexts(); // the centre line
-    const chosen = () => page.locator('#graph .g-active .g-center .g-val').innerText();
-    const column = (i) => page.locator('#graph .g-col').nth(i).locator('.g-cell:not(.g-blank)').allInnerTexts();
+    const fwd = page.locator('#graph .g-fwd');
+    const steps = () => page.locator('#graph .g-path .g-step:not(.g-here) .g-val').allInnerTexts();
+    const words = () => page.locator('#graph .g-fwd .f-root .f-word').evaluateAll((els) => els.map((e) => e.getAttribute('data-take')));
     await send('cook convert 2 cups flour');
     const normal = await lastText();
     await type('graph ');
@@ -1220,46 +1220,56 @@ async function check(name, fn) {
     const pb = await page.locator('.prompt-box').boundingBox();
     assert.equal(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y).closest('.prompt-box'), [pb.x + 10, pb.y + pb.height / 2]), true);
     assert.match(await page.locator('#hint').innerText(), /^graph mode/);
-    // Typing moves the best match onto the centre line; neighbours that sort around it stay above and below.
-    await prompt.pressSequentially('coo');
-    assert.equal(await chosen(), 'cook');
-    const around = await column(0);
-    const at = around.indexOf('cook');
-    assert.ok(at > 0 && at < around.length - 1, around.join(',')); // in order of use here: other commands above and below
-    await prompt.pressSequentially('k convrt ');
-    assert.deepEqual(await path(), ['cook', 'convert', '<amount:number>']);
-    assert.match(await page.locator('#graph .g-col').nth(1).locator('.g-center').innerText(), /convert \(convrt\)/);
-    await prompt.pressSequentially('2 cups flour');
-    assert.deepEqual(await path(), ['cook', 'convert', '2', 'cups', 'flour']);
-    assert.equal(await page.locator('#ghost-rest').textContent(), '');
+    // Far branches fold; tapping one opens its letters without moving on.
+    const folded = page.locator('#graph .f-label:has(.f-fold)').first();
+    const letters = await folded.getAttribute('data-take');
+    await folded.click();
+    assert.equal(await prompt.inputValue(), 'graph ' + letters);
+    assert.equal(await focused(), 'prompt');
+    assert.ok((await words()).every((w) => w.toLowerCase().startsWith(letters.toLowerCase())));
+    // Ghost text and Tab are normal mode's; the tree narrows as you type.
+    await type('graph coo');
+    assert.equal(await page.locator('#ghost-rest').textContent(), 'k');
+    assert.ok((await words()).includes('cook'));
+    await page.keyboard.press('Tab');
+    assert.equal(await prompt.inputValue(), 'graph cook ');
+    assert.deepEqual((await words()).slice().sort(), ['calorie', 'convert', 'oven', 'target']);
+    assert.match(await fwd.innerText(), /onvert[\s\S]*<amount:number>/); // each word with the slot after it
+    // The backward pane: the other commands, a to z, cook marked.
+    const back = page.locator('#graph .g-back .g-list').first();
+    assert.equal(await back.locator('.g-chosen').innerText(), 'cook');
+    const names = await back.locator('li').allInnerTexts();
+    const az = names.slice().sort((x, y) => (x.toLowerCase() < y.toLowerCase() ? -1 : x.toLowerCase() > y.toLowerCase() ? 1 : 0));
+    assert.deepEqual(names, az);
+    // A typo resolves, and shows what it became.
+    await prompt.pressSequentially('convrt ');
+    assert.deepEqual(await steps(), ['cook', 'convert']);
+    assert.match(await page.locator('#graph .g-path').innerText(), /convert \(convrt\)/);
+    // An open slot: its shape and what was typed there before; a tap puts it in.
+    assert.match(await fwd.innerText(), /<amount:number>/);
+    await page.locator('#graph .f-recent').filter({ hasText: /^2$/ }).first().click();
+    assert.equal(await prompt.inputValue(), 'graph cook convrt 2 ');
+    assert.equal(await focused(), 'prompt');
+    await prompt.pressSequentially('cups flour');
+    assert.deepEqual(await steps(), ['cook', 'convert', '2', 'cups']);
     assert.match(await page.locator('#hint').innerText(), /↵ runs cook convert 2 cups flour/);
     await page.keyboard.press('Enter');
     await page.waitForTimeout(60);
     assert.equal(await page.locator('.you-text').last().textContent(), 'cook convert 2 cups flour');
     assert.equal(await lastText(), normal);
     assert.equal(await prompt.inputValue(), 'graph '); // still in graph mode
-    // Ambiguous: the best match chosen; ↓ moves along the column; Tab takes it; Backspace steps back.
-    await prompt.pressSequentially('co');
-    assert.match(await page.locator('#graph .g-top').innerText(), /"co" could be several/);
-    const first = await chosen();
+    // ↑↓ walk history and stay in graph mode.
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await prompt.inputValue(), 'graph cook convert 2 cups flour');
     await page.keyboard.press('ArrowDown');
-    const next = await chosen();
-    assert.notEqual(next, first);
-    await page.keyboard.press('Tab');
-    assert.equal(await prompt.inputValue(), 'graph ' + next + ' ');
-    await page.keyboard.press('Backspace');
     assert.equal(await prompt.inputValue(), 'graph ');
-    // A tap takes a node and keeps the keyboard in the prompt.
-    const near = page.locator('#graph .g-active .g-cell:not(.g-blank):not(.g-center)').first();
-    const tapped = await near.innerText();
-    await near.click();
-    assert.equal(await prompt.inputValue(), 'graph ' + tapped + ' ');
-    assert.equal(await focused(), 'prompt');
-    await page.keyboard.press('Backspace');
+    // Backspace and Esc as in normal mode.
     await prompt.pressSequentially('cook ');
-    assert.equal(await chosen(), 'convert'); // used most comes first
+    assert.equal((await words())[0], 'convert'); // used most (in graph mode) comes first
+    await page.keyboard.press('Backspace');
+    assert.equal(await prompt.inputValue(), 'graph cook');
     await page.keyboard.press('Escape');
-    assert.equal(await prompt.inputValue(), 'cook ');
+    assert.equal(await prompt.inputValue(), '');
     assert.equal(await graph.isVisible(), false);
     await type('graph ');
     await page.keyboard.press('Backspace');
@@ -1270,12 +1280,29 @@ async function check(name, fn) {
     await page.keyboard.press('Enter');
     await page.waitForTimeout(60);
     assert.match(await lastText(), /Graph mode ranks a to z/);
-    await prompt.fill('');
-    await prompt.pressSequentially('graph cook ');
-    assert.equal(await chosen(), 'calorie');
-    await page.keyboard.press('Escape');
+    await type('graph cook ');
+    assert.equal((await words())[0], 'calorie');
     await send('graph :sort freq');
     await prompt.fill('');
+  });
+
+  await check('graph mode at phone width: siblings above the letter tree, nothing overflows', async () => {
+    const phone = await context.newPage();
+    await phone.setViewportSize({ width: 390, height: 844 });
+    await phone.goto(base);
+    await phone.waitForSelector('#prompt');
+    await phone.locator('#prompt').fill('graph cook convert ');
+    await phone.waitForSelector('#graph .g-back');
+    const m = await phone.evaluate(() => {
+      const r = (s) => document.querySelector(s).getBoundingClientRect();
+      const g = document.getElementById('graph');
+      return { back: r('#graph .g-back'), fwd: r('#graph .g-fwd'), hx: document.documentElement.scrollWidth - innerWidth, gx: g.scrollWidth - g.clientWidth, w: innerWidth };
+    });
+    assert.ok(m.back.bottom <= m.fwd.top + 1, 'the backward pane sits above the forward pane');
+    assert.ok(m.fwd.right <= m.w + 1 && m.hx <= 0 && m.gx <= 0);
+    assert.match(await phone.locator('#graph .g-fwd').innerText(), /<amount:number>/);
+    await phone.screenshot({ path: path.join(require('os').tmpdir(), 'cc-graph-phone.png') });
+    await phone.close();
   });
 
   await check('pageshow clears stale input and refocuses', async () => {

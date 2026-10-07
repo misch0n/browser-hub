@@ -115,21 +115,36 @@ name another alias, so expansion is one step and can't loop.
 
 ## Graph mode (experimental)
 
-A prompt mode, on while the text starts with `graph `. `core/graph.js` (pure)
-reads the grammar from what commands already declare: each def's `usage` lines
-(words, `<placeholders>`, `[optional]`, `a|b`) expanded into linear forms, plus
-`complete(prev)` for known values. The input is matched word by word against
-those forms (a literal word beats a placeholder; a known id beats free text),
-mistyped words resolve by tier (prefix, one typo, letters in order) only where
-no placeholder could take them, and an ambiguous word stops the path.
-The view describes columns, one per word, each holding the level's nodes in a
-stable order (by use or a to z) with the resolved node, or the best match for
-the word being typed, at its centre. `ui/graph.js` draws them as a full-screen
-overlay (`#graph`, outside `#app`; `.graph-on` lifts the composer above it) and
-`ui/prompt.js` hands it ↑↓, Tab, Backspace, Enter and Esc. Enter runs the text after `graph ` through the usual
-`run()`, with only resolved words replaced; `run()` also unwraps `graph <command>`
-arriving another way. Nothing in commands or dispatch changes. Use counts per
-node path and the ranking (`graph :sort`) are device-local (`cc-device:graph`).
+A prompt mode, on while the text starts with `graph `. It changes how input is
+resolved and displayed, never what a command does.
+
+- `core/graph.js` (pure) builds the **command graph** from what commands already
+  declare: each def's `usage` lines (words, `<placeholders>`, `[optional]`,
+  `a|b`) are expanded into linear forms and merged into one tree per command
+  (`commandNode(def)`; nodes are words and typed placeholders, a free-text node
+  can repeat); known values (ids, fields, foods) come from `complete(prev)`
+  (`neighbors(node, prev)`).
+- Reading the input walks that graph word by word (positions are nodes): a
+  literal word beats a placeholder, a known id beats free text; mistyped words
+  resolve by tier (prefix, one typo, letters in order) only where no
+  placeholder could take them; an ambiguous word stops the path.
+- `graphView` returns the path, a column per word (the level's choices and the
+  one taken), what Enter runs, and `forward`: the **letter tree** of the words
+  that can stand at the cursor (radix-compressed), each with its next slot and
+  the usage lines still reachable, typos apart, and open slots with recent
+  values from history.
+- `ui/graph.js` draws a full-screen overlay (`#graph`, outside `#app`;
+  `.graph-on` lifts the composer above it): the path, the backward pane (each
+  passed word's siblings, a to z) and the forward pane (the letter tree,
+  fisheye: size and opacity by depth from the cursor, far branches folded).
+  Taps put a node into the prompt (`take`, `pick`).
+- The input is **additive**: `ui/prompt.js` keeps ghost text, Tab, ↑↓,
+  Backspace and Esc as in normal mode (completion sees through `graph `, and ↑↓
+  keep the prefix); only Enter differs, running the text after `graph ` through
+  the usual `run()` with resolved words put right. `run()` also unwraps
+  `graph <command>` arriving another way. Nothing in commands or dispatch changes.
+- Use counts per node path and the ranking (`graph :sort`) are device-local
+  (`cc-device:graph`).
 
 ## Output
 

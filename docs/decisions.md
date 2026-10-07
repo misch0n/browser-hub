@@ -119,7 +119,7 @@ names carry `aliasOf`. Every page opened from the prompt (aliases, searches,
 address bar and bounce links don't wait (they were asked for by a click or a
 browser search).
 
-**D19. Graph mode reads the existing grammar; it never changes what runs** (7 Oct 2026, experimental)
+**D19. Graph mode reads the existing grammar; it never changes what runs** (7 Oct 2026, experimental; the overlay and keys amended by D20)
 Owner asked to try a graph mode for the prompt: `graph ` before a command shows
 every reachable next step, fuzzy-matched, ranked switchably by use or a to z;
 normal mode unchanged, no changes to execution or the grammar. → The graph
@@ -133,3 +133,18 @@ Owner's picture (same day): an overlay over the screen, a column per term
 with the closest match selected and the terms sorting above and below it,
 Tab to take it, then the next term. → Columns keep a stable order (use or a
 to z) and the match moves along them, instead of matches jumping to the top.
+
+**D20. Graph mode is additive: an explicit graph, a forward pane, the normal input** (7 Oct 2026, experimental)
+Owner's design note: graph mode is non-destructive and additive (the input
+unchanged, the fan a read-only display); two graphs (a letter tree per word,
+the command graph); a forward pane (what can still be reached) and a backward
+pane (siblings, as plain lists); fisheye; parameters as typed slots with
+recent values; a real, queryable graph; forward pane first. → The command
+structure is an explicit tree per command built from `usage`
+(`core/graph.js`), walked to read the input. The overlay shows the path, the
+backward pane and the forward pane (letter tree at the cursor, fisheye, folded
+far branches; next slots, reachable usage lines, typos apart, slots with
+recent values). The prompt keeps every normal key (amends D19's ↑↓/Tab/
+Backspace/Esc takeover); Enter still runs the resolved command, and an
+ambiguous word runs as typed. Parked: the ring, convergence in the command
+graph, normal-mode completion on the graph ([exploration](exploration/graph-mode.md)).

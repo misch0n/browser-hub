@@ -637,7 +637,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 #status-sync[data-state="ok"] { color: var(--ok); }
 #status-sync[data-state="error"], #status-sync[data-state="auth"] { color: var(--err); border-color: var(--err); }
 
-/* ---- graph mode (experimental): an overlay above the prompt, one column per word ---------- */
+/* ---- graph mode (experimental): an overlay above the prompt: path, backward and forward panes */
 
 #graph {
   position: fixed;
@@ -647,7 +647,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   flex-direction: column;
   padding: 12px var(--gutter) calc(var(--composer-h, 90px) + 6px);
   background: var(--bg);
-  --row: 1.9em;
 }
 
 #graph[hidden] { display: none; }
@@ -655,55 +654,79 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .graph-on #palette { z-index: 42; }
 
 .g-top { flex: none; }
-.g-frame { position: relative; flex: 1; min-height: 0; display: flex; }
-.g-stage { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; overflow-x: auto; overflow-y: hidden; }
-/* The centre line: the path the command takes (on the frame, so it doesn't scroll away) */
-.g-frame::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: var(--row);
-  transform: translateY(-50%);
+/* The path: the words so far, as they resolved */
+.g-path {
+  flex: none;
+  margin: 8px 0;
+  padding: 0.35em 1ch;
   background: var(--bg-hl);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  pointer-events: none;
-}
-.g-row { position: relative; display: flex; gap: 0.6ch; margin: auto 0; padding: 0 1ch; }
-.g-col, .g-join { display: flex; flex-direction: column; }
-.g-col { min-width: 6ch; max-width: 26ch; }
-.g-col.g-active { max-width: 40ch; }
-.g-cell {
-  height: var(--row);
-  line-height: var(--row);
-  padding: 0 0.6ch;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--dim);
-  cursor: pointer;
+  overflow-x: auto;
 }
-.g-blank, .g-arrow { cursor: default; }
-.g-arrow { color: var(--faint); }
-.g-cell.g-d1 { opacity: 0.85; }
-.g-cell.g-d2 { opacity: 0.6; }
-.g-cell.g-d3 { opacity: 0.42; }
-.g-cell.g-d4 { opacity: 0.28; }
-.g-col:not(.g-active) .g-cell:not(.g-center) { opacity: 0.3; }
-.g-cell.g-miss { opacity: 0.18; }
-.g-cell.g-param { font-style: italic; }
-.g-center { color: var(--strong); font-weight: 600; }
-.g-center.g-command, .g-center.g-graph { color: var(--accent); }
-.g-center.g-param .g-val { color: var(--num); font-style: normal; }
-.g-center.g-raw, .g-center.g-miss { color: var(--warn); }
-.g-center.selected { box-shadow: inset 0 -2px 0 var(--accent); }
-.g-col.g-pending .g-center { color: var(--faint); font-weight: 400; }
+.g-sep { color: var(--faint); }
+.g-step { color: var(--strong); font-weight: 600; }
+.g-step.g-command, .g-step.g-graph { color: var(--accent); }
+.g-step.g-param .g-val { color: var(--num); }
+.g-step.g-raw, .g-step.g-miss { color: var(--warn); }
+.g-step.g-pending { color: var(--faint); font-weight: 400; }
+.g-step.g-here { display: inline-block; min-width: 1ch; box-shadow: inset 0 -2px 0 var(--accent); }
 .g-sub { color: var(--faint); font-weight: 400; font-style: normal; }
-.g-foot { flex: none; max-height: 30%; overflow: hidden; padding-top: 6px; border-top: 1px solid var(--border); }
+
+.g-panes { flex: 1; min-height: 0; display: flex; gap: 2ch; }
+/* Backward pane: per word passed, its siblings a to z (reference) */
+.g-back { flex: none; display: flex; gap: 1ch; max-width: 40%; min-height: 0; overflow-x: auto; }
+.g-list {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0 1ch 0 0;
+  min-width: 6ch;
+  max-width: 18ch;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  font-size: 0.85em;
+  color: var(--faint);
+}
+.g-list li { padding: 0 0.4ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; line-height: 1.6; }
+.g-list li.g-param { font-style: italic; }
+.g-list li.g-chosen { color: var(--strong); background: var(--bg-hl); font-weight: 600; }
+
+/* Forward pane: the letter tree at the cursor, fisheye (near: large and sharp) */
+.g-fwd { flex: 1; min-width: 0; overflow: auto; padding-bottom: 4px; }
+.f-node { display: flex; align-items: flex-start; }
+.f-head { flex: none; display: flex; align-items: baseline; white-space: nowrap; }
+.f-kids { display: flex; flex-direction: column; border-left: 1px solid var(--border); margin-left: 0.3ch; padding-left: 0.3ch; }
+.f-label { padding: 0 0.3ch; cursor: pointer; color: var(--dim); white-space: nowrap; }
+.f-root > .f-head .f-label { color: var(--strong); cursor: default; }
+.f-typed { box-shadow: inset 0 -2px 0 var(--accent); display: inline-block; min-width: 1ch; }
+.f-label.f-d1 { font-size: 1.15em; line-height: 1.5; opacity: 1; }
+.f-label.f-d2 { font-size: 1em; line-height: 1.45; opacity: 0.8; }
+.f-label.f-d3 { font-size: 0.88em; line-height: 1.4; opacity: 0.6; }
+.f-label.f-d4 { font-size: 0.78em; line-height: 1.35; opacity: 0.45; }
+.f-label.f-word { color: var(--fg); }
+.f-label.f-word.g-command, .f-label.f-word.g-graph { color: var(--accent); }
+.f-label.f-hot { opacity: 1; color: var(--strong); font-weight: 600; }
+.f-label.f-hot.f-word { color: var(--accent); }
+.f-fold { color: var(--faint); font-size: 0.85em; font-weight: 400; }
+.f-next { font-size: 0.8em; white-space: nowrap; }
+.f-none { color: var(--faint); padding: 0 1ch; }
+.f-typos, .f-slot { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 1ch; }
+.f-typos .f-label { color: var(--warn); }
+.f-tag { color: var(--faint); font-size: 0.85em; }
+.f-shape { color: var(--num); font-style: italic; }
+.f-slot.f-hot .f-shape { font-weight: 600; }
+.f-recent { cursor: pointer; color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 0 0.6ch; }
+
+.g-foot { flex: none; max-height: 30%; overflow: hidden; padding-top: 6px; margin-top: 6px; border-top: 1px solid var(--border); }
 .g-desc, .g-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .g-desc { color: var(--dim); margin-bottom: 2px; }
+@media (max-width: 520px) {
+  /* Phones: the backward pane becomes a strip above the forward pane */
+  .g-panes { flex-direction: column; gap: 8px; }
+  .g-back { max-width: none; max-height: 7.5em; }
+}
 
 /* ---- command palette ------------------------------------------------------------------- */
 

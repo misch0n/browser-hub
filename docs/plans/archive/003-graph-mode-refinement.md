@@ -1,7 +1,6 @@
 # 003 · Graph mode refinement: explicit graph, forward pane, additive input
 
-Status: **in progress** (7 Oct 2026) · Todo: [todo.md](../todo.md#in-progress) ·
-Design: [exploration/graph-mode.md](../exploration/graph-mode.md)
+Status: **done** (7 Oct 2026, D20) · Design: [exploration/graph-mode.md](../../exploration/graph-mode.md)
 
 ## Goal
 
@@ -40,12 +39,20 @@ normal-mode autocomplete on the graph (normal mode is the control).
 
 ## Steps
 
-- [ ] 1. Explicit graph + walk over it; existing graph tests still pass.
-- [ ] 2. Forward-pane data (letter trie, next slots, reachable commands, recent values) + unit tests.
-- [ ] 3. Additive input in `prompt.js`; tests (unit where possible, e2e).
-- [ ] 4. Overlay: backward pane (plain lists) + forward pane (fisheye); e2e on desktop and phone width.
-- [ ] 5. Docs: README, architecture, decisions (amend D19), changelog, todo.
+- [x] 1. Explicit graph + walk over it; existing graph tests still pass.
+- [x] 2. Forward-pane data (letter trie, next slots, reachable commands, recent values) + unit tests.
+- [x] 3. Additive input in `prompt.js`; tests (unit where possible, e2e).
+- [x] 4. Overlay: backward pane (plain lists) + forward pane (fisheye); e2e on desktop and phone width.
+- [x] 5. Docs: README, architecture, decisions (amend D19), changelog, todo.
 
 ## Log
 
 - 7 Oct 2026: plan written from the owner's design note; starting step 1.
+- 7 Oct 2026: done. As built: `commandNode(def)` (one tree per command; children
+  ordered fullest-first so values are named after their place in the longest
+  line) rather than one merged `buildGraph`; `forward` is `{ query, trie,
+  words, typos, slots, more }` (typos by letters in order only when no word
+  starts with what's typed); taps use `take(text, view, value, done)`
+  (`accept` and `back` removed: Tab and Backspace are normal mode's). Enter on
+  an ambiguous word runs the text as typed. Completion (`core/completion.js`)
+  sees through `graph ` so ghost text and Tab are the command's own.

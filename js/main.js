@@ -290,7 +290,7 @@ function describe(v, ghost, hist, search, secret) {
       ['   ↵ run · ctrl+r older · tab edit · esc cancel', 'faint']];
   }
   if (hist) return [['history ', 'faint'], [hist.at + '/' + hist.of, 'num'], [' · ↑↓ to walk · esc clears', 'faint']];
-  if (graph.view) return graphHint(graph.view);
+  if (graph.view) return graphHint(graph.view, ghost);
   if (!v.trim()) {
     return [['?', 'accent'], [' shortcuts   ', 'faint'], ['/', 'accent'], [' commands   ', 'faint'], ['tab', 'accent'], [' completes', 'faint']];
   }
@@ -330,12 +330,10 @@ const graph = createGraph({
   onRun: (keys) => { if (keys.length) store.setLocal(PREFS_KEY, bump(graphPrefs(), keys)); },
 });
 
-function graphHint(v) {
-  const it = graph.selected;
-  const keys = [['   ↑↓', 'accent'], [' choose', 'faint'], ...(it && !it.ph ? [['  tab', 'accent'], [' ' + it.value, 'faint']] : [])];
-  const enter = v.ambiguous ? [['  ↵', 'accent'], [' takes ' + (it ? it.value : 'it'), 'faint']]
+function graphHint(v, ghost) {
+  const enter = v.ambiguous ? [['  ↵', 'accent'], [' runs it as typed', 'faint']]
     : v.run ? [['  ↵', 'accent'], [' runs ', 'faint'], [v.run, 'strong']] : [['  ↵', 'accent'], [' explains graph mode', 'faint']];
-  return [['graph mode', 'accent'], ...keys, ...enter, ['  esc', 'accent'], [' leaves', 'faint']];
+  return [['graph mode', 'accent'], ...(ghost ? [['  tab', 'accent'], [' completes', 'faint']] : []), ...enter, ['  esc', 'accent'], [' clears', 'faint']];
 }
 
 const prompt = createPrompt({

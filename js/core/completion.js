@@ -28,7 +28,13 @@ function firstTokenCandidates(env) {
     (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
 }
 
+// Graph mode (`graph ` before a command) is a view: the command after it completes
+// as it would on its own. `graph :sort …` is the graph command itself.
+const GRAPH = /^(\s*graph\s+)(?!:)/i;
+
 function complete(input, env) {
+  const g = GRAPH.exec(input);
+  if (g) return complete(input.slice(g[1].length), env);
   const text = input.replace(/^\s+/, '');
   if (!text) return { token: '', candidates: [] };
   const tokens = text.split(/\s+/);
@@ -93,6 +99,11 @@ function longestCommonPrefix(values) {
 // Applies Tab to `input`. Returns { input?, list? }: a new input value, or a
 // candidate list to print when completing makes no further progress.
 function applyTab(input, env) {
+  const g = GRAPH.exec(input);
+  if (g) {
+    const r = applyTab(input.slice(g[1].length), env);
+    return r.input !== undefined ? { input: g[1] + r.input } : r;
+  }
   const { token, candidates } = complete(input, env);
   if (candidates.length === 0) {
     // Nothing starts with the first word: fix a typo instead ('tsks' -> 'tasks').

@@ -5,6 +5,10 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 7 October 2026
 
+- Graph mode refined ([plan 003](plans/archive/003-graph-mode-refinement.md), D20): the prompt
+  works as always (Tab, ↑↓, Esc), and the overlay shows the path, each passed
+  word's other choices, and the letter tree at the cursor (fisheye) with what
+  follows each word and recent values for open slots; built on an explicit command graph.
 - Graph mode drawn as an overlay: one column per word, the path on a centre
   line, neighbours sorting above and below; the best match is chosen as you
   type; tapping an earlier column swaps that word.

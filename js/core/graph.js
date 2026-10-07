@@ -21,9 +21,8 @@ import { distance, useCounts } from './completion.js';
 //             settledColumn), lines: [usage line], run, canEnd, key,
 //             forward (the tree ahead of the cursor: see forwardOf) }
 //   commandNode(def) -> the command's tree in the graph    neighbors(node, prev) -> what can follow it
-//   accept(text, view, i) -> text with fan item i taken (null when it can't be)
+//   take(text, view, value, done) -> text with `value` in place of the word at the cursor
 //   pick(text, view, col, i) -> text with item i of column col taken
-//   back(text) -> text with the last whole word removed (null when there is none)
 //   leave(text) -> the text without `graph `     countKeys(view) -> node paths to count
 
 export const KEYWORD = 'graph';
@@ -754,38 +753,26 @@ function forwardOf(level, fan, sel, query, path, prev, env) {
 
 // ---- editing -------------------------------------------------------------------------
 
-// Takes fan item `i`: a word replaces the word being matched; a placeholder that
-// already has its value moves on to the next word.
-export function accept(text, view, i) {
-  const it = view && view.fan[i];
-  if (!it) return null;
-  const { start, end, query } = view.focus;
-  if (it.ph) {
-    if (!query || !it.match || end !== text.length) return null;
-    return text + ' ';
-  }
+// A tapped node or value goes in place of the word at the cursor (the focus):
+// `done` adds the space that moves on to the next word; without it the letters
+// stay open (a branch of the letter tree, to narrow it further).
+export function take(text, view, value, done = true) {
+  if (!view) return null;
+  const { start, end } = view.focus;
   const after = text.slice(end);
-  return text.slice(0, start) + it.value + (/^\s/.test(after) ? after : ' ' + after.replace(/^\s*/, ''));
+  if (!done) return text.slice(0, start) + value + after;
+  return text.slice(0, start) + value + (/^\s/.test(after) ? after : ' ' + after.replace(/^\s*/, ''));
 }
 
 // A node picked in an earlier column: that word becomes it, and what followed
-// goes (it depended on the old word). The column being typed in takes it as Tab does.
+// goes (it depended on the old word). In the column being typed in, a word is taken.
 export function pick(text, view, col, i) {
   const c = view && view.columns[col];
   const it = c && c.items[i];
   if (!it) return null;
-  if (c.active) return accept(text, view, i);
+  if (c.active) return it.ph ? null : take(text, view, it.value);
   if (it.ph) return c.kind === 'param' && c.sub === it.value ? text : text.slice(0, c.start);
   return text.slice(0, c.start) + it.value + ' ';
-}
-
-// Backspace right after a whole word: remove the word (back to its parent node).
-export function back(text) {
-  const m = PREFIX.exec(text);
-  if (!m || !/\s$/.test(text)) return null;
-  const body = text.slice(m[1].length);
-  if (!body.trim()) return null;
-  return m[1] + body.replace(/\S+\s+$/, '');
 }
 
 // The node paths a run counts towards (for ranking by use): 'cook', 'cook convert', …

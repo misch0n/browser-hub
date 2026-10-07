@@ -1,7 +1,7 @@
 import { complete, applyTab } from '../core/completion.js';
 import { edit, actionFor, historySearch } from '../core/lineedit.js';
 import { shouldCollapse, labelFor, expandAll, expandAt, removeAt, toField, placeholders } from '../core/paste.js';
-import { back, leave } from '../core/graph.js';
+import { isGraph } from '../core/graph.js';
 
 // The input line: ghost-text completion, Tab, history, and a live hint that
 // says what Enter would do.
@@ -21,8 +21,10 @@ export function createPrompt(opts) {
   // askSecret(): the next Enter hands over the text instead of running it,
   // with the field masked; it is never echoed or kept in history.
   let secret = null; // { resolve, placeholder }
-  // Graph mode (experimental): `graph <command>` shows every next step above the
-  // prompt; ↑↓ choose, Tab takes, Backspace after a word steps back, Esc leaves.
+  // Graph mode (experimental): `graph <command>` shows the command's graph above
+  // the prompt. It adds to the input and takes nothing away: ghost text, Tab,
+  // ↑↓, Backspace and Esc work as always (↑↓ keep `graph ` in front); only
+  // Enter differs, running the command as resolved (core/graph.js).
   const graph = opts.graph || null;
   const graphOn = () => !!(graph && graph.view && !secret && !search);
   // Long pastes, shown as placeholders until the cursor goes into one (core/paste.js).
@@ -53,7 +55,6 @@ export function createPrompt(opts) {
   }
 
   function ghostFor(v) {
-    if (graphOn()) return ''; // the graph panel shows the choices instead
     if (!v || input.selectionStart !== v.length || input.selectionEnd !== v.length) return '';
     // The ghost is drawn in a layer under the input; once the text scrolls
     // horizontally the two no longer line up, so don't draw it.
@@ -77,7 +78,7 @@ export function createPrompt(opts) {
   function tab(value) {
     const r = applyTab(value, opts.env());
     if (r.input !== undefined) set(r.input);
-    else if (r.list) opts.onList(value, r.list);
+    else if (r.list && !graphOn()) opts.onList(value, r.list); // in graph mode the panel shows them
     return r.input !== undefined || !!r.list;
   }
 
@@ -88,7 +89,7 @@ export function createPrompt(opts) {
   const DOUBLE_TAP_MS = 300;
   let lastTap = null; // { ch, at, pos }
   function doubleTap(e) {
-    if (secret || search || graphOn() || !opts.doubleTapTab || !opts.doubleTapTab()) return false;
+    if (secret || search || !opts.doubleTapTab || !opts.doubleTapTab()) return false;
     if (e.inputType !== 'insertText' || !e.data || !/^[a-z]$/i.test(e.data)) { lastTap = null; return false; }
     const pos = input.selectionStart;
     const at = (globalThis.performance || Date).now();
@@ -139,39 +140,17 @@ export function createPrompt(opts) {
       search ? { query: v, match } : null);
   }
 
-  // Keys that mean something else in graph mode. true when handled.
-  function graphKey(e) {
-    const v = input.value;
-    const atEnd = input.selectionStart === v.length && input.selectionEnd === v.length;
-    switch (e.key) {
-      case 'ArrowUp': case 'ArrowDown': graph.move(e.key === 'ArrowDown' ? 1 : -1); update(); return true;
-      case 'Tab': { const t = graph.accept(); if (t !== null) set(t); return true; }
-      case 'Backspace': {
-        if (!atEnd || e.altKey || e.ctrlKey || e.metaKey) return false;
-        const t = back(v);
-        if (t === null) return false;
-        set(t);
-        return true;
-      }
-      case 'Escape':
-        if (opts.onEscape()) return true;
-        set(leave(v));
-        return true;
-      case 'Enter': {
-        const r = graph.submit();
-        if (!r) return true;
-        if (r.input !== undefined) { set(r.input); return true; }
-        // As a normal Enter, with the resolved command; the prompt stays in graph mode.
-        const v2 = expandAll(r.run, pastes);
-        const pasted = placeholders(r.run, pastes).map((p) => pastes.get(p.label));
-        histIdx = -1;
-        pastes.clear();
-        set(r.leave ? '' : 'graph ');
-        opts.onSubmit(v2, r.run, pasted);
-        return true;
-      }
-      default: return false;
-    }
+  // Enter in graph mode: the command as resolved; the prompt stays in graph mode.
+  function graphEnter() {
+    const r = graph.submit();
+    if (!r) return false;
+    const v = expandAll(r.run, pastes);
+    const pasted = placeholders(r.run, pastes).map((p) => pastes.get(p.label));
+    histIdx = -1;
+    pastes.clear();
+    set(r.leave ? '' : 'graph ');
+    opts.onSubmit(v, r.run, pasted);
+    return true;
   }
 
   function startOrOlder() {
@@ -193,17 +172,20 @@ export function createPrompt(opts) {
     set(text);
   }
 
+  // ↑↓ through history; from graph mode, the recalled commands come back in it.
+  let walkGraph = false;
+  const recall = (item) => set(walkGraph && !isGraph(item) ? 'graph ' + item : item);
   function walk(dir) {
     const items = opts.history();
     if (dir < 0) {
       if (!items.length) return;
-      if (histIdx === -1) { draft = input.value; histIdx = items.length; }
+      if (histIdx === -1) { draft = input.value; histIdx = items.length; walkGraph = graphOn(); }
       if (histIdx > 0) histIdx--;
-      set(items[histIdx]);
+      recall(items[histIdx]);
     } else {
       if (histIdx === -1) return;
       histIdx++;
-      if (histIdx >= items.length) { histIdx = -1; set(draft); } else set(items[histIdx]);
+      if (histIdx >= items.length) { histIdx = -1; set(draft); } else recall(items[histIdx]);
     }
   }
 
@@ -251,7 +233,7 @@ export function createPrompt(opts) {
         return;
       }
     }
-    if (graphOn() && graphKey(e)) { e.preventDefault(); return; }
+    if (e.key === 'Enter' && graphOn() && graphEnter()) { e.preventDefault(); return; }
     if (action) {
       // Handled even when nothing changes, so Ctrl+A never selects the page
       // and Ctrl+E / Ctrl+K never jump to the browser's search box.

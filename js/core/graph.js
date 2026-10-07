@@ -200,6 +200,73 @@ function formsOf(def) {
   return parsed.get(def);
 }
 
+// ---- the command graph -------------------------------------------------------------
+// The explicit structure everything else reads: each command's usage forms
+// merged into a tree of element nodes (forms sharing a start share nodes).
+//   node: { id, kind: 'command' | 'word' | 'param', name (the command), el (the
+//           usage element: { lit, words } or a placeholder), children: [node],
+//           end (a complete command can stop here), lines: [usage lines through it],
+//           level (words from the command), depth (longest path below) }
+// A free-text placeholder (el.rest) can take any number of words: reading stays on it.
+// Known values (ids, fields, foods) aren't nodes: they come from the command's
+// complete() for the path so far (neighbors()).
+
+let nodeN = 0;
+const tries = new WeakMap();
+const elKey = (el) => (el.lit ? 'w:' + el.words.join('|') : 'p:' + el.display + (el.rest ? '…' : '') + (el.re ? '/' + el.re.source : ''));
+
+// The tree of one command (built once per def).
+export function commandNode(def) {
+  if (tries.has(def)) return tries.get(def);
+  const root = { id: ++nodeN, kind: 'command', name: def.name, def, el: null, children: [], end: !def.usage || !def.usage.length, lines: [], level: 0, depth: 0 };
+  const addLine = (n, line) => { if (!n.lines.includes(line)) n.lines.push(line); };
+  for (const form of formsOf(def)) {
+    let n = root;
+    addLine(n, form.line);
+    for (const el of form.seq) {
+      const key = elKey(el);
+      let c = n.children.find((x) => x.key === key);
+      if (!c) {
+        c = { id: ++nodeN, key, kind: el.lit ? 'word' : 'param', name: def.name, def, el, children: [], end: false, lines: [], level: n.level + 1, depth: 0 };
+        n.children.push(c);
+      }
+      addLine(c, form.line);
+      n = c;
+    }
+    n.end = true;
+  }
+  const depth = (n) => (n.depth = n.children.reduce((m, c) => Math.max(m, 1 + depth(c)), 0));
+  depth(root);
+  // The fullest continuations first, so a value is named after its place in the
+  // whole line ('cook oven chicken': <food>, not <doneness>).
+  const order = (n) => { n.children.sort((a, b) => b.depth - a.depth); n.children.forEach(order); };
+  order(root);
+  tries.set(def, root);
+  return root;
+}
+
+// What can follow a node: its child words and placeholders, and the values the
+// command knows there (from its complete() for the words so far).
+//   -> [{ value, label, kind: 'word' | 'param', node?, el? }]
+export function neighbors(node, prev = []) {
+  const out = [];
+  const seen = new Set();
+  const word = (value, label, child) => {
+    const k = value.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push({ value, label: label || '', kind: 'word', node: child || null });
+  };
+  let known = [];
+  try { known = node.def && node.def.complete ? node.def.complete(prev.map((p) => p.toLowerCase())) || [] : []; } catch (e) { known = []; }
+  for (const k of known) if (k && typeof k.value === 'string') word(k.value, k.label);
+  for (const c of node.children) {
+    if (c.el.lit) c.el.words.forEach((w) => word(w, '', c));
+    else out.push({ value: c.el.display, label: c.el.rest ? 'free text' : 'a value', kind: 'param', node: c, el: c.el });
+  }
+  return out;
+}
+
 // ---- fuzzy matching ----------------------------------------------------------------
 // Tiers, best first: 5 the same word, 4 its start, 3 one typo, 2 one typo in its
 // start or two in a long word, 1 its letters in order from the first. 0: no match.
@@ -263,9 +330,9 @@ function defFor(name, env) {
   return e ? entryDef(e) : null;
 }
 
-// The words and placeholders that can follow, from the states that matched
+// The words and placeholders that can follow, from the positions that matched
 // best so far (a typed word beats a placeholder taking it) and from the
-// command's own completion.
+// command's own completion. A position: { node, in (inside free text), score }.
 function levelOf(def, prev, states) {
   const lits = [];
   const seen = new Set();
@@ -282,54 +349,50 @@ function levelOf(def, prev, states) {
   // The fullest forms first, so a value is named after its place in the whole line
   // ('cook oven chicken': <food>, not <doneness>).
   const primary = states.filter((s) => s.score === best);
-  const lines = [...new Set(primary.map((s) => s.form.line))];
-  primary.sort((a, b) => b.form.seq.length - a.form.seq.length);
+  const lines = [...new Set(primary.flatMap((s) => s.node.lines))];
+  primary.sort((a, b) => (b.node.level + b.node.depth) - (a.node.level + a.node.depth));
   const phs = [];
   const addPh = (el) => { if (!phs.includes(el) && !phs.some((p) => p.display === el.display)) phs.push(el); };
   let canEnd = !def.usage || !def.usage.length;
   for (const s of primary) {
-    if (s.in) addPh(s.form.seq[s.i - 1]); // free text can go on
-    const el = s.form.seq[s.i];
-    if (!el) canEnd = true;
-    else if (el.lit) el.words.forEach((w) => addLit(w));
-    else addPh(el);
+    if (s.in) addPh(s.node.el); // free text can go on
+    if (s.node.end) canEnd = true;
+    for (const c of s.node.children) {
+      if (c.el.lit) c.el.words.forEach((w) => addLit(w));
+      else addPh(c.el);
+    }
   }
   // Free text can take the next word unless a known word clearly beat it ('t t1 dne': done, not text).
   const takers = states.filter((s) => s.in && s.score >= best - 1);
   return { def, prev, states, lits, phs, canEnd, lines, takers };
 }
 
-// Moves every state over one token. Strength: a literal word 2, a placeholder
+// Moves every position over one token. Strength: a literal word 2, a placeholder
 // with literal parts 1, a plain placeholder 0. A word the command knows (an id
 // from its completion) counts as literal for a one-word placeholder (<id>),
 // unless a literal word in the usage matches it too.
 function advance(states, text, value, known) {
   const next = new Map();
-  const put = (form, i, inRest, score) => {
-    const k = formsKey(form) + ':' + i + (inRest ? '+' : '');
+  const put = (node, inRest, score) => {
+    const k = node.id + (inRest ? '+' : '');
     const old = next.get(k);
-    if (!old || old.score < score) next.set(k, { form, i, in: inRest, score });
+    if (!old || old.score < score) next.set(k, { node, in: inRest, score });
   };
   const lower = String(value).toLowerCase();
-  const litHit = states.some((s) => { const el = s.form.seq[s.i]; return el && el.lit && el.lit.includes(lower); });
+  const litHit = states.some((s) => s.node.children.some((c) => c.el.lit && c.el.lit.includes(lower)));
   const bonus = known && !litHit ? 2 : 0;
   for (const s of states) {
-    if (s.in) put(s.form, s.i, true, s.score);
-    const el = s.form.seq[s.i];
-    if (!el) continue;
-    if (el.lit) { if (el.lit.includes(lower)) put(s.form, s.i + 1, false, s.score + 2); continue; }
-    if (el.re) { if (el.re.test(text)) put(s.form, s.i + 1, el.rest, s.score + 1 + (el.rest ? 0 : bonus)); continue; }
-    put(s.form, s.i + 1, el.rest, s.score + (el.rest ? 0 : bonus));
+    if (s.in) put(s.node, true, s.score);
+    for (const c of s.node.children) {
+      const el = c.el;
+      if (el.lit) { if (el.lit.includes(lower)) put(c, false, s.score + 2); continue; }
+      if (el.re) { if (el.re.test(text)) put(c, el.rest, s.score + 1 + (el.rest ? 0 : bonus)); continue; }
+      put(c, el.rest, s.score + (el.rest ? 0 : bonus));
+    }
   }
   return [...next.values()].slice(0, MAX_STATES);
 }
-// Forms of one line differ by which optional parts they keep; tell them apart.
-const formIds = new WeakMap();
-let formN = 0;
-function formsKey(form) {
-  if (!formIds.has(form)) formIds.set(form, ++formN);
-  return formIds.get(form);
-}
+const startOf = (def) => [{ node: commandNode(def), in: false, score: 0 }];
 
 // Does a placeholder take this text? (A number placeholder wants something numeric.)
 function phTakes(el, text) {
@@ -367,7 +430,7 @@ function matchWord(level, tok, env) {
       level.phs.find((el) => !el.re && phTakes(el, t) && !/^id\b/.test(el.ph)) || level.phs.find((el) => !el.re);
     const inRest = level.takers[0];
     if (ph || inRest) {
-      const el = ph || inRest.form.seq[inRest.i - 1];
+      const el = ph || inRest.node.el;
       return { node: { value: t, text: t, kind: 'param', label: el.display, rest: !!el.rest } };
     }
   }
@@ -380,7 +443,7 @@ function nextLevel(level, node, env, prev) {
   if (level.root) {
     const def = defFor(node.value, env);
     if (!def) return null;
-    return levelOf(def, [], formsOf(def).map((form) => ({ form, i: 0, in: false, score: 0 })));
+    return levelOf(def, [], startOf(def));
   }
   const states = advance(level.states, node.text, node.value, node.kind === 'word');
   return levelOf(level.def, prev, states);
@@ -539,7 +602,7 @@ export function graphView(text, env) {
         canEnd = after.canEnd;
       } else if (last && level && level.root) {
         const def = defFor(last.value, env);
-        canEnd = !!def && levelOf(def, [], formsOf(def).map((form) => ({ form, i: 0, in: false, score: 0 }))).canEnd;
+        canEnd = !!def && levelOf(def, [], startOf(def)).canEnd;
       }
     }
   }

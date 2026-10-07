@@ -9,6 +9,7 @@ when the owner says go, write a [plan](../plans/README.md) and add it to
 | Topic | Status | Summary |
 | --- | --- | --- |
 | [iOS notifications](ios-notifications.md) | open: research task (6 Oct 2026); draft [plan 001](../plans/001-ios-notifications.md) | Home Screen web app + Web Push; needs a scheduled sender (GitHub Action or Cloudflare Worker). |
+| [Graph mode](graph-mode.md) | open: built as an experiment, refined 7 Oct 2026 ([plan 003](../plans/003-graph-mode-refinement.md)) | The owner's design note: two graphs, forward and backward panes, fisheye; the ring parked. |
 | [Apple Calendar, Reminders, Notes sync](apple-sync.md) | dropped by the owner, 5 Oct 2026 | No direct API; options from `.ics` export to a Mac helper. Revisit only if it becomes a pain point. |
 
 Statuses: **open** (being looked into), **parked** (owner said not now),

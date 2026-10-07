@@ -10,6 +10,7 @@ is enough.
 | Plan | Status |
 | --- | --- |
 | [001 · iOS notifications](001-ios-notifications.md) | draft; research task first |
+| [003 · Graph mode refinement](003-graph-mode-refinement.md) | in progress |
 
 New plans: `NNN-short-name.md`, listed here and linked from todo.md.
 

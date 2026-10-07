@@ -33,7 +33,9 @@ How to use this file:
 
 ## In progress
 
-Nothing.
+- **Graph mode refinement** (owner's design note, 7 Oct 2026; started 7 Oct).
+  Plan and progress log: [plan 003](plans/003-graph-mode-refinement.md);
+  design: [exploration/graph-mode.md](exploration/graph-mode.md).
 
 ## Dev
 

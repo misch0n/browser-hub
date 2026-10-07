@@ -78,6 +78,124 @@ otherwise. The owner may reorder.
    README and command reference updated, and the "WebSocket" line in
    [deferred.md](deferred.md) updated.
 
+The owner's picks from the suggestion list (7 Oct 2026), in their order.
+Each new command: completion, help with examples, `npm run docs`, README,
+unit tests (six time zones where dates are involved), e2e when it draws or
+interacts. Anything holding something you keep is a synced collection in the
+shared grammar ([recipes.md](recipes.md#add-a-collection)).
+
+5. **`char`: hidden and odd characters** (owner: "something to spot hidden
+   chars and odd chars. say I put a letter in another language").
+   *What:* `char <text>` (or a paste) lists each character: code point
+   (`U+0430`), UTF-8 bytes, script (`\p{Script=…}`, no data table) and
+   category. Flags, at the top: invisible ones (zero-width space/joiners,
+   BOM, soft hyphen, bidi controls such as U+202E, no-break and other unusual
+   spaces, control characters) and words mixing scripts (a Cyrillic `а` in a
+   Latin word, the homoglyph case), each with its position. `char clean <text>`
+   gives the text with the invisible ones removed (copyable). Names: for the
+   flagged set from a small table of our own, not the whole Unicode list.
+   *Done when:* a pasted Latin word with one Cyrillic letter and a zero-width
+   space is flagged with both positions; emoji with joiners and flags read as
+   one visible character with their parts listed.
+6. **JSON traversal** (owner: "json traversal, yes").
+   *What:* `json path <expr> <json>` with a small jq/JSONPath-like syntax:
+   `.a.b`, `[0]`, `[-1]`, `[*]` / `.*`, `..key` (recursive), `["odd key"]`;
+   results as a list (each with its path) or the single value as a tree.
+   In the existing tree, tapping a node shows its path (copyable), so you can
+   find a path by clicking and reuse it. Errors say where the expression broke.
+   *Done when:* unit tests cover each step type, missing keys (empty, not an
+   error) and bad expressions; README and reference updated.
+7. **`chmod` resolver** (owner: "chmod resolver yes").
+   *What:* `chmod 755` → `rwxr-xr-x`, `u=rwx,g=rx,o=rx` and a who-can-what
+   table; `chmod rwxr-x---` → `750`; special bits (`4755` setuid, `2755` setgid,
+   `1777` sticky, shown as `s`/`t`/`S`/`T`); `chmod 644 u+x,go-r` applies
+   symbolic changes to a mode and prints the result; `ls -l` strings with the
+   type letter (`drwxr-xr-x`) accepted.
+8. **`hexdump` / `bin`: byte inspector** (owner: "hexdump/bin inspector").
+   *What:* `hexdump <text>` (UTF-8; `utf16le`/`utf16be` option): offset, hex
+   and printable columns, 16 bytes a row; `hexdump file` picks a local file
+   (read on the device, never uploaded) and shows its first 4 KB, size and
+   type from its magic number (PNG, JPEG, GIF, PDF, ZIP/Office, gzip, ELF,
+   Mach-O, PE, SQLite, …), with "more" to page; `hexdump hex <48 65 6c…>`
+   decodes bytes back to text; `bin <number|text>` shows binary (bytes grouped,
+   with hex and decimal). *Done when:* unit tests for the dump layout,
+   encodings and magic numbers; e2e for the file pick.
+9. **`pw check`** (owner: "pw check why not").
+   *What:* `pw check` asks for the password with hidden input (`askSecret`,
+   never echoed, kept or synced; private and noHistory like `pw`) and
+   estimates its strength on the device: length and character classes,
+   minus patterns (EFF word-list words from `lib/wordlist.js`, sequences,
+   repeats, dates, keyboard runs, common substitutions), as bits and a time
+   to crack offline and online, with what weakens it. Says plainly that it's
+   an estimate and that a reused or leaked password is weak whatever its score
+   (no breach lookup: that would send data off the device).
+10. **`holiday`: Bulgarian holidays from почивнидни.com** (owner, 7 Oct 2026).
+    *What:* `holiday` this month, `holiday <week number>` that week only,
+    `holiday <month name>` that month, `holiday year` the whole year (also
+    `holiday 2027`). Each day off with its date, weekday and name, moved days
+    off and working Saturdays included as the site lists them.
+    *Check first:* whether the page can read the site at all: the browser
+    needs it to allow cross-origin reads (CORS). The owner can test this on
+    their device with `request https://xn--b1aekbb1acci5f.com` (it reports
+    whether a page may read the response). Agents' cloud environment can't
+    reach the site (blocked by its network policy) unless the owner allows the
+    domain. If the site doesn't allow it: ask the owner. The fallback is to
+    compute the official holidays (Labour Code list, Orthodox Easter, the
+    rule moving a holiday on a weekend to the next working day), which
+    misses one-off bridge days the government declares.
+    *Rules:* fetched HTML is untrusted: parsed with `DOMParser` (never
+    inserted), every date and name validated; one fetch per year cached on
+    the device (`cc-device:holidays`, refreshed weekly) so it works offline;
+    the source is named in the output. *Open (ask when starting):* mark the
+    days in `cal` and the calendar widget too? Default: yes, once fetched.
+11. **`sun` / `moon`** (owner: "sun/moon yes").
+    *What:* `sun` today's dawn, sunrise, solar noon, sunset, dusk and day
+    length (and the change since yesterday); `sun <date>`; `moon` phase,
+    illumination, next new and full moon; computed (NOAA / Meeus formulas),
+    no network. *Open (ask when starting):* where: a place set once
+    (`config location <lat>,<lon>` or a city name from a small built-in list),
+    or the browser's location on request. Default: `config location`, with
+    Sofia offered.
+12. **Timers and stopwatches** (owner, 7 Oct 2026; revives the 5 Oct
+    deferral, D21).
+    *What:* `timer 10m [name]` starts a timer, `stopwatch [name]` a stopwatch;
+    `timer list` / `stopwatch list` list all (running and stopped).
+    Each is an entry with its recorded start time (and duration for a
+    timer); everything live is worked out from that, so it survives reloads
+    and shows the same on every device (synced). They run until stopped:
+    `timer tea stop`, `stopwatch run stop` (by name or id), `… rm`; a
+    stopwatch can `lap`. A finished timer shows as done (overdue time
+    counting) and alerts while the page is open (a line, a sound, the tab
+    title); notifications when the page is closed belong to the iOS
+    notifications research. A widget shows the running ones.
+    *Done when:* unit tests with a fake clock (start, stop, lap, finished,
+    reload), e2e for the live display; README and reference updated.
+13. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
+    events (3). *What:* `birthdays add <name> <date>` (year optional), shown
+    yearly in `agenda`, `cal`, `today` and the summary as "Ana turns 40"
+    (no age without a year); `birthdays` lists them by next date with days to go.
+14. **`lists`: reusable checklists** (owner: "lists yes").
+    *What:* `lists add packing`, `lists packing add passport`, `lists packing`
+    shows it with tappable checkboxes, `lists packing reset` unchecks all,
+    items editable and removable in the shared grammar; synced.
+15. **`subs`: subscriptions** (owner: "subs yes").
+    *What:* `subs add <name> <price> <currency> every:month|year|<n>m
+    next:<date>`; `subs` lists them with the monthly and yearly total per
+    currency (no conversion: currency rates are deferred), renewals in
+    `agenda` and `today`; the next date moves on by itself.
+16. **`log`: a journal** (owner: "log yes").
+    *What:* `log <text>` adds a dated entry, `log` shows the last days,
+    `log yesterday` / `log <date>` / `log <month>`; entries searchable by
+    `find`; synced. *Open (ask when starting):* an "on this day" line in
+    `today`? Default: yes, when there is one.
+17. **Calorie tracker** (owner: "calorie tracker yes").
+    *What:* a daily food log on top of `cook calorie`'s table and your own
+    foods: `eat 150 g chicken-breast` (household portions too) adds to today
+    with kcal and macros; `eat` shows today's total against a target
+    (`eat target 2000`), `eat yesterday`, `eat week` with a daily sparkline;
+    entries editable and removable; synced. *Open (ask when starting):* the
+    command name (`cal` is taken by the calendar). Default: `eat`.
+
 ## Research
 
 Only when the owner asks; ends with findings in [exploration/](exploration/README.md)

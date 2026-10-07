@@ -5,6 +5,9 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 7 October 2026
 
+- Queued as Dev tasks (owner's picks): `char`, `json path`, `chmod`, `hexdump`/`bin`,
+  `pw check`, `holiday` (почивнидни.com), `sun`/`moon`, timers and stopwatches (D21),
+  birthdays, `lists`, `subs`, `log`, a calorie tracker; `cook scale` deferred to later.
 - Graph mode refined ([plan 003](plans/archive/003-graph-mode-refinement.md), D20): the prompt
   works as always (Tab, ↑↓, Esc), and the overlay shows the path, each passed
   word's other choices, and the letter tree at the cursor (fisheye) with what

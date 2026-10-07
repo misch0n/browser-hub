@@ -148,3 +148,15 @@ recent values). The prompt keeps every normal key (amends D19's ↑↓/Tab/
 Backspace/Esc takeover); Enter still runs the resolved command, and an
 ambiguous word runs as typed. Parked: the ring, convergence in the command
 graph, normal-mode completion on the graph ([exploration](exploration/graph-mode.md)).
+
+**D21. Timers and stopwatches after all; a holiday source from the web** (7 Oct 2026, active)
+Owner, picking from the suggestion list: timers and stopwatches ("simple
+invocation registers either one … they go until stopped. an entry is made
+with recorded start time and that's how we resolve it when live"), reversing
+the 5 Oct deferral; and Bulgarian holidays read from почивнидни.com rather than
+computed. → Timers are synced entries resolved from their start time, so they
+survive reloads and match on every device; alerts only while a page is open
+(closed-page notifications stay with the iOS research). The holiday source is
+a third-party page: parsed as untrusted data, cached on the device, and only
+built if the site allows cross-origin reads (or the owner accepts the computed
+fallback). `cook scale` waits for the owner's other project.

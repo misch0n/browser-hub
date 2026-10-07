@@ -637,46 +637,73 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 #status-sync[data-state="ok"] { color: var(--ok); }
 #status-sync[data-state="error"], #status-sync[data-state="auth"] { color: var(--err); border-color: var(--err); }
 
-/* ---- graph mode (experimental): the fan of next steps above the prompt -------------------- */
+/* ---- graph mode (experimental): an overlay above the prompt, one column per word ---------- */
 
 #graph {
-  position: absolute;
-  left: var(--gutter);
-  right: var(--gutter);
-  bottom: calc(100% - 2px);
-  z-index: 19;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-width: 90ch;
-  max-height: min(50vh, 380px);
-  padding: 8px 1.2ch;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  padding: 12px var(--gutter) calc(var(--composer-h, 90px) + 6px);
+  background: var(--bg);
+  --row: 1.9em;
 }
 
 #graph[hidden] { display: none; }
-.g-crumbs { overflow-wrap: anywhere; }
-.g-fan { display: flex; flex-wrap: wrap; gap: 4px 6px; overflow-y: auto; min-height: 0; padding: 1px; }
-.g-node {
-  font: inherit;
-  padding: 1px 0.8ch;
-  color: var(--fg);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+.graph-on #composer { z-index: 41; }
+.graph-on #palette { z-index: 42; }
+
+.g-top { flex: none; }
+.g-frame { position: relative; flex: 1; min-height: 0; display: flex; }
+.g-stage { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; overflow-x: auto; overflow-y: hidden; }
+/* The centre line: the path the command takes (on the frame, so it doesn't scroll away) */
+.g-frame::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--row);
+  transform: translateY(-50%);
+  background: var(--bg-hl);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  pointer-events: none;
+}
+.g-row { position: relative; display: flex; gap: 0.6ch; margin: auto 0; padding: 0 1ch; }
+.g-col, .g-join { display: flex; flex-direction: column; }
+.g-col { min-width: 6ch; max-width: 26ch; }
+.g-col.g-active { max-width: 40ch; }
+.g-cell {
+  height: var(--row);
+  line-height: var(--row);
+  padding: 0 0.6ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dim);
   cursor: pointer;
 }
-.g-node.g-command, .g-node.g-graph { color: var(--accent); }
-.g-node.g-word { color: var(--strong); }
-.g-node.g-param { color: var(--dim); border-style: dashed; }
-.g-node.g-miss { opacity: 0.4; }
-.g-node.selected { background: var(--bg-hl); border-color: var(--accent); opacity: 1; }
-.g-desc, .g-empty { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.g-lines { border-top: 1px solid var(--border); padding-top: 4px; }
-.g-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-blank, .g-arrow { cursor: default; }
+.g-arrow { color: var(--faint); }
+.g-cell.g-d1 { opacity: 0.85; }
+.g-cell.g-d2 { opacity: 0.6; }
+.g-cell.g-d3 { opacity: 0.42; }
+.g-cell.g-d4 { opacity: 0.28; }
+.g-col:not(.g-active) .g-cell:not(.g-center) { opacity: 0.3; }
+.g-cell.g-miss { opacity: 0.18; }
+.g-cell.g-param { font-style: italic; }
+.g-center { color: var(--strong); font-weight: 600; }
+.g-center.g-command, .g-center.g-graph { color: var(--accent); }
+.g-center.g-param .g-val { color: var(--num); font-style: normal; }
+.g-center.g-raw, .g-center.g-miss { color: var(--warn); }
+.g-center.selected { box-shadow: inset 0 -2px 0 var(--accent); }
+.g-col.g-pending .g-center { color: var(--faint); font-weight: 400; }
+.g-sub { color: var(--faint); font-weight: 400; font-style: normal; }
+.g-foot { flex: none; max-height: 30%; overflow: hidden; padding-top: 6px; border-top: 1px solid var(--border); }
+.g-desc, .g-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-desc { color: var(--dim); margin-bottom: 2px; }
 
 /* ---- command palette ------------------------------------------------------------------- */
 

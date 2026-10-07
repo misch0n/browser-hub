@@ -320,6 +320,8 @@ function describe(v, ghost, hist, search, secret) {
 const graphPrefs = () => readPrefs(store.getLocal(PREFS_KEY));
 const graph = createGraph({
   panel: $('graph'),
+  root,
+  composer: $('composer'),
   env: () => {
     const p = graphPrefs();
     return { defs: commands.defs, entries: state.aliases.entries, history: state.history.items, counts: p.counts, sort: p.sort };

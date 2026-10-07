@@ -129,3 +129,7 @@ after `graph ` unchanged except for words that resolve to exactly one known
 word; free text (anything a placeholder can take) is never corrected, and an
 ambiguous word stops the path until chosen. Counts and the ranking stay on the
 device. Keep it, change it or drop it once the owner has compared the orders.
+Owner's picture (same day): an overlay over the screen, a column per term
+with the closest match selected and the terms sorting above and below it,
+Tab to take it, then the next term. → Columns keep a stable order (use or a
+to z) and the match moves along them, instead of matches jumping to the top.

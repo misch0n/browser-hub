@@ -3494,12 +3494,12 @@ test('graph mode: path, fan and usage lines; values become typed placeholders', 
   v = G.graphView('graph cook target ', env);
   assert.ok(fanOf(v).includes('chicken-breast') && fanOf(v).includes('<food>')); // known values and the placeholder
   v = G.graphView('graph tasks ', env);
-  assert.deepEqual(fanOf(v), ['add', 'all', 't1', '#tag', '<id>']);
+  assert.deepEqual(fanOf(v), ['add', 'all', 't1', '<id>', '#tag']); // words by use then a to z, placeholders in grammar order
   assert.deepEqual(fanOf(G.graphView('graph tasks t1 ', env)), ['done', 'edit', 'rm']);
   assert.deepEqual(fanOf(G.graphView('graph tasks t1 edit ', env)), ['done', 'due', 'repeat', 'tags', 'text', '<field>']);
   v = G.graphView('graph t buy due:fri ', env);
   assert.equal(v.path[2].label, 'due:<date>');
-  assert.deepEqual(fanOf(v), ['#tag', 'every:<rule>']);
+  assert.deepEqual(fanOf(v), ['every:<rule>', '#tag']);
   v = G.graphView('graph g cats and dogs', env); // an engine takes words
   assert.equal(v.path[1].label, '<search words>');
   assert.equal(v.run, 'g cats and dogs');
@@ -3531,11 +3531,12 @@ test('graph mode: typos resolve to their node; free text is never changed; ambig
   assert.ok(v.ambiguous);
   assert.equal(v.run, null);
   assert.deepEqual(v.path, []);
-  assert.deepEqual(v.pending, ['convert']);
-  assert.deepEqual(fanOf(v).slice(0, 5), ['color', 'config', 'cook', 'count', 'cron']);
-  assert.ok(v.fan.slice(0, 5).every((f) => f.match) && !v.fan[5].match); // non-matches dimmed, still there
-  assert.equal(v.fan.length, G.graphView('graph ', env).fan.length);
-  assert.equal(G.accept('graph co convert', v, 2), 'graph cook convert');
+  assert.deepEqual(v.pending.map((t) => t.text), ['convert']);
+  // The same nodes in the same order as with nothing typed: the best match is chosen, the others dimmed around it.
+  assert.deepEqual(fanOf(v), fanOf(G.graphView('graph ', env)));
+  assert.equal(v.fan[v.sel].value, 'color'); // a tie in the best tier: the first in order
+  assert.deepEqual(v.fan.filter((f) => f.match).map((f) => f.value), ['color', 'config', 'cook', 'count', 'cron']);
+  assert.equal(G.accept('graph co convert', v, fanOf(v).indexOf('cook')), 'graph cook convert');
   assert.equal(G.graphView('graph cook c', env).ambiguous, true); // calorie or convert
   assert.equal(G.graphView('graph cook c', env).run, null);
 });
@@ -3545,15 +3546,16 @@ test('graph mode: Tab takes a node, Backspace steps back a word', async () => {
   const env = graphEnv(app);
   let text = 'graph cook ';
   let v = G.graphView(text, env);
+  assert.equal(G.accept(text, v, v.sel), 'graph cook calorie '); // nothing typed: the first in order
   text = G.accept(text, v, fanOf(v).indexOf('convert'));
   assert.equal(text, 'graph cook convert ');
   v = G.graphView(text, env);
   assert.equal(G.accept(text, v, 0), null); // a placeholder with nothing typed: type it
   text += '2';
   v = G.graphView(text, env);
-  assert.equal(G.accept(text, v, 0), 'graph cook convert 2 ');
+  assert.equal(G.accept(text, v, v.sel), 'graph cook convert 2 ');
   v = G.graphView('graph cook conv', env);
-  assert.equal(G.accept('graph cook conv', v, 0), 'graph cook convert ');
+  assert.equal(G.accept('graph cook conv', v, v.sel), 'graph cook convert ');
   assert.equal(G.back('graph cook convert '), 'graph cook ');
   assert.equal(G.back('graph cook '), 'graph ');
   assert.equal(G.back('graph '), null); // the next Backspace eats the space: normal mode
@@ -3572,15 +3574,37 @@ test('graph mode: ranked by match, then use or a to z; counts per node path', as
   prefs = G.bump(prefs, ['uuid']);
   assert.deepEqual(prefs.counts, { cook: 3, 'cook target': 3, uuid: 1 });
   const freq = G.graphView('graph ', graphEnv(app, { counts: prefs.counts }));
-  assert.deepEqual(fanOf(freq).slice(0, 3), ['cook', 'uuid', ':sort']);
+  assert.deepEqual(fanOf(freq).slice(0, 3), ['cook', 'uuid', 'agenda']);
   const alpha = G.graphView('graph ', graphEnv(app, { counts: prefs.counts, sort: 'alpha' }));
-  assert.deepEqual(fanOf(alpha).slice(0, 3), [':sort', 'agenda', 'alias']);
+  assert.deepEqual(fanOf(alpha).slice(0, 3), ['agenda', 'alias', 'aliases']);
+  assert.equal(fanOf(alpha).pop(), ':sort'); // the graph's own node goes last
   assert.deepEqual(fanOf(G.graphView('graph cook ', graphEnv(app, { counts: prefs.counts }))), ['target', 'calorie', 'convert', 'oven']);
-  // A typed word: match first in both orders.
-  assert.equal(fanOf(G.graphView('graph u', graphEnv(app, { counts: prefs.counts })))[0], 'uuid');
-  assert.deepEqual(fanOf(G.graphView('graph u', graphEnv(app, { counts: prefs.counts, sort: 'alpha' }))).slice(0, 4), ['ua', 'undo', 'units', 'url']);
+  // A typed word: the best match is chosen; among equally good ones, the first in order.
+  const chosen = (text, extra) => { const v = G.graphView(text, graphEnv(app, Object.assign({ counts: prefs.counts }, extra))); return v.fan[v.sel].value; };
+  assert.equal(chosen('graph u'), 'uuid');
+  assert.equal(chosen('graph u', { sort: 'alpha' }), 'ua');
+  assert.equal(chosen('graph uu', { sort: 'alpha' }), 'uuid');
+  assert.equal(chosen('graph cook c'), 'calorie');
   // The normal history counts at the root too.
   assert.equal(fanOf(G.graphView('graph ', graphEnv(app, { history: ['ping a', 'ping b'] })))[0], 'ping');
+
+  // Columns: one per word, its node at the centre, the nodes sorting before and after around it.
+  const v = G.graphView('graph cok convrt 2 cups plain flour', graphEnv(app));
+  const cols = v.columns.map((c) => [c.value, c.sub, c.kind, c.active ? 'active' : '']);
+  assert.deepEqual(cols, [['cook', '', 'command', ''], ['convert', '', 'word', ''], ['2', '<amount:number>', 'param', ''],
+    ['cups', '<measure>', 'param', ''], ['plain flour', '<ingredient>', 'param', 'active']]); // free text: one column
+  const cook = v.columns[0];
+  assert.equal(cook.items[cook.at].value, 'cook');
+  assert.deepEqual(cook.items.slice(cook.at - 2, cook.at + 3).map((i) => i.value), ['color', 'config', 'cook', 'count', 'cron']);
+  assert.ok(cook.corrected && cook.typed === 'cok');
+  // Typed text nothing matches sits where it would sort, marked.
+  const miss = G.graphView('graph cook xyz', graphEnv(app)).columns[1];
+  assert.deepEqual([miss.value, miss.kind, miss.hit, miss.items[miss.at - 1].value], ['xyz', 'miss', false, 'target']);
+  // A word nobody knows (a search) gets a column too.
+  assert.deepEqual(G.graphView('graph best pizza', graphEnv(app)).columns.map((c) => c.kind), ['raw', 'miss']);
+  // Picking in an earlier column changes that word and drops what depended on it.
+  assert.equal(G.pick('graph cok convrt 2 cups plain flour', v, 1, v.columns[1].items.findIndex((i) => i.value === 'oven')), 'graph cok oven ');
+  assert.equal(G.pick('graph cook ', G.graphView('graph cook ', graphEnv(app)), 0, 0), 'graph agenda ');
   // Stored prefs are checked; the counts are capped.
   assert.deepEqual(G.readPrefs({ sort: 'zzz', counts: { a: 2, b: -1, c: 'x', d: 1.5 } }), { sort: 'freq', counts: { a: 2 } });
   let big = { sort: 'alpha', counts: {} };

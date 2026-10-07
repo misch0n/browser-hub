@@ -5,6 +5,9 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 7 October 2026
 
+- Graph mode drawn as an overlay: one column per word, the path on a centre
+  line, neighbours sorting above and below; the best match is chosen as you
+  type; tapping an earlier column swaps that word.
 - Graph mode (experimental): `graph <command>` shows the path so far and every
   next step above the prompt, resolves typos, ranks by use or a to z (`graph :sort`),
   and runs the command exactly as the normal prompt does (D19).

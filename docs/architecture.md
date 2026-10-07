@@ -122,8 +122,11 @@ reads the grammar from what commands already declare: each def's `usage` lines
 those forms (a literal word beats a placeholder; a known id beats free text),
 mistyped words resolve by tier (prefix, one typo, letters in order) only where
 no placeholder could take them, and an ambiguous word stops the path.
-`ui/graph.js` draws the panel (`#graph`) and `ui/prompt.js` hands it ↑↓, Tab,
-Backspace, Enter and Esc. Enter runs the text after `graph ` through the usual
+The view describes columns, one per word, each holding the level's nodes in a
+stable order (by use or a to z) with the resolved node, or the best match for
+the word being typed, at its centre. `ui/graph.js` draws them as a full-screen
+overlay (`#graph`, outside `#app`; `.graph-on` lifts the composer above it) and
+`ui/prompt.js` hands it ↑↓, Tab, Backspace, Enter and Esc. Enter runs the text after `graph ` through the usual
 `run()`, with only resolved words replaced; `run()` also unwraps `graph <command>`
 arriving another way. Nothing in commands or dispatch changes. Use counts per
 node path and the ranking (`graph :sort`) are device-local (`cc-device:graph`).

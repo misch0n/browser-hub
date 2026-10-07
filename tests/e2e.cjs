@@ -1203,41 +1203,61 @@ async function check(name, fn) {
     await prompt.fill('');
   });
 
-  await check('graph mode: the fan at each step, typos resolve, Enter runs as normal mode does, Esc leaves', async () => {
+  await check('graph mode: an overlay of columns, best match on the centre line, Enter runs as normal mode does, Esc leaves', async () => {
     const graph = page.locator('#graph');
-    const nodes = () => page.locator('#graph .g-node').allInnerTexts();
-    const crumbs = () => page.locator('#graph .g-crumbs').innerText();
+    const path = () => page.locator('#graph .g-col .g-center .g-val').allInnerTexts(); // the centre line
+    const chosen = () => page.locator('#graph .g-active .g-center .g-val').innerText();
+    const column = (i) => page.locator('#graph .g-col').nth(i).locator('.g-cell:not(.g-blank)').allInnerTexts();
     await send('cook convert 2 cups flour');
     const normal = await lastText();
     await type('graph ');
     assert.equal(await graph.isVisible(), true);
-    assert.ok((await nodes()).includes('cook') && (await nodes()).includes(':sort'));
+    // The overlay covers the output; the prompt stays usable on top of it.
+    const box = await graph.boundingBox();
+    const vp = page.viewportSize();
+    assert.ok(box.x === 0 && box.y === 0 && box.width === vp.width && box.height === vp.height);
+    assert.equal(await page.evaluate(() => document.elementFromPoint(20, 20).closest('#graph') !== null), true);
+    const pb = await page.locator('.prompt-box').boundingBox();
+    assert.equal(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y).closest('.prompt-box'), [pb.x + 10, pb.y + pb.height / 2]), true);
     assert.match(await page.locator('#hint').innerText(), /^graph mode/);
-    await prompt.pressSequentially('cok convrt ');
-    assert.match(await crumbs(), /cook \(cok\) › convert \(convrt\)/);
-    assert.deepEqual(await nodes(), ['<amount:number>', '<temperature>']);
+    // Typing moves the best match onto the centre line; neighbours that sort around it stay above and below.
+    await prompt.pressSequentially('coo');
+    assert.equal(await chosen(), 'cook');
+    const around = await column(0);
+    const at = around.indexOf('cook');
+    assert.ok(at > 0 && at < around.length - 1, around.join(',')); // in order of use here: other commands above and below
+    await prompt.pressSequentially('k convrt ');
+    assert.deepEqual(await path(), ['cook', 'convert', '<amount:number>']);
+    assert.match(await page.locator('#graph .g-col').nth(1).locator('.g-center').innerText(), /convert \(convrt\)/);
     await prompt.pressSequentially('2 cups flour');
-    assert.equal(await page.locator('#ghost-rest').textContent(), ''); // the fan replaces the ghost
+    assert.deepEqual(await path(), ['cook', 'convert', '2', 'cups', 'flour']);
+    assert.equal(await page.locator('#ghost-rest').textContent(), '');
     assert.match(await page.locator('#hint').innerText(), /↵ runs cook convert 2 cups flour/);
     await page.keyboard.press('Enter');
     await page.waitForTimeout(60);
     assert.equal(await page.locator('.you-text').last().textContent(), 'cook convert 2 cups flour');
     assert.equal(await lastText(), normal);
     assert.equal(await prompt.inputValue(), 'graph '); // still in graph mode
-    // Ambiguous: the matches first, the rest dimmed; ↓ and Tab take one; Backspace steps back.
+    // Ambiguous: the best match chosen; ↓ moves along the column; Tab takes it; Backspace steps back.
     await prompt.pressSequentially('co');
-    assert.match(await crumbs(), /co\? which one\?/);
-    assert.ok(await page.locator('#graph .g-node.g-miss').count() > 50);
+    assert.match(await page.locator('#graph .g-top').innerText(), /"co" could be several/);
+    const first = await chosen();
     await page.keyboard.press('ArrowDown');
-    const chosen = await page.locator('#graph .g-node.selected').innerText();
+    const next = await chosen();
+    assert.notEqual(next, first);
     await page.keyboard.press('Tab');
-    assert.equal(await prompt.inputValue(), 'graph ' + chosen + ' ');
+    assert.equal(await prompt.inputValue(), 'graph ' + next + ' ');
     await page.keyboard.press('Backspace');
     assert.equal(await prompt.inputValue(), 'graph ');
-    await page.locator('#graph .g-node', { hasText: /^cook$/ }).click();
-    assert.equal(await prompt.inputValue(), 'graph cook ');
+    // A tap takes a node and keeps the keyboard in the prompt.
+    const near = page.locator('#graph .g-active .g-cell:not(.g-blank):not(.g-center)').first();
+    const tapped = await near.innerText();
+    await near.click();
+    assert.equal(await prompt.inputValue(), 'graph ' + tapped + ' ');
     assert.equal(await focused(), 'prompt');
-    assert.deepEqual(await nodes(), ['convert', 'calorie', 'oven', 'target']); // used most first
+    await page.keyboard.press('Backspace');
+    await prompt.pressSequentially('cook ');
+    assert.equal(await chosen(), 'convert'); // used most comes first
     await page.keyboard.press('Escape');
     assert.equal(await prompt.inputValue(), 'cook ');
     assert.equal(await graph.isVisible(), false);
@@ -1252,7 +1272,7 @@ async function check(name, fn) {
     assert.match(await lastText(), /Graph mode ranks a to z/);
     await prompt.fill('');
     await prompt.pressSequentially('graph cook ');
-    assert.deepEqual(await nodes(), ['calorie', 'convert', 'oven', 'target']);
+    assert.equal(await chosen(), 'calorie');
     await page.keyboard.press('Escape');
     await send('graph :sort freq');
     await prompt.fill('');

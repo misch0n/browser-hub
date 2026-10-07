@@ -15,9 +15,12 @@ import { distance, useCounts } from './completion.js';
 //   graphView(text, env) -> view | null (null when `text` isn't in graph mode)
 //     env: { defs: [all defs, hidden too], entries: [alias entries], history: [strings],
 //            counts: { 'cook convert': n, … }, sort: 'freq' | 'alpha' }
-//     view: { path: [node], pending: [text], focus: { start, end, query }, ambiguous,
-//             fan: [{ value, label, kind, ph, match }], lines: [usage line], run, canEnd, key }
+//     view: { path: [node], focus: { start, end, query }, ambiguous, offMap,
+//             fan: [{ value, label, kind, ph, match }] (the nodes that can come next, in a stable
+//             order), sel (the best match in fan), columns: [column] (one per word: see
+//             settledColumn), lines: [usage line], run, canEnd, key }
 //   accept(text, view, i) -> text with fan item i taken (null when it can't be)
+//   pick(text, view, col, i) -> text with item i of column col taken
 //   back(text) -> text with the last whole word removed (null when there is none)
 //   leave(text) -> the text without `graph `     countKeys(view) -> node paths to count
 
@@ -363,7 +366,10 @@ function matchWord(level, tok, env) {
     const ph = level.phs.find((el) => el.re && el.re.test(t)) ||
       level.phs.find((el) => !el.re && phTakes(el, t) && !/^id\b/.test(el.ph)) || level.phs.find((el) => !el.re);
     const inRest = level.takers[0];
-    if (ph || inRest) return { node: { value: t, text: t, kind: 'param', label: (ph || inRest.form.seq[inRest.i - 1]).display } };
+    if (ph || inRest) {
+      const el = ph || inRest.form.seq[inRest.i - 1];
+      return { node: { value: t, text: t, kind: 'param', label: el.display, rest: !!el.rest } };
+    }
   }
   const r = resolveWord(t, level.lits);
   if (r.pick) return { node: { value: r.pick.value, text: t, kind: level.root ? 'command' : 'word', corrected: true } };
@@ -380,23 +386,58 @@ function nextLevel(level, node, env, prev) {
   return levelOf(level.def, prev, states);
 }
 
-function rank(level, query, env, pathKey) {
+// The nodes of a level in a stable order, so the ones around the chosen node
+// stay put while you type: by use (freq) or a to z, placeholders and :sort last.
+// Each carries how well it matches `query` (t: tier; 0.5 a placeholder that takes it).
+function order(level, query, env, pathKey) {
   if (!level) return [];
   const uses = level.root ? useCounts(env.history || []) : {};
   const counts = env.counts || {};
   const freq = (v) => (counts[(pathKey ? pathKey + ' ' : '') + v.toLowerCase()] || 0) + (uses[v.toLowerCase()] || 0);
   const items = [
     ...level.lits.map((c) => ({ value: c.value, label: c.label, kind: c.kind, ph: false, t: tier(query, c.value) })),
-    ...level.phs.map((el) => ({ value: el.display, label: el.rest ? 'free text, as many words as you like' : 'a value you type', kind: 'param', ph: true, el, t: query && phTakes(el, query) ? 0.5 : 0 })),
+    ...level.phs.map((el) => ({ value: el.display, label: el.rest ? 'free text, as many words as you like' : 'a value you type', kind: 'param', ph: true, rest: !!el.rest, t: query && phTakes(el, query) ? 0.5 : 0 })),
   ];
   for (const it of items) it.match = !query || it.t > 0;
+  const last = (it) => (it.ph ? 2 : it.kind === 'graph' ? 1 : 0);
   const byFreq = env.sort !== 'alpha';
-  items.sort((a, b) => (b.match - a.match) || (b.t - a.t) || (a.ph - b.ph) ||
-    (byFreq ? freq(b.value) - freq(a.value) : 0) || (a.value.toLowerCase() < b.value.toLowerCase() ? -1 : a.value.toLowerCase() > b.value.toLowerCase() ? 1 : 0));
-  return items.map(({ value, label, kind, ph, match, el }) => ({ value, label, kind, ph, match, rest: !!(el && el.rest) }));
+  // Placeholders keep the grammar's order (free text being typed first).
+  const alpha = (a, b) => (a.value.toLowerCase() < b.value.toLowerCase() ? -1 : a.value.toLowerCase() > b.value.toLowerCase() ? 1 : 0);
+  items.sort((a, b) => (last(a) - last(b)) || (a.ph ? 0 : (byFreq ? freq(b.value) - freq(a.value) : 0) || alpha(a, b)));
+  return items;
+}
+
+// The best match: the highest tier, the first in order on a tie (so by use, then a to z). -1: none.
+function best(items) {
+  let at = -1;
+  items.forEach((it, i) => { if (it.t > 0 && (at < 0 || it.t > items[at].t)) at = i; });
+  return at;
+}
+
+// Where a word nothing knows would sort among the words of a level.
+function slot(items, word) {
+  const w = word.toLowerCase();
+  const i = items.findIndex((it) => it.ph || it.kind === 'graph' || it.value.toLowerCase() > w);
+  return i < 0 ? items.length : i;
 }
 
 const nodeKey = (n) => (n.kind === 'param' ? n.label || '<value>' : n.value.toLowerCase());
+
+// One column of the picture: the nodes of a level in order, and the one at its centre.
+//   { items, at (index of the centre, or where it would sort), hit (items[at] is it),
+//     value, sub (a placeholder's name), kind, corrected, typed, start, end, active, pending }
+function settledColumn(items, node, tok) {
+  const col = { items, value: node.value, sub: '', kind: node.kind, corrected: !!node.corrected, typed: node.text, start: tok.start, end: tok.end };
+  if (node.kind === 'param') {
+    col.at = items.findIndex((it) => it.ph && it.value === node.label);
+    col.sub = node.label;
+  } else if (node.kind !== 'raw') {
+    col.at = items.findIndex((it) => !it.ph && it.value.toLowerCase() === node.value.toLowerCase());
+  } else col.at = -1;
+  col.hit = col.at >= 0;
+  if (!col.hit) col.at = slot(items, node.value);
+  return col;
+}
 
 export function graphView(text, env) {
   const m = PREFIX.exec(String(text));
@@ -409,6 +450,7 @@ export function graphView(text, env) {
   const partial = trailing ? { text: '', start: text.length, end: text.length } : tokens[tokens.length - 1];
 
   const path = [];
+  const columns = [];
   let level = rootLevel(env);
   const prev = [];
   let focus = { start: partial.start, end: partial.end, query: partial.text };
@@ -416,25 +458,64 @@ export function graphView(text, env) {
   let pending = [];
   let fixes = [];
   let offMap = false; // after a word nothing knows: the rest is kept as typed
+  const keyOf = () => path.filter((n) => n.kind !== 'raw').map(nodeKey).join(' ');
   for (let i = 0; i < committed.length; i++) {
     const tok = committed[i];
-    if (offMap || !level) { path.push({ value: tok.text, text: tok.text, kind: 'raw' }); continue; }
+    if (offMap || !level) {
+      const node = { value: tok.text, text: tok.text, kind: 'raw' };
+      path.push(node);
+      columns.push(settledColumn([], node, tok));
+      continue;
+    }
     const r = matchWord(level, tok, env);
     if (r.ambiguous) {
       ambiguous = true;
       focus = { start: tok.start, end: tok.end, query: tok.text };
-      pending = committed.slice(i + 1).map((x) => x.text).concat(trailing ? [] : [partial.text]);
+      pending = committed.slice(i + 1).concat(trailing ? [] : [partial]);
       break;
     }
     const node = r.node;
+    const items = order(level, '', env, keyOf());
     path.push(node);
+    // Words of one free-text placeholder share a column ('buy oat milk').
+    const before = columns[columns.length - 1];
+    if (node.kind === 'param' && node.rest && before && before.kind === 'param' && before.sub === node.label && before.rest) {
+      before.value += ' ' + node.text;
+      before.typed = before.value;
+      before.end = tok.end;
+    } else {
+      const col = settledColumn(items, node, tok);
+      col.rest = !!node.rest;
+      columns.push(col);
+    }
     if (node.corrected) fixes.push({ start: tok.start, end: tok.end, value: node.value });
     if (node.kind === 'raw' && level.root) { offMap = true; level = null; continue; }
     if (!level.root) prev.push(node.value);
     level = nextLevel(level, node, env, prev);
   }
-  const pathKey = path.filter((n) => n.kind !== 'raw').map(nodeKey).join(' ');
-  const fan = rank(level, focus.query, env, pathKey);
+  const pathKey = keyOf();
+  const fan = order(level, focus.query, env, pathKey);
+  // The column being typed in: the best match at its centre; typed text that
+  // nothing matches sits where it would sort.
+  let sel = 0;
+  if (fan.length || focus.query) {
+    const at = focus.query ? best(fan) : 0;
+    const col = { items: fan, at, hit: at >= 0, value: '', sub: '', kind: 'miss', typed: focus.query, start: focus.start, end: focus.end, active: true };
+    if (col.hit) {
+      const it = fan[at];
+      sel = at;
+      Object.assign(col, it.ph ? { value: focus.query || it.value, sub: focus.query ? it.value : '', kind: 'param' } : { value: it.value, kind: it.kind });
+    } else {
+      col.at = slot(fan, focus.query);
+      col.value = focus.query;
+    }
+    // More words of the free text before it: one column.
+    const before = columns[columns.length - 1];
+    if (col.kind === 'param' && fan[at].rest && focus.query && before && before.kind === 'param' && before.rest && before.sub === col.sub) {
+      Object.assign(before, { items: fan, at, hit: true, value: before.value + ' ' + focus.query, typed: before.value + ' ' + focus.query, end: focus.end, active: true });
+    } else columns.push(col);
+  }
+  for (const tok of pending) columns.push(Object.assign(settledColumn([], { value: tok.text, text: tok.text, kind: 'raw' }, tok), { pending: true }));
 
   // What Enter runs: the text as typed, with resolved words put right.
   let run = null;
@@ -470,6 +551,8 @@ export function graphView(text, env) {
     ambiguous,
     offMap,
     fan,
+    sel,
+    columns,
     lines: level && level.lines ? level.lines.slice(0, MAX_LINES) : [],
     more: level && level.lines ? Math.max(0, level.lines.length - MAX_LINES) : 0,
     run,
@@ -493,6 +576,17 @@ export function accept(text, view, i) {
   }
   const after = text.slice(end);
   return text.slice(0, start) + it.value + (/^\s/.test(after) ? after : ' ' + after.replace(/^\s*/, ''));
+}
+
+// A node picked in an earlier column: that word becomes it, and what followed
+// goes (it depended on the old word). The column being typed in takes it as Tab does.
+export function pick(text, view, col, i) {
+  const c = view && view.columns[col];
+  const it = c && c.items[i];
+  if (!it) return null;
+  if (c.active) return accept(text, view, i);
+  if (it.ph) return c.kind === 'param' && c.sub === it.value ? text : text.slice(0, c.start);
+  return text.slice(0, c.start) + it.value + ' ';
 }
 
 // Backspace right after a whole word: remove the word (back to its parent node).

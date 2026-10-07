@@ -57,7 +57,7 @@ still work.
 | Web | `http`, `mime`, `ua`, `device` |
 | Network | `request`, `ping`, `dns`, `ip` |
 | Aliases & engines | `aliases`, `alias`, `engine` |
-| View | `theme`, `widgets`, `font` |
+| View | `theme`, `widgets`, `font`, `graph` |
 | Sync | `sync` |
 | Meta | `config`, `help`, `keys`, `undo`, `redo`, `clear`, `session`, `history`, `export`, `import` |
 <!-- commands:end -->
@@ -103,6 +103,23 @@ aliases after the built-in commands. A word one typo away from a
 command or alias gets a "did you mean" in the hint, and Tab fixes it. The
 **copy** button at the right of the prompt copies the latest result (a `calc`
 answer, a `uuid`, pretty JSON …).
+
+**Graph mode** (experimental) shows a command as a map while you type it.
+Start the line with `graph ` (`graph cook convert 2 cups flour`) and a panel
+above the prompt shows the path so far (`graph › cook › convert › …`) and
+every step that can come next: subcommands, known values (ids, fields, foods,
+months) and typed placeholders for the rest (`<amount:number>`, `<text>`),
+with the usage lines still possible underneath. While you type a word, the
+closest matches come first and the others are dimmed, not hidden. Typos and
+half-remembered words still find their place (`graph cok convrt` reads as
+`cook convert`, and Enter runs the corrected command); free text is never
+changed, and a word that could be several things waits until you pick one.
+**↑/↓** choose, **Tab** (or a tap) takes the chosen step, **Backspace** right
+after a word steps back one, **Enter** runs the command exactly as without
+`graph` and leaves the prompt in graph mode, **Esc** (or deleting `graph `)
+goes back to the normal prompt with the command kept. The fan ranks by how
+often you take each step (counted on this device), or a to z with
+`graph :sort alpha` (`graph :sort freq` switches back); `graph` alone explains it.
 
 `tz` shows the time across your zones; `tz 15:00 tokyo` shows 15:00 Tokyo
 time across them (any zone, by city, IANA name or your name for it). Manage the

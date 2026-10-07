@@ -1203,6 +1203,61 @@ async function check(name, fn) {
     await prompt.fill('');
   });
 
+  await check('graph mode: the fan at each step, typos resolve, Enter runs as normal mode does, Esc leaves', async () => {
+    const graph = page.locator('#graph');
+    const nodes = () => page.locator('#graph .g-node').allInnerTexts();
+    const crumbs = () => page.locator('#graph .g-crumbs').innerText();
+    await send('cook convert 2 cups flour');
+    const normal = await lastText();
+    await type('graph ');
+    assert.equal(await graph.isVisible(), true);
+    assert.ok((await nodes()).includes('cook') && (await nodes()).includes(':sort'));
+    assert.match(await page.locator('#hint').innerText(), /^graph mode/);
+    await prompt.pressSequentially('cok convrt ');
+    assert.match(await crumbs(), /cook \(cok\) › convert \(convrt\)/);
+    assert.deepEqual(await nodes(), ['<amount:number>', '<temperature>']);
+    await prompt.pressSequentially('2 cups flour');
+    assert.equal(await page.locator('#ghost-rest').textContent(), ''); // the fan replaces the ghost
+    assert.match(await page.locator('#hint').innerText(), /↵ runs cook convert 2 cups flour/);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(60);
+    assert.equal(await page.locator('.you-text').last().textContent(), 'cook convert 2 cups flour');
+    assert.equal(await lastText(), normal);
+    assert.equal(await prompt.inputValue(), 'graph '); // still in graph mode
+    // Ambiguous: the matches first, the rest dimmed; ↓ and Tab take one; Backspace steps back.
+    await prompt.pressSequentially('co');
+    assert.match(await crumbs(), /co\? which one\?/);
+    assert.ok(await page.locator('#graph .g-node.g-miss').count() > 50);
+    await page.keyboard.press('ArrowDown');
+    const chosen = await page.locator('#graph .g-node.selected').innerText();
+    await page.keyboard.press('Tab');
+    assert.equal(await prompt.inputValue(), 'graph ' + chosen + ' ');
+    await page.keyboard.press('Backspace');
+    assert.equal(await prompt.inputValue(), 'graph ');
+    await page.locator('#graph .g-node', { hasText: /^cook$/ }).click();
+    assert.equal(await prompt.inputValue(), 'graph cook ');
+    assert.equal(await focused(), 'prompt');
+    assert.deepEqual(await nodes(), ['convert', 'calorie', 'oven', 'target']); // used most first
+    await page.keyboard.press('Escape');
+    assert.equal(await prompt.inputValue(), 'cook ');
+    assert.equal(await graph.isVisible(), false);
+    await type('graph ');
+    await page.keyboard.press('Backspace');
+    assert.equal(await graph.isVisible(), false);
+    assert.match(await page.locator('#hint').innerText(), /^view graph/);
+    // The ranking switch, from graph mode itself.
+    await type('graph :sort alpha');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(60);
+    assert.match(await lastText(), /Graph mode ranks a to z/);
+    await prompt.fill('');
+    await prompt.pressSequentially('graph cook ');
+    assert.deepEqual(await nodes(), ['calorie', 'convert', 'oven', 'target']);
+    await page.keyboard.press('Escape');
+    await send('graph :sort freq');
+    await prompt.fill('');
+  });
+
   await check('pageshow clears stale input and refocuses', async () => {
     await prompt.fill('stale');
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));

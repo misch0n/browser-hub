@@ -36,10 +36,10 @@ keystroke ─► ui/prompt.js ─► main.js run() ─► core/dispatch.js
 | `index.html` | the page, its CSP, the DOM skeleton | entry points are stamped by the build |
 | `js/boot.js` | applies theme, panel state and text size before first paint | classic script, tiny, read-only |
 | `js/main.js` | wiring: prompt, transcript, palette, widgets, sync, `ctx`, lifecycle | the only place that knows all parts |
-| `js/core/` | data model and logic: store, data, dispatch, completion, records, merge, log, undo, search, dates | pure where possible; no DOM |
+| `js/core/` | data model and logic: store, data, dispatch, completion, graph mode, records, merge, log, undo, search, dates | pure where possible; no DOM |
 | `js/lib/` | self-contained helpers for features (calc, qr, barcode, x509, jose, crypt, net, nutrition, …) | pure, testable in Node; no DOM, no `ctx` |
 | `js/commands/` | built-in commands, one file per area, registered in `index.js` | never touch the DOM; talk only through `ctx` |
-| `js/ui/` | DOM: transcript renderer, prompt, palette, widgets, export, Mermaid host | the only code that builds elements |
+| `js/ui/` | DOM: transcript renderer, prompt, palette, graph panel, widgets, export, Mermaid host | the only code that builds elements |
 | `js/vendor/` | third-party code as published (Mermaid 12.1.0) | never edit; don't read (5.5 MB) |
 | `mermaid-frame.html`, `js/mermaid-frame.js` | the hidden page Mermaid draws in | own CSP; see Security |
 | `tools/` | build-site (deploy build), docs-commands (command reference), nutrition table builder | Node scripts |
@@ -113,6 +113,21 @@ command aliases, which `core/dispatch.js` expands into the built-in they name
 (`{ kind: 'builtin', name, rest, alias, expanded }`). A command alias can't
 name another alias, so expansion is one step and can't loop.
 
+## Graph mode (experimental)
+
+A prompt mode, on while the text starts with `graph `. `core/graph.js` (pure)
+reads the grammar from what commands already declare: each def's `usage` lines
+(words, `<placeholders>`, `[optional]`, `a|b`) expanded into linear forms, plus
+`complete(prev)` for known values. The input is matched word by word against
+those forms (a literal word beats a placeholder; a known id beats free text),
+mistyped words resolve by tier (prefix, one typo, letters in order) only where
+no placeholder could take them, and an ambiguous word stops the path.
+`ui/graph.js` draws the panel (`#graph`) and `ui/prompt.js` hands it ↑↓, Tab,
+Backspace, Enter and Esc. Enter runs the text after `graph ` through the usual
+`run()`, with only resolved words replaced; `run()` also unwraps `graph <command>`
+arriving another way. Nothing in commands or dispatch changes. Use counts per
+node path and the ranking (`graph :sort`) are device-local (`cc-device:graph`).
+
 ## Output
 
 Commands describe results; `js/ui/transcript.js` draws them. The `out` methods:
@@ -151,7 +166,7 @@ Stored as `cc:<collection>` in `localStorage`. Device-local values
 (`store.getLocal/setLocal`, key `cc-device:<name>`, never exported or synced):
 `sync` (settings), `sync-token`, `clip-key`, `clip`, `clip-seen`, `device`
 (id and name), `undo` (last 30 steps), `logView`, `fontScale`,
-`diagram-draft`. One more, `browser-hub:keybar`, is read directly by `main.js`.
+`diagram-draft`, `graph` (graph mode's ranking and use counts). One more, `browser-hub:keybar`, is read directly by `main.js`.
 
 Adding a collection touches about ten places; follow
 [recipes.md](recipes.md#add-a-collection).

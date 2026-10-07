@@ -18,6 +18,8 @@ import { isLive, timeLeft } from './core/clip.js';
 import { createTranscript } from './ui/transcript.js';
 import { createPrompt } from './ui/prompt.js';
 import { createPalette } from './ui/palette.js';
+import { createGraph } from './ui/graph.js';
+import { unwrap, readPrefs, bump, PREFS_KEY } from './core/graph.js';
 import { createWidgets } from './ui/widgets.js';
 import { h, rich, copyText } from './ui/dom.js';
 
@@ -208,6 +210,8 @@ function cancelOpen() {
 // `shown`: what the transcript echoes when it differs from what runs (a paste
 // placeholder instead of the pasted text).
 function run(raw, shown, pasted) {
+  // `graph <command>` from anywhere but the prompt (a link, ?q=) runs the command.
+  if (unwrap(raw) !== null) { raw = unwrap(raw); shown = shown && unwrap(shown) !== null ? unwrap(shown) : shown; }
   const input = raw.trim();
   const echoed = (shown || raw).trim();
   if (!input) return Promise.resolve();
@@ -286,6 +290,7 @@ function describe(v, ghost, hist, search, secret) {
       ['   ↵ run · ctrl+r older · tab edit · esc cancel', 'faint']];
   }
   if (hist) return [['history ', 'faint'], [hist.at + '/' + hist.of, 'num'], [' · ↑↓ to walk · esc clears', 'faint']];
+  if (graph.view) return graphHint(graph.view);
   if (!v.trim()) {
     return [['?', 'accent'], [' shortcuts   ', 'faint'], ['/', 'accent'], [' commands   ', 'faint'], ['tab', 'accent'], [' completes', 'faint']];
   }
@@ -310,8 +315,30 @@ function describe(v, ghost, hist, search, secret) {
   return [[res.message, 'err']];
 }
 
+// Graph mode (experimental): `graph ` before a command shows the grammar as a
+// graph above the prompt (ui/graph.js). Ranking and use counts stay on this device.
+const graphPrefs = () => readPrefs(store.getLocal(PREFS_KEY));
+const graph = createGraph({
+  panel: $('graph'),
+  env: () => {
+    const p = graphPrefs();
+    return { defs: commands.defs, entries: state.aliases.entries, history: state.history.items, counts: p.counts, sort: p.sort };
+  },
+  onPick: (text) => { prompt.set(text); prompt.focus(); },
+  onRun: (keys) => { if (keys.length) store.setLocal(PREFS_KEY, bump(graphPrefs(), keys)); },
+});
+
+function graphHint(v) {
+  const it = graph.selected;
+  const keys = [['   ↑↓', 'accent'], [' choose', 'faint'], ...(it && !it.ph ? [['  tab', 'accent'], [' ' + it.value, 'faint']] : [])];
+  const enter = v.ambiguous ? [['  ↵', 'accent'], [' takes ' + (it ? it.value : 'it'), 'faint']]
+    : v.run ? [['  ↵', 'accent'], [' runs ', 'faint'], [v.run, 'strong']] : [['  ↵', 'accent'], [' explains graph mode', 'faint']];
+  return [['graph mode', 'accent'], ...keys, ...enter, ['  esc', 'accent'], [' leaves', 'faint']];
+}
+
 const prompt = createPrompt({
   input: $('prompt'),
+  graph,
   ghostTyped: $('ghost-typed'),
   ghostRest: $('ghost-rest'),
   env: () => completionEnv(),

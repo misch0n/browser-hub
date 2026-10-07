@@ -118,3 +118,14 @@ names carry `aliasOf`. Every page opened from the prompt (aliases, searches,
 `later <id> open`) waits one second; Esc or another command cancels. The
 address bar and bounce links don't wait (they were asked for by a click or a
 browser search).
+
+**D19. Graph mode reads the existing grammar; it never changes what runs** (7 Oct 2026, experimental)
+Owner asked to try a graph mode for the prompt: `graph ` before a command shows
+every reachable next step, fuzzy-matched, ranked switchably by use or a to z;
+normal mode unchanged, no changes to execution or the grammar. → The graph
+is derived from each command's `usage` lines and `complete()`, so it can't
+drift from the commands and needs nothing new from them. Enter runs the text
+after `graph ` unchanged except for words that resolve to exactly one known
+word; free text (anything a placeholder can take) is never corrected, and an
+ambiguous word stops the path until chosen. Counts and the ranking stay on the
+device. Keep it, change it or drop it once the owner has compared the orders.

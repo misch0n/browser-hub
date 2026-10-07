@@ -1,13 +1,14 @@
 import { complete, applyTab } from '../core/completion.js';
 import { edit, actionFor, historySearch } from '../core/lineedit.js';
 import { shouldCollapse, labelFor, expandAll, expandAt, removeAt, toField, placeholders } from '../core/paste.js';
+import { back, leave } from '../core/graph.js';
 
 // The input line: ghost-text completion, Tab, history, and a live hint that
 // says what Enter would do.
 //
 // opts: { input, ghostTyped, ghostRest, hint, env(), history(), describe(value) -> segments,
 //         onSubmit(value), onPalette(), onShortcuts(), onEscape() -> bool (true if handled),
-//         onList(input, candidates) }
+//         onList(input, candidates), graph? (ui/graph.js: graph mode while the text starts with `graph `) }
 export function createPrompt(opts) {
   const { input, ghostTyped, ghostRest } = opts;
   let histIdx = -1;
@@ -20,6 +21,10 @@ export function createPrompt(opts) {
   // askSecret(): the next Enter hands over the text instead of running it,
   // with the field masked; it is never echoed or kept in history.
   let secret = null; // { resolve, placeholder }
+  // Graph mode (experimental): `graph <command>` shows every next step above the
+  // prompt; ↑↓ choose, Tab takes, Backspace after a word steps back, Esc leaves.
+  const graph = opts.graph || null;
+  const graphOn = () => !!(graph && graph.view && !secret && !search);
   // Long pastes, shown as placeholders until the cursor goes into one (core/paste.js).
   const pastes = new Map();
   let pasteN = 0;
@@ -48,6 +53,7 @@ export function createPrompt(opts) {
   }
 
   function ghostFor(v) {
+    if (graphOn()) return ''; // the graph panel shows the choices instead
     if (!v || input.selectionStart !== v.length || input.selectionEnd !== v.length) return '';
     // The ghost is drawn in a layer under the input; once the text scrolls
     // horizontally the two no longer line up, so don't draw it.
@@ -82,7 +88,7 @@ export function createPrompt(opts) {
   const DOUBLE_TAP_MS = 300;
   let lastTap = null; // { ch, at, pos }
   function doubleTap(e) {
-    if (secret || search || !opts.doubleTapTab || !opts.doubleTapTab()) return false;
+    if (secret || search || graphOn() || !opts.doubleTapTab || !opts.doubleTapTab()) return false;
     if (e.inputType !== 'insertText' || !e.data || !/^[a-z]$/i.test(e.data)) { lastTap = null; return false; }
     const pos = input.selectionStart;
     const at = (globalThis.performance || Date).now();
@@ -112,6 +118,7 @@ export function createPrompt(opts) {
         input.setSelectionRange(r.caret, r.caret);
       }
     }
+    if (graph) graph.refresh(secret || search ? '' : input.value);
     if (secret) {
       ghostTyped.textContent = '';
       ghostRest.textContent = '';
@@ -130,6 +137,41 @@ export function createPrompt(opts) {
     const match = search && search.idx >= 0 ? opts.history()[search.idx] : null;
     opts.hint(v, rest, histIdx === -1 ? null : { at: histIdx + 1, of: opts.history().length },
       search ? { query: v, match } : null);
+  }
+
+  // Keys that mean something else in graph mode. true when handled.
+  function graphKey(e) {
+    const v = input.value;
+    const atEnd = input.selectionStart === v.length && input.selectionEnd === v.length;
+    switch (e.key) {
+      case 'ArrowUp': case 'ArrowDown': graph.move(e.key === 'ArrowDown' ? 1 : -1); update(); return true;
+      case 'Tab': { const t = graph.accept(); if (t !== null) set(t); return true; }
+      case 'Backspace': {
+        if (!atEnd || e.altKey || e.ctrlKey || e.metaKey) return false;
+        const t = back(v);
+        if (t === null) return false;
+        set(t);
+        return true;
+      }
+      case 'Escape':
+        if (opts.onEscape()) return true;
+        set(leave(v));
+        return true;
+      case 'Enter': {
+        const r = graph.submit();
+        if (!r) return true;
+        if (r.input !== undefined) { set(r.input); return true; }
+        // As a normal Enter, with the resolved command; the prompt stays in graph mode.
+        const v2 = expandAll(r.run, pastes);
+        const pasted = placeholders(r.run, pastes).map((p) => pastes.get(p.label));
+        histIdx = -1;
+        pastes.clear();
+        set(r.leave ? '' : 'graph ');
+        opts.onSubmit(v2, r.run, pasted);
+        return true;
+      }
+      default: return false;
+    }
   }
 
   function startOrOlder() {
@@ -209,6 +251,7 @@ export function createPrompt(opts) {
         return;
       }
     }
+    if (graphOn() && graphKey(e)) { e.preventDefault(); return; }
     if (action) {
       // Handled even when nothing changes, so Ctrl+A never selects the page
       // and Ctrl+E / Ctrl+K never jump to the browser's search box.

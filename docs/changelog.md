@@ -3,6 +3,12 @@
 What shipped, newest first, by feature. One line per change; the commit has
 the detail (`git show <hash>`). Add a line here with every change you push.
 
+## 7 October 2026
+
+- Graph mode (experimental): `graph <command>` shows the path so far and every
+  next step above the prompt, resolves typos, ranks by use or a to z (`graph :sort`),
+  and runs the command exactly as the normal prompt does (D19).
+
 ## 6 October 2026
 
 - Command aliases (`alias groc tasks add {} #groceries`), listed with short names

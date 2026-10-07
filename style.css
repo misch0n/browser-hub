@@ -637,6 +637,47 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 #status-sync[data-state="ok"] { color: var(--ok); }
 #status-sync[data-state="error"], #status-sync[data-state="auth"] { color: var(--err); border-color: var(--err); }
 
+/* ---- graph mode (experimental): the fan of next steps above the prompt -------------------- */
+
+#graph {
+  position: absolute;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: calc(100% - 2px);
+  z-index: 19;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 90ch;
+  max-height: min(50vh, 380px);
+  padding: 8px 1.2ch;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+#graph[hidden] { display: none; }
+.g-crumbs { overflow-wrap: anywhere; }
+.g-fan { display: flex; flex-wrap: wrap; gap: 4px 6px; overflow-y: auto; min-height: 0; padding: 1px; }
+.g-node {
+  font: inherit;
+  padding: 1px 0.8ch;
+  color: var(--fg);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.g-node.g-command, .g-node.g-graph { color: var(--accent); }
+.g-node.g-word { color: var(--strong); }
+.g-node.g-param { color: var(--dim); border-style: dashed; }
+.g-node.g-miss { opacity: 0.4; }
+.g-node.selected { background: var(--bg-hl); border-color: var(--accent); opacity: 1; }
+.g-desc, .g-empty { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-lines { border-top: 1px solid var(--border); padding-top: 4px; }
+.g-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ---- command palette ------------------------------------------------------------------- */
 
 #palette {

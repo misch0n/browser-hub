@@ -25,8 +25,10 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 6 October 2026: unit tests (90) in six time zones, decoder
-  tests and 58 e2e checks pass.
+- Last verified 7 October 2026: unit tests (98) in six time zones, decoder
+  tests and 59 e2e checks pass.
+- Graph mode (`graph <command>`) is an experiment the owner asked to try; its
+  ranking switch (`graph :sort freq|alpha`) is there to compare both orders.
 - Command reference: [commands.md](commands.md) (generated from the code).
 
 ## In progress

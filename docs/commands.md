@@ -864,6 +864,17 @@ font reset
 
 Examples: `font bigger` · `font smaller` · `font 120%` · `font reset`
 
+### `graph`
+
+graph mode (experimental): every next step of a command shown as you type it *(no undo)*
+
+```
+graph <command …>
+graph :sort [freq | alpha]
+```
+
+Examples: `graph cook convert 2 cups flour` · `graph :sort alpha`
+
 ## Sync
 
 ### `sync`

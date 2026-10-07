@@ -18,7 +18,9 @@ import { distance, useCounts } from './completion.js';
 //     view: { path: [node], focus: { start, end, query }, ambiguous, offMap,
 //             fan: [{ value, label, kind, ph, match }] (the nodes that can come next, in a stable
 //             order), sel (the best match in fan), columns: [column] (one per word: see
-//             settledColumn), lines: [usage line], run, canEnd, key }
+//             settledColumn), lines: [usage line], run, canEnd, key,
+//             forward (the tree ahead of the cursor: see forwardOf) }
+//   commandNode(def) -> the command's tree in the graph    neighbors(node, prev) -> what can follow it
 //   accept(text, view, i) -> text with fan item i taken (null when it can't be)
 //   pick(text, view, col, i) -> text with item i of column col taken
 //   back(text) -> text with the last whole word removed (null when there is none)
@@ -622,7 +624,132 @@ export function graphView(text, env) {
     canEnd,
     pathKey,
     key: focus.start + '\u0000' + focus.query + '\u0000' + pathKey,
+    forward: forwardOf(offMap ? null : level, fan, sel, focus.query, path, prev, env),
   };
+}
+
+// ---- the forward pane ------------------------------------------------------------------
+// From the cursor on: the letter tree of the words that can stand here (the ones
+// the typed letters start), for each the next slot and the complete commands
+// still reachable through it, and the open slots with recent values from history.
+// Matching goes one word at a time, so this is the tree of one slot, rooted at
+// the cursor; choosing a word moves the root to that word's next slot.
+//   forward: { query, trie, words: [branch], typos: [branch], slots: [slot], more }
+//   trie node: { edge (the letters on the way in; the root's is what's typed),
+//                word (the branch ending here, or null), children: [node], size (words below) }
+//   branch: { value, label, kind, rest (letters still to type), best, end (a complete
+//             command once taken), next: [names of the slot after it], reach: [usage lines], more }
+//   slot: { display, type, rest (free text), takes (what's typed fits), recent: [values] }
+// The words keep the fan's stable order (by use or a to z); typos are words the
+// typed letters reach only by a typo, or by their letters in order when nothing
+// starts with them (shown apart, so a wrong landing is visible).
+
+const MAX_BRANCHES = 60; // words that get their next slot worked out
+const MAX_NEXT = 8;
+const MAX_REACH = 3;
+const MAX_RECENT = 3;
+
+// Radix tree of `words` (branches), below the typed letters.
+function letterTree(query, words) {
+  const root = { edge: query, word: null, children: [], size: 0 };
+  for (const w of words) {
+    let n = root;
+    n.size++;
+    for (const ch of w.rest) {
+      let c = n.children.find((x) => x.edge === ch);
+      if (!c) { c = { edge: ch, word: null, children: [], size: 0 }; n.children.push(c); }
+      c.size++;
+      n = c;
+    }
+    if (!n.word) n.word = w;
+  }
+  // One child and no word ending here: merge the letters into one edge.
+  const squash = (n) => {
+    for (const c of n.children) {
+      while (c.children.length === 1 && !c.word) {
+        const only = c.children[0];
+        c.edge += only.edge;
+        c.word = only.word;
+        c.children = only.children;
+      }
+      squash(c);
+    }
+  };
+  squash(root);
+  return root;
+}
+
+// What taking `value` at `level` leads to: the next slot's names, the usage lines
+// through it and whether it completes a command.
+function after(level, value, env, prev) {
+  let lv = null;
+  if (level.root) {
+    const def = defFor(value, env);
+    lv = def ? levelOf(def, [], startOf(def)) : null;
+  } else lv = levelOf(level.def, prev.concat(value), advance(level.states, value, value, true));
+  if (!lv) return { next: [], reach: [], more: 0, end: true };
+  const names = [...lv.lits.map((c) => c.value), ...lv.phs.map((el) => el.display)];
+  return { next: names.slice(0, MAX_NEXT), reach: lv.lines.slice(0, MAX_REACH), more: Math.max(0, lv.lines.length - MAX_REACH), end: lv.canEnd };
+}
+
+// The command a history line is, by its own name (short names count as the command they stand for).
+function canonical(word, env) {
+  const def = defFor(word, env);
+  return def ? (def.aliasOf || def.name) : String(word).toLowerCase();
+}
+
+// Values typed into this level's slots before, newest first: the word that came
+// after the same path in history (the rest of the line for free text).
+function recentValues(level, path, env) {
+  const out = new Map(level.phs.map((el) => [el.display, []]));
+  if (!path.length) return out;
+  const want = path.map((n) => n.value.toLowerCase());
+  const head = canonical(want[0], env);
+  const hist = env.history || [];
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const line = isGraph(hist[i]) ? leave(hist[i]) : String(hist[i]);
+    const toks = lexInput(line, 0);
+    if (toks.length <= path.length || canonical(toks[0].text, env) !== head) continue;
+    if (!want.every((w, k) => k === 0 || toks[k].text.toLowerCase() === w)) continue;
+    const tok = toks[path.length];
+    const r = matchWord(level, tok, env);
+    if (!r.node || r.node.kind !== 'param' || !out.has(r.node.label)) continue;
+    const value = r.node.rest ? line.slice(tok.start).trim() : tok.text;
+    const list = out.get(r.node.label);
+    if (list.length < MAX_RECENT * 3 && !list.includes(value)) list.push(value);
+  }
+  return out;
+}
+
+function forwardOf(level, fan, sel, query, path, prev, env) {
+  const view = { query, trie: letterTree(query, []), words: [], typos: [], slots: [], more: 0 };
+  if (!level) return view;
+  const q = query.toLowerCase();
+  const best = fan[sel] && fan[sel].t > 0 ? fan[sel] : null;
+  const branch = (it) => ({ value: it.value, label: it.label || '', kind: it.kind, rest: it.value.slice(query.length), best: it === best });
+  for (const it of fan) {
+    if (it.ph) continue;
+    if (!q || it.value.toLowerCase().startsWith(q)) view.words.push(branch(it));
+    else if (it.t > 0) view.typos.push(Object.assign(branch(it), { rest: it.value, t: it.t }));
+  }
+  // Letters merely in order (tier 1) only count when nothing starts with what's typed.
+  view.typos = view.typos.filter((w) => w.t > 1 || !view.words.length).map(({ t, ...w }) => w);
+  view.words.concat(view.typos).forEach((w, i) => {
+    if (i < MAX_BRANCHES) Object.assign(w, after(level, w.value, env, prev));
+    else Object.assign(w, { next: [], reach: [], more: 0, end: false });
+  });
+  view.trie = letterTree(query, view.words);
+  if (!level.root) {
+    const recent = recentValues(level, path, env);
+    for (const it of fan) {
+      if (!it.ph) continue;
+      const el = level.phs.find((p) => p.display === it.value);
+      const all = recent.get(it.value) || [];
+      const fits = all.filter((v) => !q || v.toLowerCase().startsWith(q));
+      view.slots.push({ display: it.value, type: el ? el.type : 'text', rest: !!it.rest, takes: !!query && it.t > 0, recent: (q ? fits : all).slice(0, MAX_RECENT) });
+    }
+  }
+  return view;
 }
 
 // ---- editing -------------------------------------------------------------------------

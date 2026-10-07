@@ -3615,6 +3615,42 @@ test('graph mode: ranked by match, then use or a to z; counts per node path', as
   assert.ok(!('new' in big.counts) && 'k449' in big.counts);
 });
 
+
+test('graph mode: the forward pane is the letter tree at the cursor, with what each word leads to', async () => {
+  const app = await makeApp();
+  const env = graphEnv(app, { history: ['cook convert 2 cups flour', 'graph cook convert 3 tbsp sugar', 'tasks add call mum', 't buy milk'] });
+  const fw = (t) => G.graphView(t, env).forward;
+  const tree = (n) => n.edge + (n.word ? '=' + n.word.value : '') + (n.children.length ? '(' + n.children.map(tree).join(' ') + ')' : '');
+  let f = fw('graph cook ');
+  assert.deepEqual(f.words.map((w) => w.value), ['calorie', 'convert', 'oven', 'target']);
+  assert.equal(tree(f.trie), '(c(alorie=calorie onvert=convert) oven=oven target=target)'); // radix: shared letters once
+  assert.equal(f.trie.size, 4);
+  const convert = f.words[1];
+  assert.deepEqual(convert.next, ['<amount:number>', '<temperature>']);
+  assert.ok(convert.reach.includes('cook convert <amount> <measure> <ingredient>') && !convert.end);
+  assert.ok(f.words[3].end && f.words[3].next.includes('chicken-breast')); // cook target: complete, or a food
+  f = fw('graph cook co'); // narrows as you type; rooted at the cursor
+  assert.equal(tree(f.trie), 'co(nvert=convert)');
+  assert.deepEqual([f.words[0].rest, f.words[0].best], ['nvert', true]);
+  assert.deepEqual(f.typos, []); // calorie has c…o only in order: not shown while a word starts with 'co'
+  f = fw('graph cook covert');
+  assert.deepEqual([f.words.length, f.typos.map((w) => w.value)], [0, ['convert']]); // a typo, shown apart
+  f = fw('graph co');
+  assert.ok(f.words.length >= 1 && f.words.every((w) => w.value.toLowerCase().startsWith('co')));
+  assert.equal(f.words.filter((w) => w.best).length, 1);
+  assert.equal(fw('graph ').trie.size, fw('graph ').words.length);
+  // Open slots: their shape, and what was typed there before (after the same words).
+  f = fw('graph cook convert ');
+  assert.deepEqual(f.slots.map((s) => [s.display, s.type, s.rest]), [['<amount:number>', 'number', false], ['<temperature>', 'text', true]]);
+  assert.deepEqual(f.slots[0].recent, ['3', '2']); // newest first, typed in graph mode or not
+  assert.deepEqual(fw('graph cook convert 2').slots[0], { display: '<amount:number>', type: 'number', rest: false, takes: true, recent: ['2'] });
+  assert.deepEqual(fw('graph cook convert 2 cups ').slots[0].recent, ['flour']);
+  assert.deepEqual(fw('graph tasks add ').slots[0].recent, ['call mum']); // free text: the rest of the line
+  assert.deepEqual(fw('graph t ').slots[0].recent, ['buy milk']); // 'tasks add call mum' took the word add here
+  f = fw('graph zzzz foo '); // off the map: nothing ahead
+  assert.deepEqual([f.words, f.typos, f.slots], [[], [], []]);
+});
+
 test('graph command: explains the mode and switches the ranking on this device', async () => {
   const app = await makeApp();
   const out = await app.run('graph');

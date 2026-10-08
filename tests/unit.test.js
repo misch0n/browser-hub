@@ -12,6 +12,7 @@ import { tokenize, oneValue, quote } from '../js/core/args.js';
 import * as K from '../js/core/keys.js';
 import { loadDevice, defaultDeviceName, detectBrowser } from '../js/core/device.js';
 import * as R from '../js/core/repeat.js';
+import { linkURL } from '../js/core/records.js';
 import * as S from '../js/core/search.js';
 import * as Sum from '../js/core/summary.js';
 import * as Merge from '../js/core/merge.js';
@@ -3668,4 +3669,37 @@ test('graph command: explains the mode and switches the ranking on this device',
   assert.equal(G.readPrefs(app.store.getLocal(G.PREFS_KEY)).sort, 'freq');
   assert.match((await app.run('graph cook'))[0], /^err: Graph mode runs commands from the prompt/);
   assert.equal(app.data.state.settings.graph, undefined); // device-local, never synced
+});
+
+test('web addresses: a bare host is https, this machine is http, other schemes are refused', () => {
+  assert.equal(linkURL('example.com/a?b=1'), 'https://example.com/a?b=1');
+  assert.equal(linkURL('http://example.com'), 'http://example.com/');
+  assert.equal(linkURL('//example.com/x'), 'https://example.com/x');
+  assert.equal(linkURL('localhost:8000/app'), 'http://localhost:8000/app'); // a port, not a scheme
+  assert.equal(linkURL('127.0.0.1:3000'), 'http://127.0.0.1:3000/');
+  assert.equal(linkURL('[::1]:5173'), 'http://[::1]:5173/');
+  assert.equal(linkURL('example.com:8443/x'), 'https://example.com:8443/x');
+  for (const bad of ['javascript:alert(1)', 'data:text/html,hi', 'file:///etc/passwd', 'ftp://example.com', 'cats', 'two words.com', '']) assert.equal(linkURL(bad), null, bad);
+});
+
+test('go: opens an address as an alias does, once the command is in the history', async () => {
+  const app = await makeApp();
+  app.ctx.navigateAfter = null;
+  assert.deepEqual(await app.run('go example.com/docs?x=1'), ['# Opening example.com/docs?x=1', 'dim: https://example.com/docs?x=1']);
+  assert.equal(app.ctx.navigateAfter, 'https://example.com/docs?x=1');
+  app.ctx.navigateAfter = null;
+  await app.run('go localhost:8000');
+  assert.equal(app.ctx.navigateAfter, 'http://localhost:8000/');
+  app.ctx.navigateAfter = null;
+  assert.match((await app.run('go javascript:alert(1)'))[0], /^err: Only http and https addresses open from here/);
+  assert.match((await app.run('go cats'))[0], /^err: 'cats' is not a web address/);
+  assert.match((await app.run('go cute cats'))[0], /^err: A web address has no spaces/);
+  assert.equal(app.ctx.navigateAfter, null); // nothing opens
+  assert.match((await app.run('go'))[0], /Usage/);
+  // Tab offers the addresses opened before, newest first.
+  await app.data.addHistory('go example.com/a');
+  await app.data.addHistory('go example.org');
+  await app.data.addHistory('go example.com/a');
+  const go = app.commands.defs.find((d) => d.name === 'go');
+  assert.deepEqual(go.complete([]).map((c) => c.value), ['example.com/a', 'example.org']);
 });

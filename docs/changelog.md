@@ -3,6 +3,13 @@
 What shipped, newest first, by feature. One line per change; the commit has
 the detail (`git show <hash>`). Add a line here with every change you push.
 
+## 8 October 2026
+
+- `go <url>` opens any address like an alias does (the one-second wait, Esc
+  cancels; Tab offers addresses opened before). Bare `localhost:8000` and
+  `127.0.0.1` addresses now open over http (also in `later`).
+- `holiday` put on hold until the owner provides details ([deferred.md](deferred.md)).
+
 ## 7 October 2026
 
 - Queued as Dev tasks (owner's picks): `char`, `json path`, `chmod`, `hexdump`/`bin`,

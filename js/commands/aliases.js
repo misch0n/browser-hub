@@ -2,6 +2,7 @@ import { cmp, plural } from '../core/util.js';
 import { validateEntry, siteRoot, normalizeTemplate, commandOf } from '../core/aliases.js';
 import { tokenize } from '../core/args.js';
 import { kindSeg, usageSegs } from '../core/format.js';
+import { linkURL } from '../core/records.js';
 
 // The URLs in an `alias` definition. A URL may contain spaces (a JQL query):
 // words after an unquoted URL that aren't URLs or options belong to it, kept
@@ -47,7 +48,7 @@ function parseCommandDefinition(rest, isBuiltin) {
   return { name: nameTok.text, command, force };
 }
 
-export default function register(add, { st, isBuiltin, records }) {
+export default function register(add, { st, isBuiltin, records, usage }) {
   const entries = () => st().aliases.entries;
   const engineNames = () => entries().filter((e) => e.template).map((e) => ({ value: e.name, label: 'engine' }));
 
@@ -221,6 +222,43 @@ export default function register(add, { st, isBuiltin, records }) {
       const e = entries().find((x) => x.name === m[1].toLowerCase());
       if (!e) return out.err("No alias '" + m[1] + "'");
       return makeDefault(ctx, e);
+    },
+  });
+
+  // go <url>: open an address no alias covers, the way an alias opens one (main.js
+  // waits a second, Esc cancels, and it is in the history first, so Back and ↑ find it).
+  add({
+    name: 'go', group: 'Aliases & engines', desc: 'open a web address, as an alias would (example.com is enough)',
+    usage: ['go <url>'],
+    examples: ['go example.com', 'go github.com/misch0n/browser-hub/actions', 'go https://developer.mozilla.org/en-US/', 'go localhost:8000'],
+    // Addresses opened before, newest first.
+    complete(prev) {
+      if (prev.length) return [];
+      const seen = new Set();
+      const out = [];
+      for (const h of (st().history && st().history.items || []).slice().reverse()) {
+        const m = /^go\s+(\S+)\s*$/i.exec(h);
+        const url = m && linkURL(m[1]);
+        if (!url || seen.has(m[1])) continue;
+        seen.add(m[1]);
+        out.push({ value: m[1], label: 'opened before' });
+        if (out.length >= 30) break;
+      }
+      return out;
+    },
+    run(ctx, rest) {
+      const { out } = ctx;
+      const t = rest.trim();
+      if (!t) return usage(ctx, this);
+      if (/\s/.test(t)) return out.err('A web address has no spaces; to search, type the words without go');
+      const url = linkURL(t);
+      if (!url) {
+        return out.err(/^[a-z][\w+.-]*:/i.test(t) && !/^https?:/i.test(t) ? 'Only http and https addresses open from here' : "'" + t + "' is not a web address (example.com, https://…)");
+      }
+      const u = new URL(url);
+      out.head([['Opening ', ''], [u.host + u.pathname.replace(/\/$/, '') + u.search, 'url']], 'info');
+      out.dim(url);
+      ctx.navigateAfter = url;
     },
   });
 }

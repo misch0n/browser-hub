@@ -56,7 +56,7 @@ still work.
 | Chance | `random`, `roll` |
 | Web | `http`, `mime`, `ua`, `device` |
 | Network | `request`, `ping`, `dns`, `ip` |
-| Aliases & engines | `aliases`, `alias`, `engine` |
+| Aliases & engines | `aliases`, `alias`, `engine`, `go` |
 | View | `theme`, `widgets`, `font`, `graph` |
 | Sync | `sync` |
 | Meta | `config`, `help`, `keys`, `undo`, `redo`, `clear`, `session`, `history`, `export`, `import` |
@@ -215,7 +215,12 @@ another alias; one whose command no longer exists is listed as broken. Change
 it with `aliases groc edit command …`. From the address bar it is only put in
 the prompt, like any built-in.
 
-**Opening pages waits a second.** An alias, a search or `later <id> open`
+**`go <url>`** opens any address no alias covers, without a new tab and
+the address bar: `go example.com/docs` (https is assumed; `localhost:8000`
+and `127.0.0.1` get http). Only http and https addresses open. Tab completes
+addresses you opened with `go` before, newest first.
+
+**Opening pages waits a second.** An alias, a search, `go <url>` or `later <id> open`
 typed at the prompt says "opening github.com in 1 s · esc cancels" under the
 prompt, then goes: Esc (or the key bar's Esc, or running another command)
 stops it, and the turn says it was cancelled. Links from the address bar and

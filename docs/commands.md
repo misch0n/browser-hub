@@ -820,6 +820,16 @@ engine <name>
 
 Examples: `engine` · `engine ddg`
 
+### `go`
+
+open a web address, as an alias would (example.com is enough)
+
+```
+go <url>
+```
+
+Examples: `go example.com` · `go github.com/misch0n/browser-hub/actions` · `go https://developer.mozilla.org/en-US/` · `go localhost:8000`
+
 ## View
 
 ### `theme`

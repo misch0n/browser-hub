@@ -159,4 +159,5 @@ survive reloads and match on every device; alerts only while a page is open
 (closed-page notifications stay with the iOS research). The holiday source is
 a third-party page: parsed as untrusted data, cached on the device, and only
 built if the site allows cross-origin reads (or the owner accepts the computed
-fallback). `cook scale` waits for the owner's other project.
+fallback). `cook scale` waits for the owner's other project. (8 Oct: `holiday`
+put on hold until the owner provides details; see deferred.md.)

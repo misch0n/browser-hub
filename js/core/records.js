@@ -39,9 +39,12 @@ export const SNIPPET_NAME = /^[\p{L}\p{N}_.-]{1,40}$/u;
 export function linkURL(v) {
   const t = String(v).trim();
   if (!t || /\s/.test(t)) return null;
+  // 'localhost:8000' is a host and port, not a scheme; this machine is plain http.
+  const scheme = /^[a-z][\w+.-]*:/i.test(t) && !/^[^:/?#]+:\d+(?:[/?#]|$)/.test(t);
+  const local = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(t);
   try {
-    const u = new URL(/^[a-z][\w+.-]*:/i.test(t) ? t : 'https://' + t);
-    if ((u.protocol !== 'https:' && u.protocol !== 'http:') || (!u.hostname.includes('.') && u.hostname !== 'localhost')) return null;
+    const u = new URL(scheme ? t : (local ? 'http://' : 'https://') + t.replace(/^\/\//, ''));
+    if ((u.protocol !== 'https:' && u.protocol !== 'http:') || (!u.hostname.includes('.') && u.hostname !== 'localhost' && u.hostname !== '[::1]')) return null;
     return u.href;
   } catch (e) {
     return null;

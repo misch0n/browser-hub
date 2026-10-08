@@ -435,6 +435,34 @@ async function check(name, fn) {
     await send('aliases groc rm');
   });
 
+  await check('go <url>: any address opens like an alias (after the wait), Esc cancels, ↑ and Back find it', async () => {
+    await type('go example.com/went-there');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(300);
+    assert.match(await page.locator('#hint').innerText(), /opening example\.com in 1 s\s+esc cancels/);
+    await page.waitForURL(/example\.com\/went-there/, { timeout: 3000 });
+    assert.equal(external.at(-1), 'https://example.com/went-there');
+    await page.goBack();
+    await page.waitForSelector('#prompt');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await prompt.inputValue(), 'go example.com/went-there');
+    const n = external.length;
+    await type('go example.org/not-now');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(200);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(1300);
+    assert.equal(external.length, n);
+    assert.match(await lastText(), /Cancelled: example\.org not opened/);
+    await send('go javascript:alert(1)');
+    assert.match(await lastText(), /Only http and https addresses open from here/);
+    // Tab completes from addresses opened before.
+    await type('go example.c');
+    await page.keyboard.press('Tab');
+    assert.equal(await prompt.inputValue(), 'go example.com/went-there ');
+    await prompt.fill('');
+  });
+
   await check('snippets copy; later saves links and opens one once it is in the history', async () => {
     await send('snip sig Cheers, M');
     await send('snippets');

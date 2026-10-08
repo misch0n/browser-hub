@@ -25,8 +25,8 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 7 October 2026: unit tests (99) in six time zones, decoder
-  tests and 60 e2e checks pass.
+- Last verified 8 October 2026: unit tests (101) in six time zones, decoder
+  tests and 61 e2e checks pass.
 - Graph mode (`graph <command>`) is an experiment the owner asked to try,
   refined to the owner's design note (D20); its ranking switch
   (`graph :sort freq|alpha`) is there to compare both orders. Its open
@@ -129,26 +129,7 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
    to crack offline and online, with what weakens it. Says plainly that it's
    an estimate and that a reused or leaked password is weak whatever its score
    (no breach lookup: that would send data off the device).
-10. **`holiday`: Bulgarian holidays from почивнидни.com** (owner, 7 Oct 2026).
-    *What:* `holiday` this month, `holiday <week number>` that week only,
-    `holiday <month name>` that month, `holiday year` the whole year (also
-    `holiday 2027`). Each day off with its date, weekday and name, moved days
-    off and working Saturdays included as the site lists them.
-    *Check first:* whether the page can read the site at all: the browser
-    needs it to allow cross-origin reads (CORS). The owner can test this on
-    their device with `request https://xn--b1aekbb1acci5f.com` (it reports
-    whether a page may read the response). Agents' cloud environment can't
-    reach the site (blocked by its network policy) unless the owner allows the
-    domain. If the site doesn't allow it: ask the owner. The fallback is to
-    compute the official holidays (Labour Code list, Orthodox Easter, the
-    rule moving a holiday on a weekend to the next working day), which
-    misses one-off bridge days the government declares.
-    *Rules:* fetched HTML is untrusted: parsed with `DOMParser` (never
-    inserted), every date and name validated; one fetch per year cached on
-    the device (`cc-device:holidays`, refreshed weekly) so it works offline;
-    the source is named in the output. *Open (ask when starting):* mark the
-    days in `cal` and the calendar widget too? Default: yes, once fetched.
-11. **`sun` / `moon`** (owner: "sun/moon yes").
+10. **`sun` / `moon`** (owner: "sun/moon yes").
     *What:* `sun` today's dawn, sunrise, solar noon, sunset, dusk and day
     length (and the change since yesterday); `sun <date>`; `moon` phase,
     illumination, next new and full moon; computed (NOAA / Meeus formulas),
@@ -156,7 +137,7 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
     (`config location <lat>,<lon>` or a city name from a small built-in list),
     or the browser's location on request. Default: `config location`, with
     Sofia offered.
-12. **Timers and stopwatches** (owner, 7 Oct 2026; revives the 5 Oct
+11. **Timers and stopwatches** (owner, 7 Oct 2026; revives the 5 Oct
     deferral, D21).
     *What:* `timer 10m [name]` starts a timer, `stopwatch [name]` a stopwatch;
     `timer list` / `stopwatch list` list all (running and stopped).
@@ -170,25 +151,25 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
     notifications research. A widget shows the running ones.
     *Done when:* unit tests with a fake clock (start, stop, lap, finished,
     reload), e2e for the live display; README and reference updated.
-13. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
+12. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
     events (3). *What:* `birthdays add <name> <date>` (year optional), shown
     yearly in `agenda`, `cal`, `today` and the summary as "Ana turns 40"
     (no age without a year); `birthdays` lists them by next date with days to go.
-14. **`lists`: reusable checklists** (owner: "lists yes").
+13. **`lists`: reusable checklists** (owner: "lists yes").
     *What:* `lists add packing`, `lists packing add passport`, `lists packing`
     shows it with tappable checkboxes, `lists packing reset` unchecks all,
     items editable and removable in the shared grammar; synced.
-15. **`subs`: subscriptions** (owner: "subs yes").
+14. **`subs`: subscriptions** (owner: "subs yes").
     *What:* `subs add <name> <price> <currency> every:month|year|<n>m
     next:<date>`; `subs` lists them with the monthly and yearly total per
     currency (no conversion: currency rates are deferred), renewals in
     `agenda` and `today`; the next date moves on by itself.
-16. **`log`: a journal** (owner: "log yes").
+15. **`log`: a journal** (owner: "log yes").
     *What:* `log <text>` adds a dated entry, `log` shows the last days,
     `log yesterday` / `log <date>` / `log <month>`; entries searchable by
     `find`; synced. *Open (ask when starting):* an "on this day" line in
     `today`? Default: yes, when there is one.
-17. **Calorie tracker** (owner: "calorie tracker yes").
+16. **Calorie tracker** (owner: "calorie tracker yes").
     *What:* a daily food log on top of `cook calorie`'s table and your own
     foods: `eat 150 g chicken-breast` (household portions too) adds to today
     with kcal and macros; `eat` shows today's total against a target

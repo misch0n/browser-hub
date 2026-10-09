@@ -2,11 +2,13 @@
 // zone can be off by a day in another (UTC+14, UTC-11, DST zones).
 //   node tests/run-tz.mjs
 import { spawnSync } from 'node:child_process';
+import { readdirSync } from 'node:fs';
 
+const FILES = readdirSync('tests/unit').filter((f) => f.endsWith('.test.js')).sort().map((f) => 'tests/unit/' + f);
 const ZONES = ['UTC', 'Europe/Sofia', 'America/Los_Angeles', 'Asia/Tokyo', 'Pacific/Kiritimati', 'Pacific/Pago_Pago'];
 let failed = 0;
 for (const tz of ZONES) {
-  const r = spawnSync(process.execPath, ['--test', 'tests/unit.test.js'], { env: { ...process.env, TZ: tz }, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, ['--test', ...FILES], { env: { ...process.env, TZ: tz }, encoding: 'utf8' });
   const ok = r.status === 0;
   if (!ok) failed++;
   console.log((ok ? 'ok   ' : 'FAIL ') + tz);

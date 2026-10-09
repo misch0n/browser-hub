@@ -29,13 +29,22 @@ npm run setup      # Playwright 1.56.1, jsQR 1.4.0, @zxing/library 0.21.3 (test-
 | `npm run test:all` | all of the above, as CI runs it | ~4 min |
 | `node tools/docs-commands.mjs` | is the command reference current? (`npm run docs` rewrites it) | instant |
 
-Run one unit test: `node --test --test-name-pattern="diagrams" tests/unit.test.js`.
+Run one area: `node --test tests/unit/keep.test.js`; one test:
+`node --test --test-name-pattern="diagrams" tests/unit/*.test.js`.
 The e2e suite has no filter; to debug one check, copy its body into a scratch
 script (see "e2e harness" for the setup it needs) rather than running all 59.
 
-## Unit tests (`tests/unit.test.js`)
+## Unit tests (`tests/unit/<area>.test.js`)
 
-Grouped by `// ---- section ----` comments; search, don't read the whole file.
+One file per area: `core` (pure helpers, completion, dispatch-free bits),
+`dates`, `data` (store, import/export), `records` (notes, tasks, events,
+the shared grammar, undo, search, summary), `aliases` (aliases, engines,
+`go`), `sync` (merge, sync, history, clip, config), `keep` (snippets, later,
+diagrams), `cook`, `devtools`, `security` (crypt, cert, ua, device), `net`,
+`graph`, plus one file per newer feature area. Shared helpers live in
+`tests/helpers.mjs` (`MON`, `fakeStorage`, `recorder`, `makeApp`, `fakeEnv`,
+`fakeNet`, `UAS`, `graphEnv`, `fanOf`); `run-tz.mjs` runs every file in
+`tests/unit/`. A new area gets a new file; import what it needs from the helpers.
 
 - `makeApp(storage?)` builds the real data layer and command registry over a
   fake `localStorage`, with the clock fixed at `MON` (a Monday). It returns

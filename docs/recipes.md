@@ -25,7 +25,7 @@ place to touch, so nothing is forgotten and nothing needs rediscovering.
    - Use `out.copyable(text)` for the result someone will want to paste.
    - Secrets: ask with `ctx.askSecret(label)`, never take them from the command line.
    - Network: use `ctx.fetch || fetch` so tests can fake it; say what a browser can't do.
-3. **Tests** in `tests/unit.test.js`: the lib functions directly, and the
+3. **Tests** in `tests/unit/<area>.test.js` (a new file for a new area): the lib functions directly, and the
    command through `makeApp().run('…')` (it returns the output as lines; see
    [testing.md](testing.md)). Add an e2e check in `tests/e2e.cjs` when the
    command draws something new, needs real browser APIs, or is interactive.
@@ -74,7 +74,7 @@ Every place, in order:
 2. Styles in `style.css`, using the theme variables (`--fg`, `--dim`,
    `--accent`, `--border`, `--bg-elev`, …) and `calc(Npx * var(--scale))` for
    font sizes; touch inputs get the 16px rule near the end of the file (iOS zooms otherwise).
-3. `tests/unit.test.js`: add it to `recorder()` so command tests can see it.
+3. `tests/helpers.mjs`: add it to `recorder()` so command tests can see it.
 4. e2e: draw it, replay it after a reload, and check phone width.
 5. [architecture.md](architecture.md) Output list.
 

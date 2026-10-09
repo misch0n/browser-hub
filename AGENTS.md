@@ -57,7 +57,7 @@ private GitHub repo. One owner, who uses it on a Mac and an iPhone.
 
 ```sh
 npm run setup          # test-only packages (Playwright, jsQR, ZXing); automatic in cloud sessions
-npm test               # unit tests, ~3 s; filter: node --test --test-name-pattern="<name>" tests/unit.test.js
+npm test               # unit tests, ~3 s; one area: node --test tests/unit/<area>.test.js; filter: --test-name-pattern="<name>"
 npm run test:all       # what CI runs: six time zones, decoders, e2e in Chromium (~4 min)
 npm run docs           # regenerate docs/commands.md and the README command table
 python3 -m http.server 8000   # serve the page locally
@@ -72,14 +72,14 @@ index.html            the page and its CSP          js/main.js       wiring and 
 js/commands/          one file per command area      js/commands/index.js   the command contract (header comment)
 js/core/              data, store, sync merge, records grammar, undo, log, search, dates
 js/lib/               pure helpers per feature        js/ui/           DOM: transcript, prompt, widgets
-tests/                unit.test.js, e2e.cjs, decoder tests     tools/   build-site, docs-commands, nutrition
+tests/                unit/<area>.test.js, helpers.mjs, e2e.cjs, decoders     tools/   build-site, docs-commands, nutrition
 docs/                 everything about building it (index: docs/README.md)
 ```
 
 Save context: every module starts with a header comment saying what it does;
-read those before whole files. Search, don't read: `tests/unit.test.js`,
-`tests/e2e.cjs`, `js/lib/nutrition-data.js` (generated), `js/lib/wordlist.js`,
-`js/vendor/` (Mermaid, never edit).
+read those before whole files. Search, don't read: `tests/e2e.cjs`, `js/lib/nutrition-data.js` (generated), `js/lib/wordlist.js`,
+`js/vendor/` (Mermaid, never edit). Unit tests are one file per area in
+`tests/unit/`; open only the area you touch.
 
 ## Environment notes
 

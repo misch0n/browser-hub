@@ -48,7 +48,7 @@ keystroke ─► ui/prompt.js ─► main.js run() ─► core/dispatch.js
 
 Large files to **search, not read**: `js/lib/nutrition-data.js` (generated,
 110 KB), `js/lib/wordlist.js` (EFF word list), `js/vendor/**`,
-`tests/unit.test.js` (3,000+ lines) and `tests/e2e.cjs` (1,400+ lines).
+and `tests/e2e.cjs` (1,500+ lines). Unit tests are split by area (`tests/unit/`).
 
 ## Commands
 

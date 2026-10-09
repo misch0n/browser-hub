@@ -25,7 +25,7 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 9 October 2026: unit tests (104) in six time zones, decoder
+- Last verified 9 October 2026: unit tests (120) in six time zones, decoder
   tests and 64 e2e checks pass.
 - Graph mode (`graph <command>`) is an experiment the owner asked to try,
   refined to the owner's design note (D20); its ranking switch
@@ -49,34 +49,7 @@ unit tests (six time zones where dates are involved), e2e when it draws or
 interacts. Anything holding something you keep is a synced collection in the
 shared grammar ([recipes.md](recipes.md#add-a-collection)).
 
-1. **`char`: hidden and odd characters** (owner: "something to spot hidden
-   chars and odd chars. say I put a letter in another language").
-   *What:* `char <text>` (or a paste) lists each character: code point
-   (`U+0430`), UTF-8 bytes, script (`\p{Script=…}`, no data table) and
-   category. Flags, at the top: invisible ones (zero-width space/joiners,
-   BOM, soft hyphen, bidi controls such as U+202E, no-break and other unusual
-   spaces, control characters) and words mixing scripts (a Cyrillic `а` in a
-   Latin word, the homoglyph case), each with its position. `char clean <text>`
-   gives the text with the invisible ones removed (copyable). Names: for the
-   flagged set from a small table of our own, not the whole Unicode list.
-   *Done when:* a pasted Latin word with one Cyrillic letter and a zero-width
-   space is flagged with both positions; emoji with joiners and flags read as
-   one visible character with their parts listed.
-2. **JSON traversal** (owner: "json traversal, yes").
-   *What:* `json path <expr> <json>` with a small jq/JSONPath-like syntax:
-   `.a.b`, `[0]`, `[-1]`, `[*]` / `.*`, `..key` (recursive), `["odd key"]`;
-   results as a list (each with its path) or the single value as a tree.
-   In the existing tree, tapping a node shows its path (copyable), so you can
-   find a path by clicking and reuse it. Errors say where the expression broke.
-   *Done when:* unit tests cover each step type, missing keys (empty, not an
-   error) and bad expressions; README and reference updated.
-3. **`chmod` resolver** (owner: "chmod resolver yes").
-   *What:* `chmod 755` → `rwxr-xr-x`, `u=rwx,g=rx,o=rx` and a who-can-what
-   table; `chmod rwxr-x---` → `750`; special bits (`4755` setuid, `2755` setgid,
-   `1777` sticky, shown as `s`/`t`/`S`/`T`); `chmod 644 u+x,go-r` applies
-   symbolic changes to a mode and prints the result; `ls -l` strings with the
-   type letter (`drwxr-xr-x`) accepted.
-4. **`hexdump` / `bin`: byte inspector** (owner: "hexdump/bin inspector").
+1. **`hexdump` / `bin`: byte inspector** (owner: "hexdump/bin inspector").
    *What:* `hexdump <text>` (UTF-8; `utf16le`/`utf16be` option): offset, hex
    and printable columns, 16 bytes a row; `hexdump file` picks a local file
    (read on the device, never uploaded) and shows its first 4 KB, size and
@@ -85,7 +58,7 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
    decodes bytes back to text; `bin <number|text>` shows binary (bytes grouped,
    with hex and decimal). *Done when:* unit tests for the dump layout,
    encodings and magic numbers; e2e for the file pick.
-5. **`pw check`** (owner: "pw check why not").
+2. **`pw check`** (owner: "pw check why not").
    *What:* `pw check` asks for the password with hidden input (`askSecret`,
    never echoed, kept or synced; private and noHistory like `pw`) and
    estimates its strength on the device: length and character classes,
@@ -94,7 +67,7 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
    to crack offline and online, with what weakens it. Says plainly that it's
    an estimate and that a reused or leaked password is weak whatever its score
    (no breach lookup: that would send data off the device).
-6. **`sun` / `moon`** (owner: "sun/moon yes").
+3. **`sun` / `moon`** (owner: "sun/moon yes").
     *What:* `sun` today's dawn, sunrise, solar noon, sunset, dusk and day
     length (and the change since yesterday); `sun <date>`; `moon` phase,
     illumination, next new and full moon; computed (NOAA / Meeus formulas),
@@ -102,7 +75,7 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
     (`config location <lat>,<lon>` or a city name from a small built-in list),
     or the browser's location on request. Default: `config location`, with
     Sofia offered.
-7. **Timers and stopwatches** (owner, 7 Oct 2026; revives the 5 Oct
+4. **Timers and stopwatches** (owner, 7 Oct 2026; revives the 5 Oct
     deferral, D21).
     *What:* `timer 10m [name]` starts a timer, `stopwatch [name]` a stopwatch;
     `timer list` / `stopwatch list` list all (running and stopped).
@@ -116,25 +89,25 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
     notifications research. A widget shows the running ones.
     *Done when:* unit tests with a fake clock (start, stop, lap, finished,
     reload), e2e for the live display; README and reference updated.
-8. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
+5. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
     events (3). *What:* `birthdays add <name> <date>` (year optional), shown
     yearly in `agenda`, `cal`, `today` and the summary as "Ana turns 40"
     (no age without a year); `birthdays` lists them by next date with days to go.
-9. **`lists`: reusable checklists** (owner: "lists yes").
+6. **`lists`: reusable checklists** (owner: "lists yes").
     *What:* `lists add packing`, `lists packing add passport`, `lists packing`
     shows it with tappable checkboxes, `lists packing reset` unchecks all,
     items editable and removable in the shared grammar; synced.
-10. **`subs`: subscriptions** (owner: "subs yes").
+7. **`subs`: subscriptions** (owner: "subs yes").
     *What:* `subs add <name> <price> <currency> every:month|year|<n>m
     next:<date>`; `subs` lists them with the monthly and yearly total per
     currency (no conversion: currency rates are deferred), renewals in
     `agenda` and `today`; the next date moves on by itself.
-11. **`log`: a journal** (owner: "log yes").
+8. **`log`: a journal** (owner: "log yes").
     *What:* `log <text>` adds a dated entry, `log` shows the last days,
     `log yesterday` / `log <date>` / `log <month>`; entries searchable by
     `find`; synced. *Open (ask when starting):* an "on this day" line in
     `today`? Default: yes, when there is one.
-12. **Calorie tracker** (owner: "calorie tracker yes").
+9. **Calorie tracker** (owner: "calorie tracker yes").
     *What:* a daily food log on top of `cook calorie`'s table and your own
     foods: `eat 150 g chicken-breast` (household portions too) adds to today
     with kcal and macros; `eat` shows today's total against a target

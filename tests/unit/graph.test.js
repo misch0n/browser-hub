@@ -122,7 +122,7 @@ test('graph mode: typos resolve to their node; free text is never changed; ambig
   // The same nodes in the same order as with nothing typed: the best match is chosen, the others dimmed around it.
   assert.deepEqual(fanOf(v), fanOf(G.graphView('graph ', env)));
   assert.equal(v.fan[v.sel].value, 'color'); // a tie in the best tier: the first in order
-  assert.deepEqual(v.fan.filter((f) => f.match).map((f) => f.value), ['color', 'config', 'cook', 'count', 'cron']);
+  assert.deepEqual(v.fan.filter((f) => f.match).map((f) => f.value), ['chmod', 'color', 'config', 'cook', 'count', 'cron']);
   assert.equal(G.take('graph co convert', v, 'cook'), 'graph cook convert');
   assert.equal(G.graphView('graph cook c', env).ambiguous, true); // calorie or convert
   assert.equal(G.graphView('graph cook c', env).run, null);

@@ -307,9 +307,10 @@ validate and pretty-print JSON, in colour, as a tree, or minified
 json <text>
 json tree <text>
 json min <text>
+json path <expression> <text>
 ```
 
-Examples: `json {"a":1,"b":[true,null,"x"]}` · `json tree <paste>` · `json min <paste>`
+Examples: `json {"a":1,"b":[true,null,"x"]}` · `json tree <paste>` · `json min <paste>` · `json path .b[0] {"a":1,"b":[true,null]}` · `json path ..id <paste>` · `json path .items[*].name <paste>` · `json path '["first name"]' {"first name":"Ana"}`
 
 ### `units`
 
@@ -472,6 +473,17 @@ case camel|pascal|snake|kebab|constant|title|sentence|lower|upper|dot <text>
 
 Examples: `case user account id` · `case snake parseHTTPResponse` · `case title the quick brown fox`
 
+### `char`
+
+hidden and odd characters: code points, bytes, scripts; invisible ones and look-alike letters flagged
+
+```
+char <text>
+char clean <text>
+```
+
+Examples: `char pаypal.com` · `char café` · `char 👩‍💻` · `char clean <paste>`
+
 ### `text`
 
 line tools: dedupe, sort, trim, find and replace, counts, case, lorem ipsum
@@ -558,6 +570,17 @@ color <text colour> on <background>
 ```
 
 Examples: `color #0af` · `color hsl(200, 100%, 50%)` · `color #777 on #fff`
+
+### `chmod`
+
+Unix permissions: 755 ⇄ rwxr-xr-x ⇄ u=rwx,g=rx,o=rx, special bits, and what u+x or go-w does
+
+```
+chmod <mode>
+chmod <mode> <changes>
+```
+
+Examples: `chmod 755` · `chmod rw-r--r--` · `chmod drwxr-sr-x` · `chmod 4755` · `chmod 644 u+x` · `chmod 777 go-w,o-x` · `chmod 1777`
 
 ### `csv`
 

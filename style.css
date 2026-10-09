@@ -367,6 +367,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .jt { margin: 4px 0; padding: 6px 1ch; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; }
 .jt-kids { padding-left: 2.2ch; border-left: 1px dotted var(--border); margin-left: 0.5ch; }
 .jt-row { white-space: pre; }
+.jt-key { cursor: pointer; }
+.jt-path { margin-top: 4px; font-size: calc(12px * var(--scale)); white-space: pre-wrap; word-break: break-all; }
 .jt-node > summary { cursor: pointer; white-space: pre; list-style: none; }
 .jt-node > summary::-webkit-details-marker { display: none; }
 .jt-node > summary::before { content: '▸ '; color: var(--faint); }

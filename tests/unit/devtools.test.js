@@ -469,3 +469,47 @@ test('barcode command: types, check digits worked out, options first, replay spe
   assert.equal((await app.run('barcode qr hello'))[1], 'QR M hello'.replace('M', (await app.run('qr hello'))[1].split(' ')[1]));
   assert.deepEqual(app.commands.byName.get('barcode').complete([]).map((x) => x.value), ['code128', 'code39', 'ean13', 'ean8', 'upca', 'itf', 'codabar', 'qr']);
 });
+
+test('char, json path and chmod: the commands', async () => {
+  const app = await makeApp();
+  // char: a Cyrillic а in a Latin word and a zero-width space, both placed.
+  let out = await app.run('char pаy​pal');
+  assert.match(out[0], /^# 7 characters · 1 hidden or odd · 1 word mixing scripts$/);
+  assert.equal(out.tone, 'warn');
+  assert.ok(out.includes('4 | U+200B | zero-width space | E2 80 8B'));
+  assert.ok(out.some((l) => /^pаy​pal \| Latin \+ Cyrillic \| а \(Cyrillic, at 2\)$/.test(l)));
+  assert.ok(out.includes('4 | ⟨U+200B⟩ | U+200B | E2 80 8B | Common | zero-width space'));
+  out = await app.run('char 👩‍💻 ok');
+  assert.match(out[0], /^# 6 characters · 4 as seen · nothing hidden$/);
+  assert.deepEqual(await app.run('char clean a​b c'), ['# Cleaned · 1 invisible character removed', '= ab c']);
+  assert.deepEqual(await app.run('char clean abc'), ['# Nothing to clean', '= abc']);
+  assert.match((await app.run('char'))[0], /Usage/);
+  // json path
+  out = await app.run('json path .b[0] {"a":1,"b":["x",2]}');
+  assert.deepEqual(out, ['# 1 match · .b[0]', 'dim: $.b[0]', '= x']);
+  out = await app.run('json path ..id {"id":1,"kids":[{"id":2},{"id":3,"x":{"id":4}}]}');
+  assert.equal(out[0], '# 4 matches · ..id');
+  assert.deepEqual(out.slice(2, 6), ['$.id | 1', '$.kids[0].id | 2', '$.kids[1].id | 3', '$.kids[1].x.id | 4']);
+  assert.deepEqual(await app.run('json path ["first name"] {"first name":"Ana"}'), ['# 1 match · ["first name"]', 'dim: $["first name"]', '= Ana']);
+  assert.deepEqual(await app.run('json path [0] [[1,2],3]'), ['# 1 match · [0]', 'dim: $[0]', 'JSONTREE [1,2]']);
+  assert.equal((await app.run('json path .nope {"a":1}'))[0], '# No match · .nope');
+  assert.match((await app.run('json path .a[ {"a":1}'))[0], /^err: Can’t read the path: unclosed \[ \(at character 3\)/);
+  assert.match((await app.run('json path .a {"a":'))[0], /^err: Invalid JSON/);
+  // chmod
+  out = await app.run('chmod 755');
+  assert.equal(out[0], '# rwxr-xr-x  755');
+  assert.ok(out.includes('chmod: chmod u=rwx,g=rx,o=rx  (or chmod 755)'));
+  assert.ok(out.includes('owner | r | w | x | '));
+  assert.ok(out.includes('others | r | - | x | '));
+  assert.equal(out.copied, '755');
+  out = await app.run('chmod drwxr-sr-x');
+  assert.equal(out[0], '# rwxr-sr-x  2755');
+  assert.ok(out.includes('type: directory'));
+  assert.ok(out.some((l) => /^special: setgid/.test(l)));
+  out = await app.run('chmod 644 u+x');
+  assert.equal(out[0], '# 644 rw-r--r--  u+x  →  744 rwxr--r--');
+  assert.equal(out.tone, 'ok');
+  assert.equal((await app.run('chmod 1777'))[0], '# rwxrwxrwt  1777');
+  assert.match((await app.run('chmod 888'))[0], /^err: 888 isn't a mode/);
+  assert.match((await app.run('chmod 644 u+q'))[0], /^err: /);
+});

@@ -4,8 +4,39 @@ import { convert, listUnits } from '../lib/units.js';
 import { encodeQR } from '../lib/qr.js';
 import { encodeBarcode, BARCODE_TYPES, barcodeWidth } from '../lib/barcode.js';
 import { uuid, b64encode, b64decode, prettyJson, parseEpochInput, fmtUTC, fmtLocal, relative } from '../lib/misc.js';
+import { query as jsonQuery, parse as parsePath } from '../lib/jsonpath.js';
 
 // calc, epoch, uuid, b64, json, units, qr, barcode: small offline tools.
+
+// JSON.parse with the place it broke: -> { value } | { error, line, col, snippet }.
+function readJson(text) {
+  try {
+    return { value: JSON.parse(text) };
+  } catch (e) {
+    const pos = /position (\d+)/.exec(e.message);
+    if (!pos) return { error: 'Invalid JSON: ' + e.message };
+    const at = Number(pos[1]);
+    const before = text.slice(0, at);
+    const line = before.split('\n').length, col = at - before.lastIndexOf('\n');
+    return { error: 'Invalid JSON at line ' + line + ', column ' + col + ': ' + e.message.replace(/ in JSON at position \d+.*$/, ''),
+      snippet: text.split('\n')[line - 1].slice(Math.max(0, col - 40), col + 40) + '\n' + ' '.repeat(Math.min(col - 1, 40)) + '^' };
+  }
+}
+
+// `json path <expr> <json>`: the expression ends at the first space after which
+// the rest is JSON (so `["a b"]` and `[0] [1,2]` both read right).
+function splitPath(rest) {
+  const s = rest.trim();
+  for (let i = 0; i < s.length; i++) {
+    if (!/\s/.test(s[i])) continue;
+    const expr = s.slice(0, i), json = s.slice(i).trim();
+    if (!json || parsePath(expr).error) continue;
+    if (!readJson(json).error) return { expr, json };
+  }
+  // No split works: report the expression's own error, or the JSON's.
+  const sp = s.search(/\s/);
+  return sp < 0 ? { expr: s, json: '' } : { expr: s.slice(0, sp), json: s.slice(sp).trim() };
+}
 
 export default function register(add, { st, usage }) {
   add({
@@ -70,32 +101,51 @@ export default function register(add, { st, usage }) {
 
   add({
     name: 'json', group: 'Tools', desc: 'validate and pretty-print JSON, in colour, as a tree, or minified',
-    usage: ['json <text>', 'json tree <text>', 'json min <text>'],
-    examples: ['json {"a":1,"b":[true,null,"x"]}', 'json tree <paste>', 'json min <paste>'],
-    complete: (prev) => (prev.length === 0 ? [{ value: 'tree', label: 'collapsible' }, { value: 'min', label: 'minified' }] : []),
+    usage: ['json <text>', 'json tree <text>', 'json min <text>', 'json path <expression> <text>'],
+    examples: ['json {"a":1,"b":[true,null,"x"]}', 'json tree <paste>', 'json min <paste>', 'json path .b[0] {"a":1,"b":[true,null]}',
+      'json path ..id <paste>', 'json path .items[*].name <paste>', 'json path \'["first name"]\' {"first name":"Ana"}'],
+    complete: (prev) => (prev.length === 0 ? [{ value: 'tree', label: 'collapsible' }, { value: 'min', label: 'minified' }, { value: 'path', label: 'look up: .a.b[0], ..key, [*]' }] : []),
     async run(ctx, rest) {
       const { out } = ctx;
+      const pm = /^path(?:\s+([\s\S]*))?$/i.exec(rest.trim());
+      if (pm) {
+        const { expr, json } = splitPath(pm[1] || '');
+        if (!expr || !json) return usage(ctx, this);
+        const p = parsePath(expr.replace(/^(['"])(.*)\1$/, '$2'));
+        const e = expr.replace(/^(['"])(.*)\1$/, '$2');
+        if (p.error) {
+          out.err('Can\u2019t read the path: ' + p.error + ' (at character ' + (p.at + 1) + ')');
+          return out.code(e + '\n' + ' '.repeat(p.at) + '^');
+        }
+        const j = readJson(json);
+        if (j.error) { out.err(j.error); if (j.snippet) out.code(j.snippet); return; }
+        const r = jsonQuery(j.value, e);
+        if (!r.results.length) {
+          out.head([['No match', ''], [' · ' + e, 'dim']], 'dim');
+          return out.dim('A missing key or index gives nothing; ..key looks at every depth');
+        }
+        out.head([[plural(r.results.length, 'match', 'matches'), 'strong'], [' · ' + e, 'dim']], 'ok');
+        if (r.results.length === 1) {
+          const v = r.results[0].value;
+          out.dim(r.results[0].path);
+          if (v !== null && typeof v === 'object') return out.jsonTree(JSON.stringify(v));
+          return out.value(typeof v === 'string' ? v : JSON.stringify(v));
+        }
+        out.table(['path', 'value'], r.results.slice(0, 500).map((x) => {
+          const v = JSON.stringify(x.value);
+          return [[[x.path, 'dim']], [[v.length > 120 ? v.slice(0, 117) + '…' : v, typeof x.value === 'string' ? 'ok' : typeof x.value === 'number' ? 'num' : '']]];
+        }));
+        if (r.results.length > 500) out.dim('First 500 shown');
+        return out.copyable(JSON.stringify(r.results.map((x) => x.value), null, 2));
+      }
       const m = /^(tree|min|minify)\s+([\s\S]+)$/i.exec(rest.trim());
       const mode = m ? m[1].toLowerCase() : 'pretty';
       const text = m ? m[2] : rest;
       if (!text.trim()) return usage(ctx, this);
-      let v;
-      try {
-        v = JSON.parse(text);
-      } catch (e) {
-        // Where it went wrong, with the line and column.
-        const pos = /position (\d+)/.exec(e.message);
-        if (pos) {
-          const at = Number(pos[1]);
-          const before = text.slice(0, at);
-          const lineNo = before.split('\n').length, col = at - before.lastIndexOf('\n');
-          out.err('Invalid JSON at line ' + lineNo + ', column ' + col + ': ' + e.message.replace(/ in JSON at position \d+.*$/, ''));
-          out.code(text.split('\n')[lineNo - 1].slice(Math.max(0, col - 40), col + 40) + '\n' + ' '.repeat(Math.min(col - 1, 40)) + '^');
-        } else {
-          out.err('Invalid JSON: ' + e.message);
-        }
-        return;
-      }
+      // Where it went wrong, with the line and column.
+      const j = readJson(text);
+      if (j.error) { out.err(j.error); if (j.snippet) out.code(j.snippet); return; }
+      const v = j.value;
       const kind = Array.isArray(v) ? plural(v.length, 'item') + ' (array)'
         : v && typeof v === 'object' ? plural(Object.keys(v).length, 'key') + ' (object)' : typeof v;
       out.head([['Valid JSON', 'ok'], [' · ' + kind, 'dim']]);

@@ -49,8 +49,8 @@ still work.
 | Dates | `date`, `days`, `week` |
 | Tools | `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `barcode`, `zones`, `tz` |
 | Security | `pw`, `hash`, `jwt`, `hmac`, `crypt`, `cert` |
-| Text | `count`, `case`, `text` |
-| Developer | `cidr`, `url`, `regex`, `diff`, `cron`, `color`, `csv`, `base`, `escape` |
+| Text | `count`, `case`, `char`, `text` |
+| Developer | `cidr`, `url`, `regex`, `diff`, `cron`, `color`, `chmod`, `csv`, `base`, `escape` |
 | Share | `clip`, `bounce` |
 | Kitchen | `cook` |
 | Chance | `random`, `roll` |
@@ -348,9 +348,25 @@ as camelCase, snake_case, kebab-case, Title Case and the rest; `cidr` takes an
 IPv4 or IPv6 range or address apart (`cidr 10.0.0.0/22 10.0.3.9` says
 whether the address is inside).
 
+**Hidden and odd characters**: `char <text>` lists every character with its
+code point, UTF-8 bytes, script and kind, and calls out what you can't see or
+can't trust: zero-width spaces and joiners, byte order marks, soft hyphens,
+bidi controls (the right-to-left override trick), no-break and other unusual
+spaces, control and private-use characters; and words that mix scripts, such
+as a Latin word with a Cyrillic `а` (`char pаypal.com`), naming the odd letter
+and where it is. Emoji built with joiners and flags count as one character and
+aren't flagged. `char clean <text>` gives the text with the invisible ones
+removed and odd spaces made plain (look-alike letters are left for you to fix).
+
 **More developer tools**: `json` colours keys, strings, numbers, booleans and
 null, points at the line and column of an error, and has `json tree` (folds
-open and shut) and `json min`. `csv` shows pasted CSV as a table: the delimiter
+open and shut; tap a key for its path, copied) and `json min`. `json path <expression> <json>`
+looks things up, jq-style: `.a.b`, `[0]`, `[-1]`, `[*]` / `.*`, `["odd key"]`,
+`..id` (at every depth), slices `[1:3]`; each match comes with its path, and a
+missing key is simply no match. `chmod 755` shows a mode every way
+(`rwxr-xr-x`, `u=rwx,g=rx,o=rx`, who can do what), reads `ls -l` strings
+(`drwxr-sr-x`) and special bits (setuid, setgid, sticky), and `chmod 644 u+x`
+shows what a change does. `csv` shows pasted CSV as a table: the delimiter
 is worked out (comma, semicolon, tab, pipe), a header row detected, columns sort
 when tapped and a box filters the rows; `csv json` converts. `jwt verify`
 checks a token's signature with Web Crypto on the page: HS256/384/512 with a

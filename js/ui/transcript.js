@@ -1,4 +1,5 @@
-import { h, rich, copyButton } from './dom.js';
+import { h, rich, copyButton, copyText } from './dom.js';
+import { pathOf } from '../lib/jsonpath.js';
 import { monthGrid } from './components.js';
 import { jsonLines } from '../core/format.js';
 import { oneValue, quote } from '../core/args.js';
@@ -334,8 +335,10 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
           : typeof x === 'string' ? h('span', { class: 't-ok', text: JSON.stringify(x) })
             : typeof x === 'number' ? h('span', { class: 't-num', text: String(x) })
               : h('span', { class: 't-accent', text: String(x) }));
-        const node = (key, x, depth) => {
-          const label = key === null ? null : h('span', { class: 'jt-key ' + (typeof key === 'number' ? 't-faint' : 't-id'), text: typeof key === 'number' ? String(key) : JSON.stringify(key) });
+        // Tapping a key shows its path (for json path) and copies it.
+        const node = (key, x, depth, at = []) => {
+          const label = key === null ? null : h('span', { class: 'jt-key ' + (typeof key === 'number' ? 't-faint' : 't-id'), 'data-path': pathOf(at),
+            title: pathOf(at), text: typeof key === 'number' ? String(key) : JSON.stringify(key) });
           if (x === null || typeof x !== 'object') return h('div', { class: 'jt-row' }, label, label ? h('span', { class: 't-dim', text: ': ' }) : null, leaf(x));
           const entries = Array.isArray(x) ? x.map((y, i) => [i, y]) : Object.entries(x);
           const brackets = Array.isArray(x) ? ['[', ']'] : ['{', '}'];
@@ -343,12 +346,21 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
             h('span', { class: 't-dim', text: brackets[0] }), h('span', { class: 'jt-count t-faint', text: ' ' + entries.length + (Array.isArray(x) ? ' items ' : ' keys ') + brackets[1] }));
           const d = h('details', { class: 'jt-node', open: depth < 2 }, summary);
           const kids = h('div', { class: 'jt-kids' });
-          for (const [k, y] of entries.slice(0, LIMIT)) kids.appendChild(node(k, y, depth + 1));
+          for (const [k, y] of entries.slice(0, LIMIT)) kids.appendChild(node(k, y, depth + 1, [...at, k]));
           if (entries.length > LIMIT) kids.appendChild(h('div', { class: 'jt-row t-faint', text: '… ' + (entries.length - LIMIT) + ' more' }));
           d.appendChild(kids);
           return d;
         };
-        push(h('div', { class: 'jt' }, node(null, v, 0)));
+        const where = h('div', { class: 'jt-path t-faint', text: 'tap a key for its path' });
+        const tree = h('div', { class: 'jt' }, node(null, v, 0), where);
+        tree.addEventListener('click', (e) => {
+          const k = e.target.closest('.jt-key');
+          if (!k) return;
+          e.preventDefault(); // a key in a summary shows its path rather than folding
+          where.textContent = k.dataset.path;
+          copyText(k.dataset.path).then((ok) => { if (ok) where.textContent = k.dataset.path + '  · copied'; });
+        });
+        push(tree);
       },
       // A table to explore: tap a column to sort by it (again: the other way), type to filter.
       dataTable(spec) {

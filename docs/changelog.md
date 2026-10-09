@@ -5,6 +5,9 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 9 October 2026
 
+- `chmod`: 755 ⇄ rwxr-xr-x ⇄ u=rwx,g=rx,o=rx, special bits, `ls -l` strings, and what `u+x` / `go-w` do.
+- `json path` (jq-style: `.a.b`, `[0]`, `[*]`, `..key`, slices); tapping a key in `json tree` shows and copies its path.
+- `char`: every character with code point, bytes and script; invisible characters and look-alike letters flagged; `char clean`.
 - `request wss://…` (and `ws://` to localhost) checks a WebSocket handshake: accepted or refused, time, subprotocol, close code; CSP `connect-src` gains `wss:` and local `ws:`.
 - Recurring events: `ev fri 19:00 book club every:week` (task rules), shown on every day they fall on in `cal`, `agenda`, `today`, the summary and the widgets; edits and removal act on the series.
 - CI runs the npm scripts (`test:tz`, `setup`, `test:decoders`, `test:e2e`); `test:all` chains them.

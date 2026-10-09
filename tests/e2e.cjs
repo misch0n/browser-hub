@@ -644,6 +644,11 @@ async function check(name, fn) {
     assert.equal(await tree.locator('details[open]').count(), 2);
     assert.equal(await tree.locator('.t-num').first().textContent(), '30');
     assert.equal(await tree.locator('.t-faint', { hasText: 'null' }).count(), 1);
+    // A key shows its path (and copies it) without folding the node.
+    await tree.locator('.jt-key', { hasText: '"tags"' }).click();
+    assert.match(await tree.locator('.jt-path').innerText(), /^\$\.user\.tags/);
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '$.user.tags');
+    assert.equal(await tree.locator('details[open]').count(), 2);
     await tree.locator('details details > summary').first().click(); // fold "user"
     assert.equal(await tree.locator('details[open]').count(), 1);
     const paste = (text) => prompt.evaluate((el, t) => {

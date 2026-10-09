@@ -1,7 +1,8 @@
 import { plural } from '../core/util.js';
+import { inspect, clean } from '../lib/chars.js';
 import { password, pin, passphrase, bits, SETS, countText, words, CASES, CASE_NAMES, parseCIDR, parseIP, formatIP, contains, ipKind } from '../lib/text.js';
 
-// pw, count, case, cidr.
+// pw, count, case, cidr, char.
 
 const n2s = (n) => BigInt(n).toLocaleString('en');
 
@@ -134,4 +135,53 @@ export default function register(add, { usage }) {
       out.copyable(single ? fmt(r.address) : fmt(r.network) + '/' + r.prefix);
     },
   });
+
+  // char: every character of some text, with the invisible and look-alike ones called out.
+  add({
+    name: 'char', group: 'Text', desc: 'hidden and odd characters: code points, bytes, scripts; invisible ones and look-alike letters flagged',
+    usage: ['char <text>', 'char clean <text>'],
+    examples: ['char pаypal.com', 'char café', 'char 👩‍💻', 'char clean <paste>'],
+    complete: (prev) => (prev.length === 0 ? [{ value: 'clean', label: 'remove the invisible ones' }] : []),
+    run(ctx, rest) {
+      const { out } = ctx;
+      const cm = /^clean\s([\s\S]+)$/i.exec(rest);
+      const text = cm ? cm[1] : rest.replace(/^\s/, '');
+      if (!text) return usage(ctx, this);
+      if (cm) {
+        const c = clean(text);
+        const gone = [...text].length - [...c].length;
+        out.head(gone || c !== text ? [['Cleaned', ''], [' · ' + plural(gone, 'invisible character') + ' removed', 'dim']] : 'Nothing to clean', gone || c !== text ? 'ok' : 'dim');
+        return out.value(c);
+      }
+      const r = inspect(text);
+      const pos = new Map(r.chars.map((c, i) => [c.index, i + 1])); // 1-based, by character
+      const shown = (c) => (c.flag && !c.benign) || /^[\p{C}\p{Z}]$/u.test(c.ch) ? '⟨' + c.hex + '⟩' : c.ch;
+      const tone = r.hidden.length || r.mixed.length ? 'warn' : 'ok';
+      out.head([[plural(r.chars.length, 'character'), 'strong'], [r.graphemes !== r.chars.length ? ' · ' + r.graphemes + ' as seen' : '', 'dim'],
+        [r.hidden.length ? ' · ' + r.hidden.length + ' hidden or odd' : '', 'warn'], [r.mixed.length ? ' · ' + plural(r.mixed.length, 'word') + ' mixing scripts' : '', 'warn'],
+        [!r.hidden.length && !r.mixed.length ? ' · nothing hidden' : '', 'ok']], tone);
+      if (r.hidden.length) {
+        out.section([['Hidden or odd', 'warn']]);
+        out.table(['at', 'code', 'what', 'UTF-8'], r.hidden.map((c) => [[[String(pos.get(c.index)), 'num']], [[c.hex, 'id']], [[c.flag, '']], [[c.utf8, 'dim']]]));
+        out.line([['char clean …', 'accent', { run: 'char clean ' + text }], [' gives the text without them', 'faint']]);
+      }
+      if (r.mixed.length) {
+        out.section([['Words mixing scripts', 'warn'], ['  look-alike letters, as in a fake web address', 'faint']]);
+        out.table(['word', 'scripts', 'odd letters'], r.mixed.map((w) => [[[w.word, 'strong']], [[w.scripts.join(' + '), '']],
+          [[w.odd.map((o) => o.ch + ' (' + o.script + ', at ' + pos.get(o.index) + ')').join(', '), 'warn']]]));
+      }
+      const LIMIT = 300;
+      out.section('Characters');
+      out.table(['at', 'char', 'code', 'UTF-8', 'script', 'kind'], r.chars.slice(0, LIMIT).map((c, i) => [
+        [[String(i + 1), 'faint']], [[shown(c), c.flag && !c.benign ? 'warn' : 'strong']], [[c.hex, 'id']], [[c.utf8, 'dim']],
+        [[c.script, c.script === 'Common' ? 'faint' : '']], [[c.flag ? c.flag + (c.benign ? ' (part of an emoji)' : '') : CATEGORY[c.category] || c.category, c.flag && !c.benign ? 'warn' : 'dim']],
+      ]));
+      if (r.chars.length > LIMIT) out.dim('First ' + LIMIT + ' shown');
+    },
+  });
 }
+
+const CATEGORY = { Lu: 'capital letter', Ll: 'small letter', Lt: 'title-case letter', Lm: 'modifier letter', Lo: 'letter', Mn: 'combining mark', Mc: 'combining mark',
+  Me: 'enclosing mark', Nd: 'digit', Nl: 'letter number', No: 'number', Pc: 'connector', Pd: 'dash', Ps: 'opening bracket', Pe: 'closing bracket',
+  Pi: 'opening quote', Pf: 'closing quote', Po: 'punctuation', Sm: 'math symbol', Sc: 'currency', Sk: 'modifier symbol', So: 'symbol', Zs: 'space',
+  Cc: 'control', Cf: 'format' };

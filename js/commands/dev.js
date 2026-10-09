@@ -4,9 +4,10 @@ import { tokenize } from '../core/args.js';
 import { highlight } from '../core/search.js';
 import { relative } from '../lib/misc.js';
 import { ALGS, verifyJwt, signJwt } from '../lib/jose.js';
+import { parseMode, describe as describeMode, apply as applyMode } from '../lib/chmod.js';
 import { md5, decodeJWT, diffLists, diffView, parseCron, cronNext, describeCron, parseColor, toHex, toHsl, contrast } from '../lib/dev.js';
 
-// Developer tools: hash, jwt, url, regex, diff, cron, color. All offline.
+// Developer tools: hash, jwt, url, regex, diff, cron, color, chmod. All offline.
 
 const ALGOS = { md5: 'MD5', sha1: 'SHA-1', 'sha-1': 'SHA-1', sha256: 'SHA-256', 'sha-256': 'SHA-256', sha384: 'SHA-384', 'sha-384': 'SHA-384', sha512: 'SHA-512', 'sha-512': 'SHA-512' };
 
@@ -333,4 +334,48 @@ export default function register(add, { usage }) {
       out.copyable(hex);
     },
   });
+
+  // chmod: a Unix mode in every notation, and what symbolic changes do to it.
+  add({
+    name: 'chmod', group: 'Developer', desc: 'Unix permissions: 755 ⇄ rwxr-xr-x ⇄ u=rwx,g=rx,o=rx, special bits, and what u+x or go-w does',
+    usage: ['chmod <mode>', 'chmod <mode> <changes>'],
+    examples: ['chmod 755', 'chmod rw-r--r--', 'chmod drwxr-sr-x', 'chmod 4755', 'chmod 644 u+x', 'chmod 777 go-w,o-x', 'chmod 1777'],
+    run(ctx, rest) {
+      const { out } = ctx;
+      const m = /^(\S+)(?:\s+(\S[\s\S]*))?$/.exec(rest.trim());
+      if (!m) return usage(ctx, this);
+      const p = parseMode(m[1]);
+      if (p.error) return out.err(p.error);
+      let mode = p.mode;
+      const before = describeMode(mode);
+      if (m[2]) {
+        const r = applyMode(mode, m[2].replace(/\s+/g, ','));
+        if (r.error) return out.err(r.error);
+        mode = r.mode;
+      }
+      const d = describeMode(mode);
+      const head = m[2]
+        ? [[before.short, 'num'], [' ' + before.symbolic, 'dim'], ['  ' + m[2].trim() + '  →  ', 'faint'], [d.short, 'num strong'], [' ' + d.symbolic, 'strong']]
+        : [[d.symbolic, 'strong'], ['  ' + d.short, 'num']];
+      out.head(head, m[2] ? (mode === p.mode ? 'dim' : 'ok') : undefined);
+      out.kv([
+        ['octal', [[d.octal, 'num'], [d.short !== d.octal.replace(/^0/, '') ? '' : '  (' + d.short + ')', 'faint']]],
+        ['symbolic', [[(p.type && !m[2] ? p.type : '') + d.symbolic, '']]],
+        ['chmod', [['chmod ' + d.equation, ''], ['  (or chmod ' + d.short + ')', 'faint']]],
+        ...(p.type ? [['type', [[{ d: 'directory', '-': 'file', l: 'symbolic link', b: 'block device', c: 'character device', p: 'named pipe', s: 'socket' }[p.type] || p.type, 'dim']]]] : []),
+        ...(d.special.length ? [['special', [[d.special.join(', '), 'warn'], ['  ' + d.special.map((x) => SPECIAL[x]).join('; '), 'faint']]]] : []),
+      ]);
+      const yes = (b, letter) => [b ? letter : '-', b ? 'ok' : 'faint'];
+      out.table(['who', 'read', 'write', 'execute', ''], d.table.map((r) => [
+        [[r.who, '']], [yes(r.read, 'r')], [yes(r.write, 'w')], [yes(r.execute, 'x')], [[r.special || '', 'warn']],
+      ]));
+      out.copyable(d.short);
+    },
+  });
 }
+
+const SPECIAL = {
+  setuid: 'runs as the file\u2019s owner',
+  setgid: 'runs as its group (on a directory: new files get its group)',
+  sticky: 'only owners may delete in it (as /tmp)',
+};

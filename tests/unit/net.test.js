@@ -14,8 +14,8 @@ test('net lib: targets, blocked ports and mixed content, reverse names', () => {
   assert.equal(Net.readTarget('example.com', { port: 8443, path: 'v1' }).url, 'https://example.com:8443/v1');
   assert.equal(Net.readTarget('http://[::1]:5173/x?y=1').url, 'http://[::1]:5173/x?y=1');
   assert.equal(Net.readTarget('example.com?q=1').url, 'https://example.com/?q=1');
-  assert.throws(() => Net.readTarget('ftp://x.org'), /only test http and https/);
-  assert.throws(() => Net.readTarget('wss://x.org'), /WebSocket/);
+  assert.equal(Net.readTarget('wss://x.org').url, 'wss://x.org/'); // WebSocket: request checks the handshake
+  assert.throws(() => Net.readTarget('ftp://x.org'), /http, https, ws and wss/);
   assert.throws(() => Net.readTarget('x.org:70000'), /1 to 65535/);
   assert.match(Net.blockedBefore(Net.readTarget('example.com:22'), 'https:'), /port 22 \(SSH\) is on the browsers’ blocked list/);
   assert.match(Net.blockedBefore(Net.readTarget('http://example.com'), 'https:'), /mixed content/);
@@ -144,4 +144,65 @@ test('ip: the public address from ipify, details from ipapi.co; kept out of the 
   assert.equal(app.commands.byName.get('ip').private, true);
   app.ctx.fetch = fakeNet({ 'api.ipify.org': () => ({ body: JSON.stringify({ ip: '203.0.113.9' }) }) });
   assert.equal((await app.run('ip'))[2], 'IPv6: none: this connection has no IPv6');
+});
+
+// A stand-in WebSocket: behaviour by host. accept: opens, then closes cleanly
+// when asked; refuse: error then close 1006; silent: never answers.
+function fakeSocket(log = []) {
+  return class FakeWS {
+    constructor(url, protocols) {
+      this.url = url;
+      log.push(url);
+      const host = new URL(url).host;
+      if (host.startsWith('bad')) throw new SyntaxError('The URL is invalid');
+      this.protocol = '';
+      this.extensions = '';
+      setTimeout(() => {
+        if (host.startsWith('accept')) {
+          this.protocol = host.includes('chat') ? 'chat.v1' : '';
+          this.extensions = 'permessage-deflate';
+          this.onopen && this.onopen();
+        } else if (host.startsWith('refuse')) {
+          this.onerror && this.onerror({});
+          this.onclose && this.onclose({ code: 1006, reason: '', wasClean: false });
+        }
+      }, 5);
+    }
+    close(code = 1005, reason = '') { setTimeout(() => this.onclose && this.onclose({ code, reason, wasClean: true }), 1); }
+  };
+}
+
+test('WebSocket check: accepted, refused, silent, mixed content; ping points to request', async () => {
+  const WS = fakeSocket();
+  let r = await Net.probeSocket('wss://accept.test/live', { WebSocket: WS });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.close, { code: 1000, reason: 'check done', clean: true });
+  assert.equal(r.extensions, 'permessage-deflate');
+  r = await Net.probeSocket('wss://refuse.test/', { WebSocket: WS });
+  assert.deepEqual([r.ok, r.error, r.close.code], [false, 'refused', 1006]);
+  r = await Net.probeSocket('wss://silent.test/', { WebSocket: WS, timeout: 100 });
+  assert.deepEqual([r.ok, r.error], [false, 'timeout']);
+  r = await Net.probeSocket('wss://bad.test/', { WebSocket: WS });
+  assert.equal(r.error, 'invalid');
+
+  const app = await makeApp();
+  app.ctx.pageURL = 'https://misch0n.github.io/browser-hub/';
+  app.ctx.WebSocket = WS;
+  let out = await app.run('request wss://accept-chat.test/socket');
+  assert.match(out[0], /^# WebSocket open · handshake in .* · wss:\/\/accept-chat\.test\/socket$/);
+  assert.equal(out.tone, 'ok');
+  assert.ok(out.includes('handshake: accepted (101 Switching Protocols)'));
+  assert.ok(out.includes('subprotocol: chat.v1'));
+  assert.ok(out.includes('closed: 1000 normal closure · “check done”'));
+  out = await app.run('request wss://refuse.test/nope');
+  assert.match(out[0], /^# Refused/);
+  assert.ok(out.includes('closed: 1006 closed abnormally (no close frame: the handshake failed or the connection dropped)'));
+  assert.ok(out.some((l) => /request https:\/\/refuse\.test\/nope/.test(l)));
+  out = await app.run('request wss://silent.test timeout 0.2');
+  assert.match(out[0], /^# No handshake in 0\.2 s/);
+  // From an https page, ws:// goes only to this machine.
+  assert.match((await app.run('request ws://example.com/socket'))[1], /mixed content.*try wss:\/\//);
+  out = await app.run('request ws://accept.localhost:3000/');
+  assert.match(out[0], /WebSocket open/);
+  assert.match((await app.run('ping wss://accept.test'))[0], /^err: ping speaks HTTP; for a WebSocket: request wss:\/\/accept\.test\//);
 });

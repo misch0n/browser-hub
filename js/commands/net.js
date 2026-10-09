@@ -1,10 +1,10 @@
 import { plural } from '../core/util.js';
 import { tokenize } from '../core/args.js';
-import { readTarget, blockedBefore, probe, METHODS, dohQuery, readDomain, reverseName, DNS_TYPES, DEFAULT_TYPES, RESOLVERS, publicIp, ipDetails, isIp } from '../lib/net.js';
+import { readTarget, blockedBefore, probe, probeSocket, CLOSE_CODES, METHODS, dohQuery, readDomain, reverseName, DNS_TYPES, DEFAULT_TYPES, RESOLVERS, publicIp, ipDetails, isIp } from '../lib/net.js';
 
 // request, ping, dns, ip: what a web page can find out about the network.
 
-const LIMITS = 'A page can only make HTTP(S) requests: no ICMP ping, no raw TCP or UDP, and some ports are blocked outright.';
+const LIMITS = 'A page can only make HTTP(S) requests and WebSocket connections: no ICMP ping, no raw TCP or UDP, and some ports are blocked outright.';
 const ms = (n) => (n < 10 ? n.toFixed(1) : Math.round(n)) + ' ms';
 const seconds = (s) => {
   const m = /^(\d+(?:\.\d+)?)\s*(ms|s)?$/i.exec(String(s));
@@ -57,13 +57,44 @@ function prettyBody(text, type) {
   return { text: lines.slice(0, 60).join('\n') + (lines.length > 60 ? '\n… ' + (lines.length - 60) + ' more lines' : ''), lang: null };
 }
 
+// request ws(s)://…: does the handshake succeed? Opened, then closed again at once.
+async function socketCheck(ctx, target, timeout) {
+  const { out } = ctx;
+  const r = await probeSocket(target.url, { timeout, WebSocket: ctx.WebSocket });
+  const via = [[' · ' + target.url, 'dim']];
+  const closeSeg = (c) => [[String(c.code), 'num'], [' ' + (CLOSE_CODES[c.code] || (c.code >= 4000 ? 'the application\u2019s own code' : 'unknown')), 'dim'], [c.reason ? ' · \u201c' + c.reason + '\u201d' : '', '']];
+  if (r.ok) {
+    out.head([['WebSocket open', ''], [' · handshake in ' + ms(r.ms), 'dim'], ...via], 'ok');
+    const rows = [['handshake', [['accepted (101 Switching Protocols)', 'ok']]]];
+    if (r.protocol) rows.push(['subprotocol', [[r.protocol, '']]]);
+    if (r.extensions) rows.push(['extensions', [[r.extensions, '']]]);
+    if (r.close) rows.push(['closed', closeSeg(r.close)]);
+    if (target.notes.length) rows.push(['assumed', [[target.notes.join(', '), 'faint']]]);
+    out.kv(rows);
+    out.dim('Opened and closed again straight away; nothing was sent');
+    return;
+  }
+  if (r.error === 'timeout') {
+    out.head([['No handshake', ''], [' in ' + timeout / 1000 + ' s', 'dim'], ...via], 'err');
+    out.line([['Nothing answered in time: the host may drop packets on that port, be down, or be very slow.', '']]);
+  } else if (r.error === 'invalid') {
+    return out.err('Can\u2019t open that address: ' + (r.message || target.url));
+  } else {
+    out.head([['Refused', ''], [' after ' + ms(r.ms), 'dim'], ...via], 'err');
+    out.line([['The handshake didn\u2019t succeed: nothing listening, not a WebSocket endpoint at that path, refused (401/403/404), or an untrusted certificate. Browsers don\u2019t show the HTTP status of a refused handshake.', '']]);
+    if (r.close) out.kv([['closed', closeSeg(r.close)]]);
+    out.line([['Is the server up? ', 'dim'], ['request ' + target.url.replace(/^ws/, 'http'), 'accent', { run: 'request ' + target.url.replace(/^ws/, 'http') }]]);
+  }
+  if (target.notes.length) out.dim('Assumed ' + target.notes.join(', '));
+}
+
 export default function register(add, { usage }) {
   add({
     name: 'request', group: 'Network', desc: 'test a URL, host or port from this browser: status, timing, headers, body',
-    usage: ['request <url | host[:port][/path]>', 'request [GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS] <target>',
+    usage: ['request <url | host[:port][/path]>', 'request [GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS] <target>', 'request wss://<host>[/path]',
       'request <host> port <n> path <p> scheme http|https', 'request <target> timeout <seconds>', 'request <target> header "Name: value"', 'request POST <target> body <text>'],
     examples: ['request example.com', 'request https://api.github.com/zen', 'request HEAD 1.1.1.1', 'request localhost:3000/health',
-      'request POST https://httpbin.org/post body {"a":1}', 'request example.com port 8443 timeout 3'],
+      'request POST https://httpbin.org/post body {"a":1}', 'request example.com port 8443 timeout 3', 'request wss://echo.websocket.org', 'request ws://localhost:8080/socket'],
     complete: (prev) => (prev.length === 0 ? METHODS.map((m) => ({ value: m })) : prev.length >= 1 ? ['port', 'path', 'scheme', 'timeout', 'header', 'body'].map((v) => ({ value: v })) : []),
     async run(ctx, rest) {
       const { out } = ctx;
@@ -84,6 +115,7 @@ export default function register(add, { usage }) {
         return;
       }
       const timeout = req.o.timeout || 8000;
+      if (target.scheme === 'ws' || target.scheme === 'wss') return socketCheck(ctx, target, timeout);
       const r = await probe(target.url, { method: req.method, timeout, fetch: ctx.fetch, headers: req.o.headers, body: req.o.body });
       const via = [[' · ' + req.method + ' ' + target.url, 'dim']];
       if (!r.ok) {
@@ -149,6 +181,7 @@ export default function register(add, { usage }) {
       } catch (e) {
         return out.err(e.message);
       }
+      if (target.scheme === 'ws' || target.scheme === 'wss') return out.err('ping speaks HTTP; for a WebSocket: request ' + target.url);
       const blocked = blockedBefore(target, pageProtocol(ctx));
       if (blocked) return out.err(blocked);
       const count = Math.min(Math.max(Number(req.o.count) || 4, 1), 10);

@@ -404,7 +404,12 @@ may see and the body. A server that answers without CORS headers is reported
 as reachable, with its status and body hidden by the browser; a request that
 fails can't say why (DNS, refused, TLS or nothing listening look the same to
 a page). From the https page, plain `http://` addresses are blocked as mixed
-content, except `localhost`. `ping <host>` sends a few `HEAD` requests and
+content, except `localhost`. `request wss://host/path` (or `ws://` to
+`localhost`) checks a WebSocket endpoint: whether the handshake was accepted,
+how long it took, the subprotocol and extensions, and the close code, then it
+closes again without sending anything. A refused handshake (wrong path, not a
+WebSocket server, 401/403, bad certificate) only reads as "refused" with close
+code 1006: browsers don't show its HTTP status. `ping <host>` sends a few `HEAD` requests and
 gives min/avg/max. `dns <name> [types]` asks Cloudflare (or `via google`) over
 HTTPS for A, AAAA, CNAME, MX, TXT and NS by default, any type by name, and PTR
 for an IP; tap a value to follow it. `ip` gives your public IPv4 and IPv6

@@ -30,8 +30,10 @@ it to [todo.md](todo.md) (or write an [exploration](exploration/README.md) first
 - **Other key formats.** SEC1 `EC PRIVATE KEY` and passphrase-protected
   `ENCRYPTED PRIVATE KEY` files aren't read; `crypt` names the `openssl`
   command that converts them to PKCS#8.
-- **Raw TCP/UDP and ICMP.** `request` and `ping` speak HTTP(S) (and soon
-  WebSocket, a Dev task in [todo.md](todo.md#dev)); browsers allow nothing lower.
+- **Raw TCP/UDP and ICMP.** `request` and `ping` speak HTTP(S), and `request`
+  checks WebSocket handshakes; browsers allow nothing lower.
+- **The status of a refused WebSocket handshake.** Browsers report only an
+  error and close code 1006, never the server's HTTP answer; `request` says so.
 - **Telling network failures apart.** A page can't tell DNS failure, a refused
   connection, a bad TLS certificate and a CORS refusal apart beyond the
   no-cors retry; `request` says so rather than guessing.

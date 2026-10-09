@@ -734,13 +734,14 @@ test a URL, host or port from this browser: status, timing, headers, body
 ```
 request <url | host[:port][/path]>
 request [GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS] <target>
+request wss://<host>[/path]
 request <host> port <n> path <p> scheme http|https
 request <target> timeout <seconds>
 request <target> header "Name: value"
 request POST <target> body <text>
 ```
 
-Examples: `request example.com` · `request https://api.github.com/zen` · `request HEAD 1.1.1.1` · `request localhost:3000/health` · `request POST https://httpbin.org/post body {"a":1}` · `request example.com port 8443 timeout 3`
+Examples: `request example.com` · `request https://api.github.com/zen` · `request HEAD 1.1.1.1` · `request localhost:3000/health` · `request POST https://httpbin.org/post body {"a":1}` · `request example.com port 8443 timeout 3` · `request wss://echo.websocket.org` · `request ws://localhost:8080/socket`
 
 ### `ping`
 

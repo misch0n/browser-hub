@@ -25,14 +25,14 @@ npm run setup      # Playwright 1.56.1, jsQR 1.4.0, @zxing/library 0.21.3 (test-
 | `npm test` | unit tests (Node's runner): libs, core, every command through a fake page | ~3 s |
 | `npm run test:tz` | the unit tests in six time zones (UTC, Sofia, Los Angeles, Tokyo, Kiritimati +14, Pago Pago −11) | ~20 s |
 | `npm run test:decoders` | QR codes read back by jsQR, barcodes by ZXing, X.509 against OpenSSL-made fixtures | ~5 s |
-| `npm run test:e2e` | the deployable build in headless Chromium: 59 checks | ~3 min |
+| `npm run test:e2e` | the deployable build in headless Chromium: 64 checks | ~3 min |
 | `npm run test:all` | `test:tz`, `test:decoders` and `test:e2e`, the scripts CI runs | ~4 min |
 | `node tools/docs-commands.mjs` | is the command reference current? (`npm run docs` rewrites it) | instant |
 
 Run one area: `node --test tests/unit/keep.test.js`; one test:
 `node --test --test-name-pattern="diagrams" tests/unit/*.test.js`.
 The e2e suite has no filter; to debug one check, copy its body into a scratch
-script (see "e2e harness" for the setup it needs) rather than running all 59.
+script (see "e2e harness" for the setup it needs) rather than running all of them.
 
 ## Unit tests (`tests/unit/<area>.test.js`)
 

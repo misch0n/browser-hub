@@ -29,9 +29,8 @@ export function readTarget(text, opts = {}) {
     scheme = sm[1].toLowerCase();
     t = t.slice(sm[0].length);
   }
-  if (scheme && !['http', 'https'].includes(scheme)) {
-    if (scheme === 'ws' || scheme === 'wss') throw new Error('WebSocket checks are not supported here; try the http(s) address of the same server');
-    throw new Error('a browser can only test http and https, not ' + scheme + '://');
+  if (scheme && !['http', 'https', 'ws', 'wss'].includes(scheme)) {
+    throw new Error('a browser can only test http, https, ws and wss, not ' + scheme + '://');
   }
   const hm = /^(\[[0-9a-f:.]+\]|[^/:?#\s]+)(?::(\d+))?(\/[^\s]*)?$/i.exec(t.replace(/^([^/?#]*)([?#].*)$/, '$1/$2'));
   if (!hm) throw new Error("that isn't a host, IP or URL");
@@ -43,7 +42,7 @@ export function readTarget(text, opts = {}) {
     scheme = port === 80 || port === 8080 || (isLocalHost(host) && port !== 443) ? 'http' : 'https';
     notes.push('scheme ' + scheme + (port ? ' (guessed from port ' + port + ')' : isLocalHost(host) ? ' (local address)' : ' (the default)'));
   }
-  const def = scheme === 'https' ? 443 : 80;
+  const def = scheme === 'https' || scheme === 'wss' ? 443 : 80;
   if (!port) { port = def; notes.push('port ' + def + ' (the ' + scheme + ' default)'); }
   let path = opts.path || hm[3] || '/';
   if (!path.startsWith('/')) path = '/' + path;
@@ -57,8 +56,9 @@ export function blockedBefore(target, pageProtocol) {
     const n = portName(target.port);
     return 'port ' + target.port + (n ? ' (' + n + ')' : '') + ' is on the browsers’ blocked list: no page may connect to it';
   }
-  if (pageProtocol === 'https:' && target.scheme === 'http' && !isLocalHost(target.host)) {
-    return 'mixed content: this page is https, and browsers block its requests to plain http:// addresses (only localhost is allowed)';
+  if (pageProtocol === 'https:' && (target.scheme === 'http' || target.scheme === 'ws') && !isLocalHost(target.host)) {
+    return 'mixed content: this page is https, and browsers block its connections to plain ' + target.scheme + ':// addresses (only localhost is allowed)' +
+      (target.scheme === 'ws' ? '; try wss://' : '');
   }
   return null;
 }
@@ -120,6 +120,48 @@ export async function probe(url, opts = {}) {
   const second = await run('no-cors');
   return { ...second, cors: false, corsError: first.message };
 }
+
+// ---- WebSocket ------------------------------------------------------------------------
+// Opens a connection, waits for the handshake, closes it again. A page learns
+// little: a refused handshake (wrong path, not a WebSocket endpoint, a 403, a
+// bad certificate, nothing listening) is just an error then close code 1006, with
+// no HTTP status. -> { ok: true, ms, protocol, extensions, close: { code, reason, clean } }
+//                  | { ok: false, error: 'refused' | 'timeout' | 'invalid', ms, close?, message? }
+export function probeSocket(url, opts = {}) {
+  const WS = opts.WebSocket || globalThis.WebSocket;
+  const timeout = opts.timeout || 8000;
+  const t0 = now();
+  return new Promise((resolve) => {
+    let ws;
+    try {
+      ws = new WS(url, opts.protocols || []);
+    } catch (e) {
+      resolve({ ok: false, error: 'invalid', ms: 0, message: e && e.message });
+      return;
+    }
+    let opened = null; // the result once the handshake succeeded
+    let done = false;
+    const finish = (r) => { if (!done) { done = true; clearTimeout(timer); resolve(r); } };
+    const timer = setTimeout(() => {
+      try { ws.close(); } catch (e) { /* closing anyway */ }
+      finish(opened || { ok: false, error: 'timeout', ms: now() - t0 });
+    }, timeout);
+    ws.onopen = () => {
+      opened = { ok: true, ms: now() - t0, protocol: ws.protocol || '', extensions: ws.extensions || '', close: null };
+      try { ws.close(1000, 'check done'); } catch (e) { finish(opened); }
+    };
+    ws.onclose = (e) => {
+      const close = { code: e.code, reason: e.reason || '', clean: !!e.wasClean };
+      finish(opened ? { ...opened, close } : { ok: false, error: 'refused', ms: now() - t0, close });
+    };
+    ws.onerror = () => { /* the close event that follows says how it ended */ };
+  });
+}
+
+// What a WebSocket close code means (RFC 6455 section 7.4).
+export const CLOSE_CODES = { 1000: 'normal closure', 1001: 'going away', 1002: 'protocol error', 1003: 'unsupported data', 1005: 'no status given',
+  1006: 'closed abnormally (no close frame: the handshake failed or the connection dropped)', 1007: 'invalid data', 1008: 'policy violation',
+  1009: 'message too big', 1010: 'extension required', 1011: 'server error', 1012: 'service restart', 1013: 'try again later', 1015: 'TLS handshake failed' };
 
 // ---- DNS over HTTPS ---------------------------------------------------------------------
 

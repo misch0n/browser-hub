@@ -5,6 +5,7 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 9 October 2026
 
+- `request wss://…` (and `ws://` to localhost) checks a WebSocket handshake: accepted or refused, time, subprotocol, close code; CSP `connect-src` gains `wss:` and local `ws:`.
 - Recurring events: `ev fri 19:00 book club every:week` (task rules), shown on every day they fall on in `cal`, `agenda`, `today`, the summary and the widgets; edits and removal act on the series.
 - CI runs the npm scripts (`test:tz`, `setup`, `test:decoders`, `test:e2e`); `test:all` chains them.
 - Unit tests split by area into `tests/unit/` with shared `tests/helpers.mjs` (same 102 tests).

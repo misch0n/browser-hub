@@ -27,14 +27,15 @@ needs the owner's agreement and an entry in [decisions.md](decisions.md).
 GitHub Pages can't send headers, so the policy is a `<meta>` in `index.html`:
 
 ```
-default-src 'self'; connect-src https: http://localhost:* http://127.0.0.1:*;
+default-src 'self'; connect-src https: wss: http://localhost:* http://127.0.0.1:*
+  ws://localhost:* ws://127.0.0.1:*;
 img-src 'self' blob:; object-src 'none'; base-uri 'none'
 ```
 
 | Directive | Why |
 | --- | --- |
 | `default-src 'self'` | scripts, styles and everything else only from the site; no inline scripts or styles, no `eval` |
-| `connect-src https: http://localhost:* http://127.0.0.1:*` | sync (`api.github.com`) and the network tools (`request`, `ping`, `dns`, `ip`), which by nature reach any host. Widened from `https://api.github.com` on 6 October 2026 ([decision](decisions.md)). Plain http only to this machine |
+| `connect-src https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*` | sync (`api.github.com`) and the network tools (`request`, `ping`, `dns`, `ip`), which by nature reach any host. Widened from `https://api.github.com` on 6 October 2026 ([decision](decisions.md)); `wss:` and local `ws:` added on 9 October 2026 for `request wss://…` (CSP 3 lets `https:` cover `wss:`, but not every browser does). Plain http and ws only to this machine |
 | `img-src 'self' blob:` | Mermaid drawings are shown as images from `blob:` URLs |
 | `object-src 'none'`, `base-uri 'none'` | no plugins, no base-URL hijacking |
 

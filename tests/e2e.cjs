@@ -19,6 +19,25 @@ const server = http.createServer((req, res) => {
   res.end(fs.readFileSync(file));
 });
 
+// A minimal WebSocket endpoint on the same server, for request ws://…: /socket
+// completes the handshake and answers a close frame with the same code; any
+// other path refuses the upgrade with a 404.
+server.on('upgrade', (req, socket) => {
+  if (!req.url.startsWith('/socket') || !req.headers['sec-websocket-key']) {
+    socket.end('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n');
+    return;
+  }
+  const accept = require('crypto').createHash('sha1').update(req.headers['sec-websocket-key'] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+  socket.on('data', (buf) => {
+    if ((buf[0] & 0x0f) !== 8) return; // only the client's close frame matters here
+    const len = buf[1] & 0x7f, mask = buf.subarray(2, 6);
+    const payload = Buffer.from(buf.subarray(6, 6 + len).map((b, i) => b ^ mask[i % 4]));
+    socket.end(Buffer.concat([Buffer.from([0x88, payload.length]), payload]));
+  });
+  socket.on('error', () => {});
+});
+
 let passed = 0;
 async function check(name, fn) {
   try { await fn(); passed++; console.log('ok   ' + name); }
@@ -76,7 +95,9 @@ async function check(name, fn) {
   page.on('console', (m) => {
     // The browser logs every 4xx response; GitHub's 404 (no sync file yet) and
     // 401 (the revoked-token test) are expected answers, handled by the page; so
-    // is the refused CORS attempt of the network test.
+    // are the refused CORS attempt of the network test and the refused WebSocket handshake.
+    // The refused WebSocket handshake of the request ws:// check is logged the same way.
+    if (m.type() === 'error' && /^WebSocket connection to 'ws:\/\/127\.0\.0\.1:\d+\/nope' failed/.test(m.text())) return;
     if (m.type() === 'error' && !/^https:\/\/(api\.github\.com|nocors\.test)\//.test(m.location().url || '')) errors.push(m.text());
   });
   await page.goto(base);
@@ -102,7 +123,7 @@ async function check(name, fn) {
   await check('CSP meta blocks outbound connections and inline scripts', async () => {
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
     // https anywhere (sync, and the network tools), plain http only to this machine.
-    assert.match(csp, /connect-src https: http:\/\/localhost:\* http:\/\/127\.0\.0\.1:\*;/);
+    assert.match(csp, /connect-src https: wss: http:\/\/localhost:\* http:\/\/127\.0\.0\.1:\* ws:\/\/localhost:\* ws:\/\/127\.0\.0\.1:\*;/);
     assert.equal(await page.evaluate(() => fetch('http://example.com/', { mode: 'no-cors' }).then(() => false, () => true)), true);
     const ran = await page.evaluate(() => new Promise((resolve) => {
       const s = document.createElement('script');
@@ -433,6 +454,19 @@ async function check(name, fn) {
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.length), tasksBefore);
     await prompt.fill('');
     await send('aliases groc rm');
+  });
+
+  await check('request ws://: the handshake to a local WebSocket server; a refused path says so', async () => {
+    const ws = base.replace(/^http/, 'ws');
+    await send('request ' + ws + 'socket');
+    await page.waitForFunction(() => /WebSocket open|Refused|No handshake/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    const ok = await lastText();
+    assert.match(ok, /WebSocket open · handshake in/);
+    assert.match(ok, /accepted \(101 Switching Protocols\)/);
+    assert.match(ok, /closed\s*1000 normal closure/);
+    await send('request ' + ws + 'nope');
+    await page.waitForFunction(() => /WebSocket open|Refused|No handshake/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await lastText(), /Refused[\s\S]*1006/);
   });
 
   await check('recurring events: cal marks every occurrence, the agenda widget lists it with ↻, removal takes the series', async () => {

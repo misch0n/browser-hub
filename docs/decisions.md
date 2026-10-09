@@ -63,7 +63,8 @@ which must reach arbitrary hosts. → `connect-src https: http://localhost:*
 http://127.0.0.1:*` (was `https://api.github.com`). Script sources stay
 `'self'`, so no other code can use it; tools omit credentials and referrers.
 Supersedes the v1 spec's "no network requests" and the "without the internet
-ones" answer of 5 Oct for these tools only.
+ones" answer of 5 Oct for these tools only. (9 Oct: `wss:` and `ws:` to this
+machine added for the WebSocket check in `request`.)
 
 **D11. Mermaid vendored, rendered in a frame, shown as an image** (6 Oct 2026, active)
 Writing a diagram renderer is unreasonable; Mermaid needs inline styles that

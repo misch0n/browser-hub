@@ -151,6 +151,20 @@ export const KINDS = {
           return t ? { value: t } : { error: "can't read the time '" + s + "' (24-hour HH:MM, or none for all day)" };
         },
       },
+      // A recurring event is one item: its date starts the series (core/repeat.js occursOn).
+      repeat: {
+        aliases: ['every', 'recur'],
+        raw: (x) => x.repeat || 'none',
+        parse(v) {
+          if (NONE.test(v.trim())) return { value: null };
+          const r = parseRepeat(v.replace(/^every:?\s*/i, ''));
+          return r ? { value: r } : { error: "can't read '" + v.trim() + "' (try day, weekday, week, 2w, month, year, mon,thu or none)" };
+        },
+        apply(item, value) {
+          if (value) item.repeat = value;
+          else delete item.repeat;
+        },
+      },
     },
   },
   snippet: {

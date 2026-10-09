@@ -170,6 +170,17 @@ Ids in the results open the entry.
 occurrence (finishing late doesn't leave it overdue; finishing early skips the
 one done). `t edit t3.repeat none` makes it a normal task again.
 
+**Recurring events**: `ev fri 19:00 book club every:week`, `ev thu 18:30 climbing every:2w`,
+`ev 2026-11-01 rent every:month`, `ev mon 09:00 standup every:weekday` (the same
+rules). The event's date starts the series (with a weekday rule, the first
+day the rule has), and it runs with no end. `cal`, `agenda`, `today`, the pinned
+summary and the calendar and agenda widgets show every occurrence on its day,
+marked ↻; `events` lists each series at its next occurrence (`events all` by
+its first date). Monthly series keep their day (the 31st falls on the 30th in
+shorter months; 29 February on the 28th). An event is one item, so editing or
+removing it acts on the whole series (it says so); `events e2 edit repeat none`
+makes it a one-off on its first date.
+
 **History on every device**: the page keeps what you ran *and what it
 printed*, and with sync on, every device shows every device's history merged
 in time order; a command from another device carries its name (`iPhone · Safari`).

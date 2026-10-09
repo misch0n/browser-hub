@@ -435,6 +435,22 @@ async function check(name, fn) {
     await send('aliases groc rm');
   });
 
+  await check('recurring events: cal marks every occurrence, the agenda widget lists it with ↻, removal takes the series', async () => {
+    await send('ev today 07:00 stretch every:day');
+    const id = (await lastText()).match(/Added event (e\d+)/)[1];
+    await send('cal');
+    const marks = await lastTurn().locator('table.cal td.mark').count();
+    const left = await page.evaluate(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate() + 1; });
+    assert.ok(marks >= left, marks + ' marks, ' + left + ' days left');
+    assert.match(await lastText(), /stretch ↻/);
+    await page.waitForFunction(() => /stretch ↻/.test(document.querySelector('[data-widget=agenda]').innerText));
+    await send('agenda 3');
+    assert.equal((await lastText()).match(/stretch/g).length, 3);
+    await send('events ' + id + ' rm');
+    assert.match(await lastText(), /the whole series \(every day\)/);
+    await page.waitForFunction(() => !/stretch/.test(document.querySelector('[data-widget=agenda]').innerText));
+  });
+
   await check('go <url>: any address opens like an alias (after the wait), Esc cancels, ↑ and Back find it', async () => {
     await type('go example.com/went-there');
     await page.keyboard.press('Enter');

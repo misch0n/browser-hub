@@ -1,7 +1,8 @@
 import { parseId, parseDate, leadingDate, parseTime, truncate, byIdNum, plural, pad2, todayISO, monthIndex } from '../core/util.js';
 import { MONTH_NAMES, DAY_NAMES_LONG, dayLabel, longDate, usageSegs } from '../core/format.js';
 import { daySummary, summaryRows, summaryCounts, tomorrowLine } from '../core/summary.js';
-import { agenda, eventDays, sortEvents } from '../core/agenda.js';
+import { agenda, eventDays, eventsIn, upcoming, sortEvents } from '../core/agenda.js';
+import { parseRepeat, repeatLabel, firstDue } from '../core/repeat.js';
 import { parseICS } from '../lib/ics.js';
 import { oneValue } from '../core/args.js';
 
@@ -41,12 +42,13 @@ export default function register(add, helpers) {
         }
       }
       const prefix = year + '-' + pad2(month) + '-';
-      const events = st().events.items.filter((e) => e.date.startsWith(prefix)).sort(sortEvents);
+      const events = eventsIn(st(), prefix + '01', prefix + pad2(new Date(year, month, 0).getDate()));
       out.head([[MONTH_NAMES[month - 1] + ' ' + year, 'strong'], [events.length ? ' · ' + plural(events.length, 'event') : '', 'dim']]);
       out.calendar({ year, month, today, marks: eventDays(st(), year, month) });
       if (events.length) {
         out.table(null, events.map((e) => [
-          [[e.id, 'id', { run: 'events ' + e.id }]], [[longDate(e.date, today), 'date']], [[e.time || 'all day', e.time ? 'num' : 'faint']], e.title,
+          [[e.id, 'id', { run: 'events ' + e.id }]], [[longDate(e.date, today), 'date']], [[e.time || 'all day', e.time ? 'num' : 'faint']],
+          [[e.title, ''], [e.repeat ? '  ↻' : '', 'faint']],
         ]));
       }
     },
@@ -83,7 +85,7 @@ export default function register(add, helpers) {
           ? [[label[0].toUpperCase() + label.slice(1), 'accent'], [' · ' + longDate(d.date, today), 'dim']]
           : [[longDate(d.date, today), 'date']]);
         out.table(null, [
-          ...d.events.map((e) => [[[e.id, 'id', { run: 'events ' + e.id }]], [[e.time || 'all day', e.time ? 'num' : 'faint']], e.title]),
+          ...d.events.map((e) => [[[e.id, 'id', { run: 'events ' + e.id }]], [[e.time || 'all day', e.time ? 'num' : 'faint']], [[e.title, ''], [e.repeat ? '  ↻' : '', 'faint']]]),
           ...d.tasks.map((t) => [[[t.id, 'id', { run: 'tasks ' + t.id }]], [['task due', 'warn']], t.text]),
         ]);
       }
@@ -149,13 +151,24 @@ export default function register(add, helpers) {
       if (!time) return out.err("Can't read the time '" + tm[1] + "' (use 24-hour HH:MM)");
       title = tm[2] || '';
     }
+    // every:<rule> anywhere after the date: a series (ev fri 19:00 book club every:week)
+    let repeat = null;
+    const kept = [];
+    for (const w of title.split(/\s+/).filter(Boolean)) {
+      if (/^(every|repeat):/i.test(w) && !/^"/.test(title)) {
+        repeat = parseRepeat(w.slice(w.indexOf(':') + 1));
+        if (!repeat) return out.err("Can't read the repeat '" + w.slice(w.indexOf(':') + 1) + "' (try day, weekday, week, 2w, month, year or mon,thu)");
+      } else kept.push(w);
+    }
+    if (repeat) title = kept.join(' ');
     title = oneValue(title); // ev fri "19:30 is the title"
     if (!title.trim()) return out.err('An event needs a title: events add ' + m[1] + (time ? ' ' + time : '') + ' <title>');
     if (title.length > 200) return out.err('The title is too long (200 characters max)');
+    const start = repeat ? firstDue(repeat, date) : date; // every:mon from a Friday starts on the Monday
     const id = await ctx.data.allocId('e');
-    await ctx.data.mutate('events', (d) => { d.items.push({ id, date, time, title }); });
+    await ctx.data.mutate('events', (d) => { d.items.push(repeat ? { id, date: start, time, title, repeat } : { id, date, time, title }); });
     out.head([['Added event ', ''], [id, 'id', { run: 'events ' + id }]], 'ok');
-    out.line([[title, ''], ['  ', ''], [dayLabel(date, today), 'date'], [time ? ' ' + time : '', 'num']]);
+    out.line([[title, ''], ['  ', ''], [dayLabel(start, today), 'date'], [time ? ' ' + time : '', 'num'], [repeat ? '  ↻ ' + repeatLabel(repeat) + ', from then on' : '', 'faint']]);
   }
 
   function listEvents(ctx, rest) {
@@ -167,7 +180,8 @@ export default function register(add, helpers) {
       return;
     }
     const today = todayISO(ctx.now());
-    const list = st().events.items.filter((e) => arg === 'all' || e.date >= today).sort(sortEvents);
+    // Upcoming: each event at its next occurrence. All: as stored (a series by its first date).
+    const list = arg === 'all' ? st().events.items.slice().sort(sortEvents) : upcoming(st(), today);
     if (!list.length) {
       out.head(arg === 'all' ? 'No events' : 'No upcoming events', 'dim');
       out.dim('Add one with: events add <date> [HH:MM] <title>  (or ev …)');
@@ -176,24 +190,24 @@ export default function register(add, helpers) {
     out.head([[plural(list.length, arg === 'all' ? 'event' : 'upcoming event'), 'strong']]);
     out.table(['id', 'date', 'time', 'event'], list.map((e) => [
       [[e.id, 'id', { run: 'events ' + e.id }]], [[longDate(e.date, today), e.date < today ? 'faint' : 'date']],
-      [[e.time || 'all day', e.time ? 'num' : 'faint']], [[e.title, e.date < today ? 'dim' : '']],
+      [[e.time || 'all day', e.time ? 'num' : 'faint']], [[e.title, e.date < today && !e.repeat ? 'dim' : ''], [e.repeat ? '  ↻ ' + repeatLabel(e.repeat) : '', 'faint']],
     ]));
   }
 
-  const spec = { list: listEvents, add: addEvent, addArgs: '<date> [HH:MM] <title>', filter: '[all]' };
+  const spec = { list: listEvents, add: addEvent, addArgs: '<date> [HH:MM] <title> [every:<rule>]', filter: '[all]' };
 
   add({
     name: 'events', group: 'Calendar', desc: 'list, add, show, edit and remove events',
     usage: records.usageFor('event', spec),
-    examples: ['events', 'events all', 'events add fri 19:30 dinner at Mia\'s', 'events e2', 'events e2 edit', 'events e2 edit time 20:00', 'events e2 rm'],
+    examples: ['events', 'events all', 'events add fri 19:30 dinner at Mia\'s', 'events add thu 19:00 book club every:2w', 'events e2', 'events e2 edit', 'events e2 edit time 20:00', 'events e2 edit repeat none', 'events e2 rm'],
     complete: (prev) => records.complete('event', prev, { first: [{ value: 'all' }] }),
     run: (ctx, rest) => records.route(ctx, 'event', rest, spec),
   });
 
   add({
     name: 'ev', group: 'Calendar', aliasOf: 'events', desc: 'short for events; ev <date> … adds an event',
-    usage: ['ev <date> [HH:MM] <title>', 'ev <id> [edit [<field> [<value>]] | rm]'],
-    examples: ['ev fri 19:30 dinner at Mia\'s', 'ev 2026-12-24 Christmas Eve', 'ev e2 edit time 20:00', 'ev e2 rm'],
+    usage: ['ev <date> [HH:MM] <title> [every:<rule>]', 'ev <id> [edit [<field> [<value>]] | rm]'],
+    examples: ['ev fri 19:30 dinner at Mia\'s', 'ev mon 09:00 standup every:weekday', 'ev 2026-12-24 Christmas Eve', 'ev e2 edit time 20:00', 'ev e2 rm'],
     complete: (prev) => records.complete('event', prev),
     run: (ctx, rest) => records.route(ctx, 'event', records.legacy('event', rest) ?? rest, { ...spec, short: true }),
   });

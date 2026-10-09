@@ -1,5 +1,7 @@
-// Recurring tasks: `t water the plants every:mon,thu`. A recurring task is
-// never finished; `t done` moves its due date to the next occurrence.
+// Recurring tasks and events: `t water the plants every:mon,thu`,
+// `ev fri 19:00 book club every:week`. A recurring task is never finished;
+// `t done` moves its due date to the next occurrence. A recurring event is one
+// item whose occurrences are worked out from its date and rule (occursOn, nextOn).
 //
 // Rules: day, weekday (Mon-Fri), week, month, year, N d|w|m|y (2w, 10d, 3m),
 // or a list of weekdays (mon,thu). Stored normalized: 'day', 'weekday',
@@ -100,4 +102,66 @@ export function repeatLabel(rule) {
   const m = /^(\d+)([dwmy])$/.exec(rule);
   if (m) return 'every ' + m[1] + ' ' + UNIT[m[2]] + 's';
   return 'every ' + rule;
+}
+
+// ---- event series --------------------------------------------------------------------
+// A series starts on its event's date and has no end. Month and year rules keep
+// the start's day of the month, on the last day of shorter months (31st -> 30 Apr,
+// 29 Feb -> 28 Feb).
+
+const dayNo = (iso) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86400000;
+const lastDay = (y, m) => new Date(y, m, 0).getDate(); // m: 1-12
+
+// { kind: 'd' | 'm', n } for interval rules (weeks are 7 days, years 12 months); null for day sets.
+function interval(rule) {
+  if (rule === 'day') return { kind: 'd', n: 1 };
+  if (rule === 'week') return { kind: 'd', n: 7 };
+  if (rule === 'month') return { kind: 'm', n: 1 };
+  if (rule === 'year') return { kind: 'm', n: 12 };
+  const m = /^(\d+)([dwmy])$/.exec(rule);
+  if (!m) return null;
+  const k = +m[1];
+  return { d: { kind: 'd', n: k }, w: { kind: 'd', n: 7 * k }, m: { kind: 'm', n: k }, y: { kind: 'm', n: 12 * k } }[m[2]];
+}
+
+// The k-th month after the start, on the start's day (or the month's last).
+function monthStep(start, k) {
+  const y = +start.slice(0, 4), m = +start.slice(5, 7) - 1 + k, d = +start.slice(8, 10);
+  const yy = y + Math.floor(m / 12), mm = ((m % 12) + 12) % 12 + 1;
+  return yy + '-' + String(mm).padStart(2, '0') + '-' + String(Math.min(d, lastDay(yy, mm))).padStart(2, '0');
+}
+
+// Does the series starting `start` fall on `date`? (Its start always does.)
+export function occursOn(rule, start, date) {
+  if (date < start) return false;
+  if (date === start) return true;
+  const set = daySet(rule);
+  if (set) return set.has(parseISO(date).getDay());
+  const iv = interval(rule);
+  if (!iv) return false;
+  if (iv.kind === 'd') return (dayNo(date) - dayNo(start)) % iv.n === 0;
+  const months = (+date.slice(0, 4) - +start.slice(0, 4)) * 12 + (+date.slice(5, 7) - +start.slice(5, 7));
+  return months % iv.n === 0 && monthStep(start, months) === date;
+}
+
+// The first occurrence on or after `from`.
+export function nextOn(rule, start, from) {
+  if (from <= start) return start;
+  const set = daySet(rule);
+  if (set) {
+    let d = from;
+    for (let i = 0; i < 8 && !set.has(parseISO(d).getDay()); i++) d = addDays(d, 1);
+    return d;
+  }
+  const iv = interval(rule);
+  if (!iv) return null;
+  if (iv.kind === 'd') {
+    const gap = dayNo(from) - dayNo(start);
+    return addDays(start, Math.ceil(gap / iv.n) * iv.n);
+  }
+  const months = (+from.slice(0, 4) - +start.slice(0, 4)) * 12 + (+from.slice(5, 7) - +start.slice(5, 7));
+  for (let k = Math.max(0, Math.floor(months / iv.n) - 1); ; k++) {
+    const d = monthStep(start, k * iv.n);
+    if (d >= from) return d;
+  }
 }

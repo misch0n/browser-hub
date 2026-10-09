@@ -84,7 +84,10 @@ export function merge(current, file, isBuiltin, now) {
   for (const e of items('events')) {
     const time = e && e.time ? e.time : null;
     if (!e || !isStr(e.title, 200) || !parseISO(e.date) || (time !== null && parseTime(time) !== time)) { invalid++; continue; }
-    out.events.items.push({ id: nextId('e'), date: e.date, time, title: e.title });
+    const ev = { id: nextId('e'), date: e.date, time, title: e.title };
+    const repeat = typeof e.repeat === 'string' ? parseRepeat(e.repeat) : null;
+    if (repeat) ev.repeat = repeat;
+    out.events.items.push(ev);
     added.events++;
   }
 

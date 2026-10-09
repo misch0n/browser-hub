@@ -1,7 +1,7 @@
 import { KINDS, fieldName, fieldsOfItem, parseFieldEdit, findRecord, applyField } from '../core/records.js';
 import { parseId, todayISO } from '../core/util.js';
 import { dueSeg, tagSegs, dayLabel, longDate } from '../core/format.js';
-import { repeatLabel } from '../core/repeat.js';
+import { repeatLabel, nextOn } from '../core/repeat.js';
 import { oneValue } from '../core/args.js';
 
 // One grammar for everything you keep: notes, tasks, events, snippets, links to read later,
@@ -45,6 +45,7 @@ function display(kind, field, item, today) {
     case 'task.repeat': return item.repeat ? [['↻ ' + repeatLabel(item.repeat), '']] : none;
     case 'event.date': return [[longDate(item.date, today), 'date'], [' · ' + dayLabel(item.date, today), 'faint']];
     case 'event.time': return item.time ? [[item.time, 'num']] : [['all day', 'faint']];
+    case 'event.repeat': return item.repeat ? [['↻ ' + repeatLabel(item.repeat), '']] : none;
     case 'snippet.name': return [[item.name, 'accent']];
     case 'food.name': return [[item.name, 'strong']];
     case 'diagram.name': return [[item.name, 'strong']];
@@ -74,6 +75,10 @@ function extras(kind, item, today) {
     const rows = [['created', when(item.created)]];
     if (item.repeat && item.lastDone) rows.push(['last done', [...when(item.lastDone), [' · ' + (item.doneCount || 1) + '×', 'faint']]]);
     return rows;
+  }
+  if (kind === 'event' && item.repeat) {
+    const next = nextOn(item.repeat, item.date, today);
+    return [['next', [[longDate(next, today), 'date'], [' · ' + dayLabel(next, today), 'faint']]], ['series', [['edits and removal apply to every occurrence', 'faint']]]];
   }
   return [];
 }
@@ -154,7 +159,7 @@ export function createRecords({ st, isBuiltin }) {
       return out.head([['Removed ', ''], [key, 'accent']], 'ok');
     }
     await ctx.data.mutate(KINDS[kind].col, (d) => { d.items = d.items.filter((x) => x.id !== key); });
-    out.head([['Removed ' + label(kind) + ' ', ''], [key, 'id']], 'ok');
+    out.head([['Removed ' + label(kind) + ' ', ''], [key, 'id'], [kind === 'event' && item.repeat ? ' · the whole series (' + repeatLabel(item.repeat) + ')' : '', 'dim']], 'ok');
     out.line(kind === 'snippet' || kind === 'food' || kind === 'diagram' ? item.name : kind === 'link' ? item.title || item.url : item.text || item.title, 'gone');
   }
 

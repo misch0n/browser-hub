@@ -5,7 +5,8 @@ import { edit, actionFor, historySearch } from '../../js/core/lineedit.js';
 import * as R from '../../js/core/repeat.js';
 import * as S from '../../js/core/search.js';
 import * as Sum from '../../js/core/summary.js';
-import { makeApp } from '../helpers.mjs';
+import { makeApp, MON } from '../helpers.mjs';
+import { DEFAULTS } from '../../js/core/data.js';
 
 test('notes: capture, list, edit round trip, remove; subcommand words never overwrite (review #1)', async () => {
   const app = await makeApp();
@@ -411,4 +412,63 @@ test('vocabulary: the same words everywhere, older forms still understood', asyn
   const help = await app.run('help');
   assert.ok(!help.some((l) => l.startsWith('ics ')));
   assert.equal((await app.run('help ics'))[0], '# ics · import events from a local .ics file (now: import)');
+});
+
+test('recurring events: series rules, every view shows the occurrences, edits and removal act on the series', async () => {
+  // The rule alone.
+  assert.ok(R.occursOn('week', '2026-10-09', '2026-10-23') && !R.occursOn('week', '2026-10-09', '2026-10-22'));
+  assert.ok(!R.occursOn('week', '2026-10-09', '2026-10-02')); // never before the start
+  assert.ok(R.occursOn('2w', '2026-10-09', '2026-11-06') && !R.occursOn('2w', '2026-10-09', '2026-10-16'));
+  assert.ok(R.occursOn('weekday', '2026-10-05', '2026-10-09') && !R.occursOn('weekday', '2026-10-05', '2026-10-10'));
+  assert.ok(R.occursOn('month', '2026-01-31', '2026-02-28') && R.occursOn('month', '2026-01-31', '2026-03-31') && !R.occursOn('month', '2026-01-31', '2026-03-30'));
+  assert.ok(R.occursOn('year', '2024-02-29', '2025-02-28') && R.occursOn('year', '2024-02-29', '2028-02-29') && !R.occursOn('year', '2024-02-29', '2028-02-28'));
+  assert.ok(R.occursOn('3m', '2026-01-15', '2026-07-15') && !R.occursOn('3m', '2026-01-15', '2026-06-15'));
+  assert.equal(R.nextOn('month', '2026-01-31', '2026-04-01'), '2026-04-30');
+  assert.equal(R.nextOn('2w', '2026-10-02', '2026-10-09'), '2026-10-16');
+  assert.equal(R.nextOn('mon,thu', '2026-10-05', '2026-10-07'), '2026-10-08');
+  assert.equal(R.nextOn('day', '2026-10-09', '2026-10-01'), '2026-10-09'); // not started yet: its start
+
+  const app = await makeApp(); // Monday 5 October 2026
+  assert.match((await app.run('ev fri 19:00 book club every:week'))[1], /book club  Friday 9 Oct 19:00  ↻ every week, from then on|book club/);
+  const e = app.data.state.events.items[0];
+  assert.deepEqual([e.date, e.time, e.title, e.repeat], ['2026-10-09', '19:00', 'book club', 'week']);
+  await app.run('ev wed standup every:mon,thu'); // starts on the first day the rule has
+  assert.equal(app.data.state.events.items[1].date, '2026-10-08');
+  assert.match((await app.run('ev fri lunch every:fortnightly'))[0], /^err: Can't read the repeat 'fortnightly'/);
+  // agenda and today: each occurrence on its day.
+  const ag = (await app.run('agenda 14')).join('\n');
+  assert.equal((ag.match(/book club/g) || []).length, 2); // 9 and 16 October
+  assert.equal((ag.match(/standup/g) || []).length, 3); // agenda 14 is 5-18 Oct: Thu 8, Mon 12, Thu 15
+  app.setNow(new Date(2026, 9, 16, 9, 0));
+  assert.ok((await app.run('today')).some((l) => /19:00 \| ?e1|19:00  e1  book club/.test(l) || /book club/.test(l)));
+  // cal marks every Friday from the 9th; the list shows each occurrence.
+  const cal = await app.run('cal');
+  assert.ok(cal.some((l) => /^CAL/.test(l)));
+  assert.equal(cal.filter((l) => /book club/.test(l)).length, 4); // 9, 16, 23, 30 October
+  // events: the next occurrence, with the rule; events all: as stored.
+  const list = (await app.run('events')).join('\n');
+  assert.match(list, /e1 \| Friday 16 Oct.*book club  ↻ every week/);
+  assert.match((await app.run('events all')).join('\n'), /e1 \| Friday 9 Oct/);
+  // show: next and a note that changes apply to the series.
+  const shown = (await app.run('events e1')).join('\n');
+  assert.match(shown, /repeat: ↻ every week/);
+  assert.match(shown, /next: Friday 16 October · today/);
+  assert.match(shown, /every occurrence/);
+  // Editing the rule; none ends it (a one-off on its first date).
+  await app.run('events e1 edit repeat 2w');
+  assert.equal(app.data.state.events.items[0].repeat, '2w');
+  await app.run('events e1 edit repeat none');
+  assert.equal(app.data.state.events.items[0].repeat, undefined);
+  assert.match((await app.run('events e1 edit repeat sometimes'))[0], /^err: .*can't read 'sometimes'/);
+  await app.run('undo'); await app.run('undo');
+  assert.equal(app.data.state.events.items[0].repeat, 'week');
+  // Removing removes the series, and says so.
+  assert.match((await app.run('events e2 rm'))[0], /Removed event e2 · the whole series \(every Monday, Thursday\)/);
+  // Import carries the rule; a bad one is dropped.
+  const { merge: mergeImport } = await import('../../js/core/importer.js');
+  const other = await makeApp();
+  const cur = {};
+  for (const k of Object.keys(DEFAULTS)) cur[k] = other.data.state[k];
+  const imp = mergeImport(cur, { schema: 1, collections: { events: { items: [{ date: '2026-11-01', title: 'rent', repeat: 'month' }, { date: '2026-11-02', title: 'x', repeat: 'often' }] } } }, other.commands.isBuiltin, () => MON);
+  assert.deepEqual(imp.collections.events.items.map((x) => x.repeat), ['month', undefined]);
 });

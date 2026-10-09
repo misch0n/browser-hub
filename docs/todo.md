@@ -25,8 +25,8 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 9 October 2026: unit tests (102) in six time zones, decoder
-  tests and 62 e2e checks pass.
+- Last verified 9 October 2026: unit tests (103) in six time zones, decoder
+  tests and 63 e2e checks pass.
 - Graph mode (`graph <command>`) is an experiment the owner asked to try,
   refined to the owner's design note (D20); its ranking switch
   (`graph :sort freq|alpha`) is there to compare both orders. Its open
@@ -43,20 +43,7 @@ Nothing.
 Do in order. Each is safe to start without asking, unless its entry says
 otherwise. The owner may reorder.
 
-1. **Recurring events** (owner: "recurring events yes", 6 Oct 2026).
-   *What:* `events add fri 19:00 book club every:week` and `ev …`, with the same
-   rules as tasks (`day`, `weekday`, `week`, `2w`, `month`, `year`, `mon,thu`;
-   `js/core/repeat.js`), and an editable `repeat` field
-   (`events e2 edit repeat none` ends it). An event repeats from its date onward.
-   *Done when:* `events`, `agenda`, `cal` (the grid's marks and the
-   calendar/agenda widgets), `today` and the pinned summary all show
-   occurrences on the right days, with ↻ and the rule; editing or removing
-   acts on the whole series (say so in the output); import, sync and undo carry
-   the field; unit tests in six time zones, an e2e check of `cal` and `agenda`;
-   README and command reference updated.
-   *Open (ask when starting):* is "skip one occurrence" or an end date needed now?
-   Default: no, whole series only.
-2. **WebSocket check in `request`** (owner: "web socket - yes", 6 Oct 2026).
+1. **WebSocket check in `request`** (owner: "web socket - yes", 6 Oct 2026).
    *What:* `request wss://host/path` (and `ws://` to localhost) opens a
    connection, reports whether the handshake was accepted, its time, and the
    close code/reason, then closes it; `timeout` works as for HTTP. Browsers
@@ -76,7 +63,7 @@ unit tests (six time zones where dates are involved), e2e when it draws or
 interacts. Anything holding something you keep is a synced collection in the
 shared grammar ([recipes.md](recipes.md#add-a-collection)).
 
-3. **`char`: hidden and odd characters** (owner: "something to spot hidden
+2. **`char`: hidden and odd characters** (owner: "something to spot hidden
    chars and odd chars. say I put a letter in another language").
    *What:* `char <text>` (or a paste) lists each character: code point
    (`U+0430`), UTF-8 bytes, script (`\p{Script=…}`, no data table) and
@@ -89,7 +76,7 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
    *Done when:* a pasted Latin word with one Cyrillic letter and a zero-width
    space is flagged with both positions; emoji with joiners and flags read as
    one visible character with their parts listed.
-4. **JSON traversal** (owner: "json traversal, yes").
+3. **JSON traversal** (owner: "json traversal, yes").
    *What:* `json path <expr> <json>` with a small jq/JSONPath-like syntax:
    `.a.b`, `[0]`, `[-1]`, `[*]` / `.*`, `..key` (recursive), `["odd key"]`;
    results as a list (each with its path) or the single value as a tree.
@@ -97,13 +84,13 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
    find a path by clicking and reuse it. Errors say where the expression broke.
    *Done when:* unit tests cover each step type, missing keys (empty, not an
    error) and bad expressions; README and reference updated.
-5. **`chmod` resolver** (owner: "chmod resolver yes").
+4. **`chmod` resolver** (owner: "chmod resolver yes").
    *What:* `chmod 755` → `rwxr-xr-x`, `u=rwx,g=rx,o=rx` and a who-can-what
    table; `chmod rwxr-x---` → `750`; special bits (`4755` setuid, `2755` setgid,
    `1777` sticky, shown as `s`/`t`/`S`/`T`); `chmod 644 u+x,go-r` applies
    symbolic changes to a mode and prints the result; `ls -l` strings with the
    type letter (`drwxr-xr-x`) accepted.
-6. **`hexdump` / `bin`: byte inspector** (owner: "hexdump/bin inspector").
+5. **`hexdump` / `bin`: byte inspector** (owner: "hexdump/bin inspector").
    *What:* `hexdump <text>` (UTF-8; `utf16le`/`utf16be` option): offset, hex
    and printable columns, 16 bytes a row; `hexdump file` picks a local file
    (read on the device, never uploaded) and shows its first 4 KB, size and
@@ -112,7 +99,7 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
    decodes bytes back to text; `bin <number|text>` shows binary (bytes grouped,
    with hex and decimal). *Done when:* unit tests for the dump layout,
    encodings and magic numbers; e2e for the file pick.
-7. **`pw check`** (owner: "pw check why not").
+6. **`pw check`** (owner: "pw check why not").
    *What:* `pw check` asks for the password with hidden input (`askSecret`,
    never echoed, kept or synced; private and noHistory like `pw`) and
    estimates its strength on the device: length and character classes,
@@ -121,7 +108,7 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
    to crack offline and online, with what weakens it. Says plainly that it's
    an estimate and that a reused or leaked password is weak whatever its score
    (no breach lookup: that would send data off the device).
-8. **`sun` / `moon`** (owner: "sun/moon yes").
+7. **`sun` / `moon`** (owner: "sun/moon yes").
     *What:* `sun` today's dawn, sunrise, solar noon, sunset, dusk and day
     length (and the change since yesterday); `sun <date>`; `moon` phase,
     illumination, next new and full moon; computed (NOAA / Meeus formulas),
@@ -129,7 +116,7 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
     (`config location <lat>,<lon>` or a city name from a small built-in list),
     or the browser's location on request. Default: `config location`, with
     Sofia offered.
-9. **Timers and stopwatches** (owner, 7 Oct 2026; revives the 5 Oct
+8. **Timers and stopwatches** (owner, 7 Oct 2026; revives the 5 Oct
     deferral, D21).
     *What:* `timer 10m [name]` starts a timer, `stopwatch [name]` a stopwatch;
     `timer list` / `stopwatch list` list all (running and stopped).
@@ -143,25 +130,25 @@ shared grammar ([recipes.md](recipes.md#add-a-collection)).
     notifications research. A widget shows the running ones.
     *Done when:* unit tests with a fake clock (start, stop, lap, finished,
     reload), e2e for the live display; README and reference updated.
-10. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
+9. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
     events (3). *What:* `birthdays add <name> <date>` (year optional), shown
     yearly in `agenda`, `cal`, `today` and the summary as "Ana turns 40"
     (no age without a year); `birthdays` lists them by next date with days to go.
-11. **`lists`: reusable checklists** (owner: "lists yes").
+10. **`lists`: reusable checklists** (owner: "lists yes").
     *What:* `lists add packing`, `lists packing add passport`, `lists packing`
     shows it with tappable checkboxes, `lists packing reset` unchecks all,
     items editable and removable in the shared grammar; synced.
-12. **`subs`: subscriptions** (owner: "subs yes").
+11. **`subs`: subscriptions** (owner: "subs yes").
     *What:* `subs add <name> <price> <currency> every:month|year|<n>m
     next:<date>`; `subs` lists them with the monthly and yearly total per
     currency (no conversion: currency rates are deferred), renewals in
     `agenda` and `today`; the next date moves on by itself.
-13. **`log`: a journal** (owner: "log yes").
+12. **`log`: a journal** (owner: "log yes").
     *What:* `log <text>` adds a dated entry, `log` shows the last days,
     `log yesterday` / `log <date>` / `log <month>`; entries searchable by
     `find`; synced. *Open (ask when starting):* an "on this day" line in
     `today`? Default: yes, when there is one.
-14. **Calorie tracker** (owner: "calorie tracker yes").
+13. **Calorie tracker** (owner: "calorie tracker yes").
     *What:* a daily food log on top of `cook calorie`'s table and your own
     foods: `eat 150 g chicken-breast` (household portions too) adds to today
     with kcal and macros; `eat` shows today's total against a target

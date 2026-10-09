@@ -52,7 +52,7 @@ const RENDERERS = {
         const label = dayLabel(d.date, today);
         box.appendChild(h('div', { class: 'w-group' }, rich(label === 'today' || label === 'tomorrow'
           ? [[label[0].toUpperCase() + label.slice(1), 'accent']] : [[longDate(d.date, today), 'date']])));
-        for (const e of d.events) { box.appendChild(row([[e.time || 'all day', e.time ? 'num' : 'faint']], [[e.title, '']])); shown++; }
+        for (const e of d.events) { box.appendChild(row([[e.time || 'all day', e.time ? 'num' : 'faint']], [[e.title, ''], [e.repeat ? ' ↻' : '', 'faint']])); shown++; }
         for (const t of d.tasks) { box.appendChild(row([['task due', 'warn']], [[t.text, '']])); shown++; }
       }
       box.appendChild(h('button', { class: 'w-link', type: 'button', text: 'agenda 30 →', onclick: () => run('agenda 30') }));

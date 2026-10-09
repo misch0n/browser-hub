@@ -124,24 +124,24 @@ list, add, show, edit and remove events
 
 ```
 events [all]
-events add <date> [HH:MM] <title>
+events add <date> [HH:MM] <title> [every:<rule>]
 events <id>
 events <id> edit [<field> [<value>]]
 events <id> rm
 ```
 
-Examples: `events` · `events all` · `events add fri 19:30 dinner at Mia's` · `events e2` · `events e2 edit` · `events e2 edit time 20:00` · `events e2 rm`
+Examples: `events` · `events all` · `events add fri 19:30 dinner at Mia's` · `events add thu 19:00 book club every:2w` · `events e2` · `events e2 edit` · `events e2 edit time 20:00` · `events e2 edit repeat none` · `events e2 rm`
 
 ### `ev`
 
 short for events; ev <date> … adds an event
 
 ```
-ev <date> [HH:MM] <title>
+ev <date> [HH:MM] <title> [every:<rule>]
 ev <id> [edit [<field> [<value>]] | rm]
 ```
 
-Examples: `ev fri 19:30 dinner at Mia's` · `ev 2026-12-24 Christmas Eve` · `ev e2 edit time 20:00` · `ev e2 rm`
+Examples: `ev fri 19:30 dinner at Mia's` · `ev mon 09:00 standup every:weekday` · `ev 2026-12-24 Christmas Eve` · `ev e2 edit time 20:00` · `ev e2 rm`
 
 ## Snippets
 

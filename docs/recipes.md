@@ -37,6 +37,13 @@ place to touch, so nothing is forgotten and nothing needs rediscovering.
 
 Something the user keeps: a new kind of record in the shared grammar (like
 `diagrams` or `foods`).
+
+Shortcut for a simple one (no special merge or import rules): add a row to
+`PERSONAL` in `js/core/personal.js` (collection, single-letter id prefix,
+`normalize` for imported items). That alone covers steps 1–4, 7 and 9 below
+(store, defaults, sync, undo, import, export counts); then do 5, 6, 8, 10–12.
+The timers, birthdays, lists, subs, journal and meals collections work this way.
+
 Every place, in order:
 
 1. `js/core/store.js`: add to `COLLECTIONS`.

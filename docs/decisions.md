@@ -162,3 +162,15 @@ a third-party page: parsed as untrusted data, cached on the device, and only
 built if the site allows cross-origin reads (or the owner accepts the computed
 fallback). `cook scale` waits for the owner's other project. (8 Oct: `holiday`
 put on hold until the owner provides details; see deferred.md.)
+
+**D22. The personal collections, and the defaults taken for them** (9 Oct 2026, active)
+Owner: "go about implementing the rest of the items besides the holiday one"
+(the Dev queue from 7 Oct). → Timers, birthdays, lists, subscriptions, the
+journal and meals are synced collections described once in `core/personal.js`
+(prefix and import checks), in the shared grammar. Birthdays and renewals
+show as all-day entries on their days (`core/agenda.js eventsOn`), so cal,
+agenda, today, the summary and the widgets need nothing else. Defaults the
+todo marked "ask when starting", taken as written and open to change: the
+calorie tracker is `eat`; sun and moon use `config edit place` (synced; Sofia
+until set); `today` shows "on this day" from the log; no skip-one or end date
+for recurring events.

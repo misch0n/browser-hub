@@ -24,9 +24,10 @@ tasks t3 done                  actions of its own        (aliases: gh default)
 ```
 
 Swap `tasks` for `notes`, `events`, `snippets`, `later`, `diagrams`,
-`cook calorie` (your own foods), `aliases`, `zones` or `widgets`; the item is
-named by its id (`t3`, `d2`, `f1`), or for aliases, zones and widgets by name
-(snippets by either): `aliases gh edit template …`,
+`birthdays`, `lists`, `subs`, `log`, `eat`, `cook calorie` (your own foods),
+`aliases`, `zones` or `widgets`; the item is named by its id (`t3`, `d2`, `f1`,
+`b1`, `p2`, `j4`, `m3`), or for aliases, zones and widgets by name (snippets and
+lists by either): `aliases gh edit template …`,
 `zones tokyo edit name Kenji`, `widgets zones move top`. Their own actions:
 `tasks t3 done`, `later l2 open|done`, `diagrams d1 save|code`, `aliases ddg default`, `widgets zones on|off|move <where>`;
 `zones all`, `tasks all` and `later all` list everything. Notes, tasks, events,
@@ -40,19 +41,19 @@ still work.
 | Area | Commands |
 | --- | --- |
 | Find | `find` |
-| Notes | `notes`, `n` |
+| Notes | `notes`, `n`, `lists`, `log` |
 | Tasks | `tasks`, `t` |
-| Calendar | `cal`, `agenda`, `today`, `events`, `ev` |
+| Calendar | `cal`, `agenda`, `today`, `events`, `ev`, `birthdays`, `subs` |
 | Snippets | `snippets`, `snip` |
 | Read later | `later` |
 | Diagrams | `diagrams`, `mermaid` |
 | Tools | `timer`, `stopwatch`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `barcode`, `zones`, `tz` |
+| Kitchen | `eat`, `cook` |
 | Dates | `date`, `days`, `week`, `sun`, `moon` |
 | Security | `pw`, `hash`, `jwt`, `hmac`, `crypt`, `cert` |
 | Text | `count`, `case`, `char`, `text` |
 | Developer | `cidr`, `url`, `regex`, `diff`, `cron`, `color`, `chmod`, `csv`, `base`, `escape`, `hexdump`, `bin` |
 | Share | `clip`, `bounce` |
-| Kitchen | `cook` |
 | Chance | `random`, `roll` |
 | Web | `http`, `mime`, `ua`, `device` |
 | Network | `request`, `ping`, `dns`, `ip` |
@@ -169,6 +170,18 @@ Ids in the results open the entry.
 `2w` / `10d` / `3m`, or weekdays. `t done` moves the due date to the next
 occurrence (finishing late doesn't leave it overdue; finishing early skips the
 one done). `t edit t3.repeat none` makes it a normal task again.
+
+**Birthdays**: `birthdays add Ana 12 mar 1986` (the year is optional) keeps
+one; `birthdays` lists them by how soon they come, with the age each turns.
+They show on their day in `agenda`, `cal`, `today` and the widgets as
+"🎂 Ana turns 41" (29 February counts on the 28th in common years).
+
+**Subscriptions**: `subs add Netflix 15.99 EUR every:month next:3 nov` (the
+currency defaults to your last one, the period to a month, the next date to
+today; `every:year`, `every:3m`, `every:week`). `subs` lists them by next
+renewal, which moves on by itself, with what each costs a month and the totals
+a month and a year per currency (no conversion). Renewals show in `agenda` and
+`today` like events.
 
 **Recurring events**: `ev fri 19:00 book club every:week`, `ev thu 18:30 climbing every:2w`,
 `ev 2026-11-01 rent every:month`, `ev mon 09:00 standup every:weekday` (the same
@@ -318,6 +331,17 @@ runs in a hidden helper page, `mermaid-frame.html`, which may use inline
 styles but can't connect anywhere. Drawings come back as SVG and are shown as
 images, so nothing in a diagram can run in the hub; for that the hub's CSP
 allows `blob:` images.
+
+**Lists** are checklists you use again: `lists add packing passport,
+charger, toothbrush` makes one, `lists packing` shows it with a box to tap for
+each item, `lists packing check 2` (or `check pass`, the start of its text)
+ticks one, `lists packing add socks; sunglasses` adds, `lists packing drop 3`
+takes one out, and `lists packing reset` unticks them all for the next trip.
+
+**Journal**: `log <text>` writes an entry for today; `log` reads the last seven
+days, `log yesterday`, `log 12 oct`, `log october` or `log week` another span
+(a date alone reads; more words write). `today` adds what you wrote on the same
+day in earlier years. `log j3 edit date yesterday` moves one; `find` searches them.
 
 **Snippets** are named pieces of text you paste often (a signature, an
 address, a command): `snip sig` shows one with a copy button. **Later** keeps
@@ -503,6 +527,16 @@ protein 4 fat 7 carbs 27 per 1 bar = 45 g` (stored per 100 g, counted by the
 bar). They come first in searches and meals; `cook calorie mine` lists them,
 `cook calorie f2` shows one with every value editable in place, `cook calorie
 f2 edit sugar 9` and `cook calorie f2 rm` work as everywhere else.
+
+**Calorie tracker**: `eat 150 g chicken breast` logs what you ate, from the
+same table and your own foods (`eat 2 eggs + 1 slice bread`, `eat 1 cup rice
+cooked`; a food with no amount counts one portion). `eat` shows today: each
+meal with its time and calories, and the day's protein, fat and carbs with
+their share of the energy; `eat target 2000` sets a daily target (synced) and
+the day then says what's left or over. `eat yesterday` or any date reads
+another day, `eat week` the last seven with a bar for each. Each meal is kept
+with its numbers at the time (`eat m3` shows them); `eat m3 edit grams 200`
+rescales it, `eat m3 rm` removes it.
 
 **Sun and moon**: `sun` gives today's dawn, sunrise, noon (and how high the
 sun gets), sunset, dusk, day length (and its change since yesterday), and

@@ -33,7 +33,7 @@ export const DEFAULTS = {
   diagrams: () => ({ items: [] }), // Mermaid diagrams
   ...Object.fromEntries(personalCols.map((c) => [c, () => ({ items: [] })])), // timers, birthdays, lists, subs, journal, meals
   settings: () => ({ zones: [], zoneNames: {}, theme: DEFAULT_THEME, widgets: DEFAULT_WIDGETS.slice(), panel: true,
-    summary: 'on', summaryDismissed: null, name: null, bounceKeys: [], place: null }),
+    summary: 'on', summaryDismissed: null, name: null, bounceKeys: [], place: null, kcalTarget: null }),
   history: () => ({ items: [] }),
   log: () => emptyLog(),
   clip: () => ({ at: null }), // the shared clipboard: one sealed item (core/clip.js)

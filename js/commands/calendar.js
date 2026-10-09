@@ -47,7 +47,7 @@ export default function register(add, helpers) {
       out.calendar({ year, month, today, marks: eventDays(st(), year, month) });
       if (events.length) {
         out.table(null, events.map((e) => [
-          [[e.id, 'id', { run: 'events ' + e.id }]], [[longDate(e.date, today), 'date']], [[e.time || 'all day', e.time ? 'num' : 'faint']],
+          [[e.id, 'id', { run: e.run || 'events ' + e.id }]], [[longDate(e.date, today), 'date']], [[e.time || 'all day', e.time ? 'num' : 'faint']],
           [[e.title, ''], [e.repeat ? '  ↻' : '', 'faint']],
         ]));
       }
@@ -85,7 +85,7 @@ export default function register(add, helpers) {
           ? [[label[0].toUpperCase() + label.slice(1), 'accent'], [' · ' + longDate(d.date, today), 'dim']]
           : [[longDate(d.date, today), 'date']]);
         out.table(null, [
-          ...d.events.map((e) => [[[e.id, 'id', { run: 'events ' + e.id }]], [[e.time || 'all day', e.time ? 'num' : 'faint']], [[e.title, ''], [e.repeat ? '  ↻' : '', 'faint']]]),
+          ...d.events.map((e) => [[[e.id, 'id', { run: e.run || 'events ' + e.id }]], [[e.time || 'all day', e.time ? 'num' : 'faint']], [[e.title, ''], [e.repeat ? '  ↻' : '', 'faint']]]),
           ...d.tasks.map((t) => [[[t.id, 'id', { run: 'tasks ' + t.id }]], [['task due', 'warn']], t.text]),
         ]);
       }
@@ -121,6 +121,12 @@ export default function register(add, helpers) {
       if (rows.length) out.table(null, rows.map((r) => [r]));
       else out.line([['Nothing overdue, due or scheduled today', 'dim']]);
       out.line(tomorrowLine(sum));
+      // What you wrote on this day in earlier years (log).
+      const past = st().journal.items.filter((j) => j.date.slice(5) === today.slice(5) && j.date < today).sort((a, b) => (a.date < b.date ? 1 : -1));
+      if (past.length) {
+        out.section([['On this day', ''], ['  from your log', 'faint']]);
+        for (const j of past.slice(0, 5)) out.line([[j.date.slice(0, 4), 'num', { run: 'log ' + j.id }], ['  ' + j.text.split('\n')[0].slice(0, 160), 'dim']]);
+      }
     },
   });
 

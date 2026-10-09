@@ -68,6 +68,14 @@ export default function register(add, { st, defs, isBuiltin }) {
               return [[link(doc.key, 'id')], [...hl(doc.snippet.name, hits.name, 'accent'), ['  ', ''], ...hl(doc.snippet.text.split('\n')[0], hits.text, 'dim')], []];
             case 'diagrams':
               return [[link(doc.key, 'id')], [...hl(doc.diagram.name, hits.name, 'strong'), ['  ' + diagramKind(doc.diagram.code), 'dim']], []];
+            case 'journal':
+              return [[link(doc.key, 'id')], hl(doc.entry.text.split('\n')[0], hits.text), [[longDate(doc.entry.date, today), 'date']]];
+            case 'lists':
+              return [[link(doc.list.name, 'accent')], hl(doc.list.entries.map((e) => e.text).join(' · ') || 'empty', hits.items, 'dim'), []];
+            case 'birthdays':
+              return [[link(doc.key, 'id')], hl(doc.birthday.name, hits.name, 'strong'), []];
+            case 'subs':
+              return [[link(doc.key, 'id')], [...hl(doc.sub.name, hits.name, 'strong'), ['  ' + doc.sub.price.toFixed(2) + ' ' + doc.sub.currency, 'dim']], []];
             case 'later': {
               const l = doc.link;
               return [[link(l.id, l.read ? 'faint' : 'id')], [...(l.title ? [...hl(l.title, hits.title, l.read ? 'gone' : ''), ['  ', '']] : []), ...hl(l.url, hits.url, 'url')], []];

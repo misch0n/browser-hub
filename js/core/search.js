@@ -5,7 +5,8 @@
 //   flour milk          every word must match, in any field (any case)
 //   "oat milk"          a quoted phrase matches as one piece
 //   /^buy\s/i           a regular expression (flags allowed, `i` if none given)
-//   in:tasks flour      only one category (notes, tasks, events, snippets, later, diagrams, links, commands, history)
+//   in:tasks flour      only one category (notes, tasks, events, snippets, later, diagrams, journal, lists, birthdays,
+//                       subs, links, commands, history)
 //
 // Words match as a whole word (best), the start of a word, anywhere in a
 // word, or fuzzily (the letters in order, close together: `pmt` finds
@@ -20,6 +21,10 @@ export const CATEGORIES = [
   { id: 'snippets', label: 'Snippets', weight: 1 },
   { id: 'later', label: 'Read later', weight: 1 },
   { id: 'diagrams', label: 'Diagrams', weight: 1 },
+  { id: 'journal', label: 'Journal', weight: 1 },
+  { id: 'lists', label: 'Lists', weight: 1 },
+  { id: 'birthdays', label: 'Birthdays', weight: 1 },
+  { id: 'subs', label: 'Subscriptions', weight: 1 },
   { id: 'links', label: 'Your aliases and engines', weight: 1 },
   { id: 'commands', label: 'Built-in commands', weight: 0.8 },
   { id: 'history', label: 'Command history', weight: 0.5 },
@@ -121,6 +126,22 @@ export function documents(state, defs, isBuiltin) {
   for (const d of state.diagrams ? state.diagrams.items : []) {
     docs.push({ category: 'diagrams', key: d.id, title: d.name, run: 'diagrams ' + d.id, rank: 1,
       fields: [{ name: 'name', text: d.name, weight: 1.2 }, { name: 'code', text: d.code, weight: 0.8 }, { name: 'id', text: d.id, weight: 0.6 }], diagram: d });
+  }
+  for (const j of state.journal ? state.journal.items : []) {
+    docs.push({ category: 'journal', key: j.id, title: j.text, run: 'log ' + j.id, rank: 1,
+      fields: [{ name: 'text', text: j.text, weight: 1 }, { name: 'date', text: j.date, weight: 0.7 }, { name: 'id', text: j.id, weight: 0.6 }], entry: j });
+  }
+  for (const l of state.lists ? state.lists.items : []) {
+    docs.push({ category: 'lists', key: l.id, title: l.name, run: 'lists ' + l.name, rank: 1,
+      fields: [{ name: 'name', text: l.name, weight: 1.2 }, { name: 'items', text: l.entries.map((e) => e.text).join(' · '), weight: 0.9 }], list: l });
+  }
+  for (const b of state.birthdays ? state.birthdays.items : []) {
+    docs.push({ category: 'birthdays', key: b.id, title: b.name, run: 'birthdays ' + b.id, rank: 1,
+      fields: [{ name: 'name', text: b.name, weight: 1.2 }, { name: 'id', text: b.id, weight: 0.6 }], birthday: b });
+  }
+  for (const s of state.subs ? state.subs.items : []) {
+    docs.push({ category: 'subs', key: s.id, title: s.name, run: 'subs ' + s.id, rank: 1,
+      fields: [{ name: 'name', text: s.name, weight: 1.2 }, { name: 'id', text: s.id, weight: 0.6 }], sub: s });
   }
   for (const a of state.aliases.entries) {
     if (isBuiltin && isBuiltin(a.name)) continue;

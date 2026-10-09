@@ -1,5 +1,6 @@
 import { addDays, byIdNum, cmp } from './util.js';
 import { occursOn, nextOn } from './repeat.js';
+import { birthdayIn } from './personal.js';
 
 // Open before done, then by due date (undated last), then by id.
 export function sortTasks(list) {
@@ -11,11 +12,23 @@ export const sortEvents = (a, b) => cmp(a.date, b.date) || cmp(a.time || '', b.t
 
 // The events on one day. A recurring event appears as its occurrence on that
 // day: the same item with `date` set to the day and `start` to the series' first.
+// Birthdays and subscription renewals come along as all-day entries. Each
+// carries `run`, the command that shows it.
 export function eventsOn(state, date) {
-  return state.events.items
+  const list = state.events.items
     .filter((e) => (e.repeat ? occursOn(e.repeat, e.date, date) : e.date === date))
-    .map((e) => (e.repeat ? { ...e, date, start: e.date } : e))
-    .sort(sortEvents);
+    .map((e) => ({ ...e, ...(e.repeat ? { date, start: e.date } : {}), run: 'events ' + e.id }));
+  const y = +date.slice(0, 4);
+  for (const b of state.birthdays ? state.birthdays.items : []) {
+    if (birthdayIn(b, y) !== date) continue;
+    list.push({ id: b.id, date, time: null, kind: 'birthday', run: 'birthdays ' + b.id,
+      title: '🎂 ' + (b.year ? b.name + ' turns ' + (y - b.year) : b.name + '\u2019s birthday') });
+  }
+  for (const s of state.subs ? state.subs.items : []) {
+    if (!occursOn(s.every, s.next, date)) continue;
+    list.push({ id: s.id, date, time: null, kind: 'sub', run: 'subs ' + s.id, title: s.name + ' renews · ' + s.price.toFixed(2) + ' ' + s.currency });
+  }
+  return list.sort(sortEvents);
 }
 
 // Every occurrence in [from, to] (dates inclusive), in order.

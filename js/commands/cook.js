@@ -107,6 +107,26 @@ function amountOf(f, q) {
   return null;
 }
 
+// One food and how much of it, for the meal log (eat): the first food that
+// matches, its amount from grams or a portion (one portion, else 100 g, when
+// none is given). -> { food, name, grams, label, values, others } | { error }
+export async function foodAmount(state, text) {
+  const { items: usda } = await nutrition();
+  const items = [...state.foods.items.map(ownItem), ...usda];
+  const q = readQuantity(text, readAmount);
+  if (q.grams !== undefined && !(q.grams > 0 && q.grams <= 5000)) return { error: 'Give an amount between 1 g and 5 kg' };
+  if (!q.rest) return { error: 'Name a food: eat 150 g chicken breast' };
+  const list = /^f\d+$/i.test(q.rest) ? items.filter((f) => f.id === q.rest.toLowerCase()) : findFoods(items, q.rest);
+  if (!list.length) return { error: 'No food matches "' + q.rest + '" (cook calorie ' + q.rest.split(' ')[0] + ' to look, cook calorie add to save your own)' };
+  let f = list.find(isRawish) && /\b(raw|uncooked)\b/.test(q.rest) ? list.find(isRawish) : list[0];
+  if (q.count && !amountOf(f, q)) f = list.find((x) => amountOf(x, q)) || f; // '1 slice bread': a food that comes in slices
+  let a = amountOf(f, q);
+  if (!a && q.count) return { error: 'No portion size for ' + f.name + (q.unit ? ' in ' + q.unit : '') + '; give grams: eat 150 g ' + q.rest };
+  if (!a) a = portionGrams(f, 1, null, readAmount) || { grams: 100, label: '100 g' };
+  const name = f.name + (f.state ? ', ' + f.state : '');
+  return { food: f, name, grams: a.grams, label: a.label, values: f.values, others: list.length - 1 };
+}
+
 function calorieTable(out, list, q, query) {
   const groups = new Set(list.map((f) => f.group));
   const rows = [];
@@ -210,7 +230,7 @@ function meal(ctx, parts, items) {
     const q = readQuantity(part, readAmount);
     const list = q.rest ? findFoods(items, q.rest) : [];
     if (!list.length) { bad++; rows.push([[[part, '']], [['no food matches "' + (q.rest || part) + '"', 'err']], [['', '']], [['', '']], [['', '']], [['', '']]]); continue; }
-    const f = list[0];
+    const f = (q.count && list.find((x) => amountOf(x, q))) || list[0]; // '1 slice bread': a food that comes in slices
     let a = amountOf(f, q);
     if (!a && q.count) { bad++; rows.push([[[part, '']], [['no portion size for ' + f.name + ': give grams', 'err']], [['', '']], [['', '']], [['', '']], [['', '']]]); continue; }
     if (!a) { a = { grams: 100, label: '100 g?' }; notes.push(q.rest + ': no amount given, counted 100 g'); }

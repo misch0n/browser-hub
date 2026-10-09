@@ -25,8 +25,8 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 9 October 2026: unit tests (144) in six time zones, decoder
-  tests and 66 e2e checks pass.
+- Last verified 9 October 2026: unit tests (151) in six time zones, decoder
+  tests and 67 e2e checks pass.
 - Graph mode (`graph <command>`) is an experiment the owner asked to try,
   refined to the owner's design note (D20); its ranking switch
   (`graph :sort freq|alpha`) is there to compare both orders. Its open
@@ -43,37 +43,12 @@ Nothing.
 Do in order. Each is safe to start without asking, unless its entry says
 otherwise. The owner may reorder.
 
-The owner's picks from the suggestion list (7 Oct 2026), in their order.
-Each new command: completion, help with examples, `npm run docs`, README,
-unit tests (six time zones where dates are involved), e2e when it draws or
-interacts. Anything holding something you keep is a synced collection in the
-shared grammar ([recipes.md](recipes.md#add-a-collection)).
-
-1. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
-    events (3). *What:* `birthdays add <name> <date>` (year optional), shown
-    yearly in `agenda`, `cal`, `today` and the summary as "Ana turns 40"
-    (no age without a year); `birthdays` lists them by next date with days to go.
-2. **`lists`: reusable checklists** (owner: "lists yes").
-    *What:* `lists add packing`, `lists packing add passport`, `lists packing`
-    shows it with tappable checkboxes, `lists packing reset` unchecks all,
-    items editable and removable in the shared grammar; synced.
-3. **`subs`: subscriptions** (owner: "subs yes").
-    *What:* `subs add <name> <price> <currency> every:month|year|<n>m
-    next:<date>`; `subs` lists them with the monthly and yearly total per
-    currency (no conversion: currency rates are deferred), renewals in
-    `agenda` and `today`; the next date moves on by itself.
-4. **`log`: a journal** (owner: "log yes").
-    *What:* `log <text>` adds a dated entry, `log` shows the last days,
-    `log yesterday` / `log <date>` / `log <month>`; entries searchable by
-    `find`; synced. *Open (ask when starting):* an "on this day" line in
-    `today`? Default: yes, when there is one.
-5. **Calorie tracker** (owner: "calorie tracker yes").
-    *What:* a daily food log on top of `cook calorie`'s table and your own
-    foods: `eat 150 g chicken-breast` (household portions too) adds to today
-    with kcal and macros; `eat` shows today's total against a target
-    (`eat target 2000`), `eat yesterday`, `eat week` with a daily sparkline;
-    entries editable and removable; synced. *Open (ask when starting):* the
-    command name (`cal` is taken by the calendar). Default: `eat`.
+Empty: everything queued on 7 October 2026 is built (9 October). Waiting on the
+owner: `holiday` (details), `cook scale` (the other project); see
+[deferred.md](deferred.md). New commands follow the usual bar: completion, help
+with examples, `npm run docs`, README, unit tests (six time zones where dates
+are involved), e2e when it draws or interacts; anything you keep is a synced
+collection in the shared grammar ([recipes.md](recipes.md#add-a-collection)).
 
 ## Research
 

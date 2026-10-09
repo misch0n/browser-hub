@@ -87,3 +87,50 @@ export const PERSONAL = [
 ];
 
 export const personalCols = PERSONAL.map((p) => p.col);
+
+// ---- birthdays ------------------------------------------------------------------------
+
+// '12 mar', 'march 12', '12.03', '1986-03-12', '12 mar 1986', '12.03.1986', '03-12'
+// -> { date: 'MM-DD', year: n | null } | null
+export function parseBirthday(text, monthIndex, nowYear) {
+  const t = String(text).trim().toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ');
+  const out = (m, d, y) => {
+    const year = y === undefined || y === null ? null : Number(y);
+    if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31) || !parseISO('2000-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0'))) return null;
+    if (year !== null && !(year >= 1850 && year <= nowYear)) return null;
+    if (year !== null && !parseISO(year + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0'))) return null; // 29 Feb of a common year
+    return { date: String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0'), year };
+  };
+  let m;
+  if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t))) return out(+m[2], +m[3], +m[1]);
+  if ((m = /^(\d{1,2})-(\d{1,2})$/.exec(t))) return out(+m[1], +m[2]);
+  if ((m = /^(\d{1,2})[./](\d{1,2})(?:[./](\d{4}))?$/.exec(t))) return out(+m[2], +m[1], m[3]);
+  if ((m = /^(\d{1,2})(?:st|nd|rd|th)? ([a-z]+)\.?(?: (\d{4}))?$/.exec(t)) && monthIndex(m[2]) >= 0) return out(monthIndex(m[2]) + 1, +m[1], m[3]);
+  if ((m = /^([a-z]+)\.? (\d{1,2})(?:st|nd|rd|th)?(?: (\d{4}))?$/.exec(t)) && monthIndex(m[1]) >= 0) return out(monthIndex(m[1]) + 1, +m[2], m[3]);
+  return null;
+}
+
+const leap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+
+// The day a birthday falls on in `year` (29 Feb on 28 Feb in common years).
+export const birthdayIn = (b, year) => year + '-' + (b.date === '02-29' && !leap(year) ? '02-28' : b.date);
+
+// The next birthday on or after `today`: { date, age (the age turned then, or null), days }.
+export function nextBirthday(b, today) {
+  const y = +today.slice(0, 4);
+  let date = birthdayIn(b, y);
+  if (date < today) date = birthdayIn(b, y + 1);
+  const days = Math.round((Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8)) - Date.UTC(y, +today.slice(5, 7) - 1, +today.slice(8))) / 86400000);
+  return { date, age: b.year ? +date.slice(0, 4) - b.year : null, days };
+}
+
+// ---- subscriptions --------------------------------------------------------------------
+
+// What a subscription costs a month: price × how many renewals fall in a month.
+export function perMonth(sub) {
+  const m = /^(\d*)([wmy]|week|month|year)$/.exec(sub.every);
+  if (!m) return 0;
+  const n = Number(m[1]) || 1;
+  const unit = m[2][0];
+  return sub.price * (unit === 'w' ? 52 / 12 / n : unit === 'm' ? 1 / n : 1 / (12 * n));
+}

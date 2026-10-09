@@ -11,9 +11,10 @@
 // unquoted, which is how to keep leading spaces or say "none" literally.
 
 import { oneValue } from './args.js';
-import { parseDate, parseTime, parseISO, parseId, todayISO } from './util.js';
+import { parseDate, parseTime, parseISO, parseId, todayISO, monthIndex } from './util.js';
 import { validateEntry } from './aliases.js';
 import { parseRepeat, firstDue } from './repeat.js';
+import { parseBirthday, LIST_NAME, SUB_RULE } from './personal.js';
 
 const NONE = /^(none|-|clear)$/i;
 const num = (v) => (v === null || v === undefined ? 'none' : String(v));
@@ -34,6 +35,14 @@ export function readPortionText(v) {
   return { name: m[1].replace(/=\s*$/, '').trim() || 'portion', g };
 }
 export const SNIPPET_NAME = /^[\p{L}\p{N}_.-]{1,40}$/u;
+
+// 'EUR', 'eur', '€', '$', '£', 'лв' -> 'EUR' … or null.
+export function readCurrency(v) {
+  const s = String(v).trim();
+  const sym = { '€': 'EUR', $: 'USD', '£': 'GBP', 'лв': 'BGN', 'лв.': 'BGN', '¥': 'JPY', 'CHF': 'CHF' }[s];
+  if (sym) return sym;
+  return /^[a-z]{3}$/i.test(s) ? s.toUpperCase() : null;
+}
 
 // A link to keep: http(s) only; a bare domain gets https://. -> the URL or null
 export function linkURL(v) {
@@ -248,6 +257,125 @@ export const KINDS = {
       code: { aliases: ['source', 'text', 'body'], parse: text(MAX_DIAGRAM), raw: (x) => x.code },
     },
   },
+  // The personal collections (core/personal.js has their import checks).
+  birthday: {
+    col: 'birthdays', cmd: 'birthdays', prefix: 'b', label: 'birthday',
+    fields: {
+      name: { aliases: ['who', 'title'], parse: text(100), raw: (x) => x.name },
+      date: {
+        aliases: ['day', 'born', 'birthday'],
+        raw: (x) => (x.year ? x.year + '-' + x.date : x.date),
+        parse(v, env) {
+          const b = parseBirthday(v, monthIndex, env.now().getFullYear());
+          return b ? { value: b } : { error: "can't read '" + v.trim() + "' (try 12 mar, 12 mar 1986 or 1986-03-12)" };
+        },
+        apply(item, value) { item.date = value.date; item.year = value.year; },
+      },
+    },
+  },
+  list: {
+    col: 'lists', cmd: 'lists', prefix: 'c', label: 'list',
+    fields: {
+      name: {
+        aliases: ['title'],
+        raw: (x) => x.name,
+        parse(v) {
+          const n = v.trim().toLowerCase();
+          return LIST_NAME.test(n) && !/^c\d+$/.test(n) && !['add', 'all'].includes(n) ? { value: n } : { error: 'is one word (letters, digits, . _ -), and not an id like c3' };
+        },
+      },
+    },
+  },
+  sub: {
+    col: 'subs', cmd: 'subs', prefix: 'p', label: 'subscription',
+    fields: {
+      name: { aliases: ['title'], parse: text(100), raw: (x) => x.name },
+      price: {
+        aliases: ['cost', 'amount'],
+        raw: (x) => String(x.price),
+        parse(v) {
+          const n = Number(v.trim().replace(',', '.').replace(/^[€$£]|[€$£]$/g, ''));
+          return Number.isFinite(n) && n >= 0 && n <= 1e6 ? { value: Math.round(n * 100) / 100 } : { error: 'is a number, like 12.99' };
+        },
+      },
+      currency: {
+        aliases: ['cur'],
+        raw: (x) => x.currency,
+        parse(v) {
+          const c = readCurrency(v.trim());
+          return c ? { value: c } : { error: 'is a three-letter code like EUR, BGN, USD (or € $ £)' };
+        },
+      },
+      every: {
+        aliases: ['repeat', 'renews', 'period'],
+        raw: (x) => x.every,
+        parse(v) {
+          const r = parseRepeat(v.replace(/^every:?\s*/i, ''));
+          return r && SUB_RULE.test(r) ? { value: r } : { error: "is week, month, year or like 3m, 2y (not '" + v.trim() + "')" };
+        },
+      },
+      next: {
+        aliases: ['renewal', 'date', 'due'],
+        raw: (x) => x.next,
+        parse(v, env) {
+          const d = parseDate(v.trim(), env.now());
+          return d ? { value: d } : { error: "can't read the date '" + v.trim() + "'" };
+        },
+      },
+    },
+  },
+  entry: {
+    col: 'journal', cmd: 'log', prefix: 'j', label: 'journal entry',
+    fields: {
+      text: { aliases: ['body', 'note'], parse: text(MAX_TEXT), raw: (x) => x.text },
+      date: {
+        aliases: ['day'],
+        raw: (x) => x.date,
+        parse(v, env) {
+          const d = parseDate(v.trim(), env.now());
+          return d ? { value: d } : { error: "can't read the date '" + v.trim() + "'" };
+        },
+      },
+    },
+  },
+  meal: {
+    col: 'meals', cmd: 'eat', prefix: 'm', label: 'meal',
+    fields: {
+      grams: {
+        aliases: ['amount', 'weight', 'g'],
+        raw: (x) => String(Math.round(x.grams * 10) / 10),
+        parse(v) {
+          const n = Number(v.trim().replace(',', '.').replace(/\s*g$/i, ''));
+          return n > 0 && n <= 5000 ? { value: n } : { error: 'is grams, from 0.1 to 5000' };
+        },
+        // The nutrients were saved for the old amount: they scale with it.
+        apply(item, value) {
+          const f = value / item.grams;
+          for (const k of ['kcal', 'protein', 'fat', 'carbs']) if (typeof item[k] === 'number') item[k] = Math.round(item[k] * f * 10) / 10;
+          item.grams = value;
+          delete item.label;
+        },
+      },
+      date: {
+        aliases: ['day'],
+        raw: (x) => x.date,
+        parse(v, env) {
+          const d = parseDate(v.trim(), env.now());
+          return d ? { value: d } : { error: "can't read the date '" + v.trim() + "'" };
+        },
+      },
+      time: {
+        aliases: [],
+        raw: (x) => x.time || 'none',
+        parse(v) {
+          const s = v.trim();
+          if (NONE.test(s)) return { value: null };
+          const t = parseTime(s);
+          return t ? { value: t } : { error: "can't read the time '" + s + "' (24-hour HH:MM, or none)" };
+        },
+      },
+    },
+  },
   alias: {
     col: 'aliases', cmd: 'alias', label: 'alias',
     // A command alias has a name and a command; one that opens a page, the rest.
@@ -298,6 +426,7 @@ export function findRecord(kind, state, target) {
   const k = KINDS[kind];
   if (kind === 'alias') return state.aliases.entries.find((e) => e.name === String(target).toLowerCase()) || null;
   if (kind === 'snippet' && !/^s?\d+$/i.test(target)) return state.snippets.items.find((x) => x.name === String(target).toLowerCase()) || null;
+  if (kind === 'list' && !/^c?\d+$/i.test(target)) return state.lists.items.find((x) => x.name === String(target).toLowerCase()) || null;
   const id = parseId(k.prefix, target);
   return id ? state[k.col].items.find((x) => x.id === id) || null : null;
 }
@@ -317,6 +446,9 @@ export function applyField(kind, item, field, value, env) {
   if (kind === 'event' && !parseISO(next.date)) return { error: 'date is not valid' };
   if (kind === 'snippet' && next.name !== item.name && env.state.snippets.items.some((x) => x.name === next.name)) {
     return { error: "a snippet named '" + next.name + "' already exists" };
+  }
+  if (kind === 'list' && next.name !== item.name && env.state.lists.items.some((x) => x.name === next.name)) {
+    return { error: "a list named '" + next.name + "' already exists" };
   }
   if (kind !== 'alias') return { item: next };
 

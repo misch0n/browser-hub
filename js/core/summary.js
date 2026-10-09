@@ -27,7 +27,7 @@ export function summaryRows(sum) {
     rows.push([[dayLabel(t.due, sum.today), 'err'], ['  ', ''], [t.id, 'id', { run: 'tasks ' + t.id }], ['  ' + t.text, '']]);
   }
   for (const e of sum.events) {
-    rows.push([[e.time || 'all day', e.time ? 'num' : 'faint'], ['  ', ''], [e.id, 'id', { run: 'events ' + e.id }], ['  ' + e.title, '']]);
+    rows.push([[e.time || 'all day', e.time ? 'num' : 'faint'], ['  ', ''], [e.id, 'id', { run: e.run || 'events ' + e.id }], ['  ' + e.title, '']]);
   }
   for (const t of sum.due) {
     rows.push([['due today', 'warn'], ['  ', ''], [t.id, 'id', { run: 'tasks ' + t.id }], ['  ' + t.text, ''], [t.repeat ? '  ↻' : '', 'faint']]);

@@ -445,7 +445,7 @@ async function check(name, fn) {
     assert.match(await lastText(), /Added task[\s\S]*→ tasks add oat milk #groceries/);
     // Help: short names and your aliases after the command, one row.
     await send('help');
-    const row = await page.locator('#turns .turn').last().locator('tr', { hasText: 'groc' }).first().innerText();
+    const row = await page.locator('#turns .turn').last().locator('tr', { hasText: 'groc↗' }).first().innerText();
     assert.match(row, /^tasks, t, groc↗/);
     // From the address bar it is only put in the prompt, like any built-in: a link can't add a task.
     const tasksBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:tasks')).items.length);
@@ -525,6 +525,22 @@ async function check(name, fn) {
     assert.match(await lastText(), /sunrise\s+\d\d:\d\d[\s\S]*sunset\s+\d\d:\d\d/);
     await send('moon');
     assert.match(await lastText(), /% lit[\s\S]*full moon/);
+  });
+
+  await check('lists: tapping a box ticks it; birthdays and renewals appear in the agenda widget; eat logs a food', async () => {
+    await send('lists add e2e milk, bread');
+    await lastTurn().locator('button[data-run="lists e2e check 1"]').click();
+    await page.waitForFunction(() => /1 of 2 done/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await lastText(), /☑\s*1\s*milk/);
+    const today = await page.evaluate(() => { const d = new Date(); return d.getDate() + ' ' + d.toLocaleString('en', { month: 'short' }); });
+    await send('birthdays add E2E Person ' + today + ' 1990');
+    await page.waitForFunction(() => /E2E Person turns/.test(document.querySelector('[data-widget=agenda]').innerText));
+    await send('subs add E2Estream 9.99 EUR');
+    await page.waitForFunction(() => /E2Estream renews/.test(document.querySelector('[data-widget=agenda]').innerText));
+    await send('eat 100 g apple');
+    await page.waitForFunction(() => /Logged/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await lastText(), /Logged Apple[\s\S]*kcal/);
+    for (const c of ['lists e2e rm', 'birthdays b1 rm', 'subs p1 rm', 'eat m1 rm']) await send(c);
   });
 
   await check('go <url>: any address opens like an alias (after the wait), Esc cancels, ↑ and Back find it', async () => {
@@ -1654,9 +1670,12 @@ async function check(name, fn) {
     await send2('t a task with a fairly long description that has to wrap somewhere due:tomorrow #home');
     // Each command's tables are measured right after it runs (help and keys leave with the next command).
     const bad = [];
-    for (const c of ['help', 'keys', 'alias ls', 'tasks', 'tz', 'theme', 'widgets', 'help alias', 'agenda', 'cook target', 'cook oven', 'cook oven chicken 500g', 'cook convert', 'cook calorie chocolate', 'cook calorie 05062', 'roll', 'roll stats']) {
+    for (const c of ['help', 'keys', 'alias ls', 'tasks', 'tz', 'theme', 'widgets', 'help alias', 'agenda', 'cook target', 'cook oven', 'cook oven chicken 500g', 'cook convert', 'cook calorie chocolate', 'cook calorie 05062', 'roll', 'roll stats',
+      'char pаypal\u200B.com', 'chmod 4755', 'hexdump Hello, world! héllo', 'bin -1', 'sun', 'moon', 'timer 5m phone', 'timer list',
+      'lists add trip passport, charger, a rather long item name that needs to wrap on a phone', 'lists trip', 'subs add Netflix 15.99 EUR', 'subs',
+      'birthdays add Ana 12 mar 1986', 'birthdays', 'log a short entry', 'log', 'eat 150 g chicken breast', 'eat']) {
       await send2(c);
-      await tp.waitForTimeout(c.startsWith('cook calorie') ? 300 : 0);
+      await tp.waitForTimeout(c.startsWith('cook calorie') || c.startsWith('eat') ? 300 : 0);
       bad.push(...(await tp.evaluate(() => {
       const out = [];
       for (const t of [...document.querySelectorAll('article.turn')].pop().querySelectorAll('.tbl')) {

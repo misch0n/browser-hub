@@ -51,6 +51,38 @@ n <id> [edit [<field> [<value>]] | rm]
 
 Examples: `n call the plumber about the boiler` · `n "rm the weeds"` · `n n3 edit text call the plumber today`
 
+### `lists`
+
+reusable checklists (packing, groceries): tick items off, reset for next time
+
+```
+lists
+lists add <name> [item, item …]
+lists <name>
+lists <name> edit [<field> [<value>]]
+lists <name> add <item>, <item> …
+lists <name> check <n | text>
+lists <name> uncheck <n | text>
+lists <name> reset
+lists <name> drop <n | text>
+lists <name> rm
+```
+
+Examples: `lists` · `lists add packing passport, charger, toothbrush` · `lists packing` · `lists packing add socks` · `lists packing check 2` · `lists packing check pass` · `lists packing reset` · `lists packing drop 3` · `lists packing edit name travel` · `lists packing rm`
+
+### `log`
+
+a journal: log <text> writes for today; log yesterday, log october, log week read back
+
+```
+log <text>
+log
+log <date> | <month> | week
+log j<n> [edit [<field> [<value>]] | rm]
+```
+
+Examples: `log finished the report, long walk after` · `log` · `log yesterday` · `log october` · `log week` · `log j3 edit date yesterday` · `log j3 rm`
+
 ## Tasks
 
 ### `tasks`
@@ -142,6 +174,34 @@ ev <id> [edit [<field> [<value>]] | rm]
 ```
 
 Examples: `ev fri 19:30 dinner at Mia's` · `ev mon 09:00 standup every:weekday` · `ev 2026-12-24 Christmas Eve` · `ev e2 edit time 20:00` · `ev e2 rm`
+
+### `birthdays`
+
+birthdays with the age they turn; they show in agenda, cal and today
+
+```
+birthdays
+birthdays add <name> <date> (12 mar 1986, 12 mar, 1986-03-12)
+birthdays <id>
+birthdays <id> edit [<field> [<value>]]
+birthdays <id> rm
+```
+
+Examples: `birthdays` · `birthdays add Ana 12 mar 1986` · `birthdays add Grandma Rosa 3 august` · `birthdays b1` · `birthdays b1 edit date 1986-03-12` · `birthdays b1 rm`
+
+### `subs`
+
+subscriptions: price, renewal, monthly and yearly totals; renewals show in agenda
+
+```
+subs
+subs add <name> <price> [currency] [every:month|year|3m] [next:<date>]
+subs <id>
+subs <id> edit [<field> [<value>]]
+subs <id> rm
+```
+
+Examples: `subs` · `subs add Netflix 15.99 EUR every:month next:3 nov` · `subs add iCloud 2.99` · `subs add domain 12 USD every:year next:2027-02-01` · `subs p1 edit price 17.99` · `subs p1 rm`
 
 ## Snippets
 
@@ -361,6 +421,40 @@ tz <HH:MM> <zone>
 ```
 
 Examples: `tz` · `tz 15:00` · `tz 15:00 tokyo` · `tz 9:30 NYC office`
+
+## Kitchen
+
+### `eat`
+
+a calorie tracker: eat 150 g chicken breast logs it (from cook calorie and your foods); eat shows the day
+
+```
+eat <amount> <food> [+ <amount> <food> …]
+eat
+eat <date> | week
+eat target <kcal> | none
+eat m<n> [edit [<field> [<value>]] | rm]
+```
+
+Examples: `eat 150 g chicken breast` · `eat 2 eggs + 1 slice bread` · `eat 1 cup rice cooked` · `eat` · `eat yesterday` · `eat week` · `eat target 2000` · `eat m3 edit grams 200` · `eat m3 rm`
+
+### `cook`
+
+kitchen reference: safe and best temperatures, oven times, cups and spoons to grams, calories and nutrients
+
+```
+cook target [food]
+cook oven [food] [weight] [temperature] [fan] [doneness]
+cook convert <amount> <measure> <ingredient>
+cook convert <temperature>
+cook calorie [amount] <food> [raw | cooked]
+cook calorie <amount> <food> + <amount> <food> …
+cook calorie add <name> <n> kcal <n> protein <n> fat <n> carbs [per …]
+cook calorie f<n> [edit [<field> [<value>]] | rm]
+cook calorie mine
+```
+
+Examples: `cook target chicken` · `cook target` · `cook oven chicken 500g at 200` · `cook oven whole chicken 1.6kg` · `cook oven beef 1.5kg medium-rare` · `cook oven lamb leg 2kg fan 160` · `cook calorie chicken` · `cook calorie chicken breast raw 250g` · `cook calorie 2 eggs` · `cook calorie 1 slice bread` · `cook calorie 200g chicken breast raw + 150g rice cooked + 1 tbsp olive oil` · `cook calorie add lyutenitsa 75 kcal 1.5 protein 2.5 fat 11 carbs` · `cook calorie crisps` · `cook convert 1 spoon sugar` · `cook convert ½ stick butter` · `cook convert 250 g flour` · `cook convert 350f`
 
 ## Dates
 
@@ -727,26 +821,6 @@ bounce <bounce link>
 ```
 
 Examples: `bounce https://example.com/a/rather/long/path?with=query` · `bounce https://misch0n.github.io/browser-hub/?go=…`
-
-## Kitchen
-
-### `cook`
-
-kitchen reference: safe and best temperatures, oven times, cups and spoons to grams, calories and nutrients
-
-```
-cook target [food]
-cook oven [food] [weight] [temperature] [fan] [doneness]
-cook convert <amount> <measure> <ingredient>
-cook convert <temperature>
-cook calorie [amount] <food> [raw | cooked]
-cook calorie <amount> <food> + <amount> <food> …
-cook calorie add <name> <n> kcal <n> protein <n> fat <n> carbs [per …]
-cook calorie f<n> [edit [<field> [<value>]] | rm]
-cook calorie mine
-```
-
-Examples: `cook target chicken` · `cook target` · `cook oven chicken 500g at 200` · `cook oven whole chicken 1.6kg` · `cook oven beef 1.5kg medium-rare` · `cook oven lamb leg 2kg fan 160` · `cook calorie chicken` · `cook calorie chicken breast raw 250g` · `cook calorie 2 eggs` · `cook calorie 1 slice bread` · `cook calorie 200g chicken breast raw + 150g rice cooked + 1 tbsp olive oil` · `cook calorie add lyutenitsa 75 kcal 1.5 protein 2.5 fat 11 carbs` · `cook calorie crisps` · `cook convert 1 spoon sugar` · `cook convert ½ stick butter` · `cook convert 250 g flour` · `cook convert 350f`
 
 ## Chance
 

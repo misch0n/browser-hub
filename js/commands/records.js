@@ -2,6 +2,7 @@ import { KINDS, fieldName, fieldsOfItem, parseFieldEdit, findRecord, applyField 
 import { parseId, todayISO } from '../core/util.js';
 import { dueSeg, tagSegs, dayLabel, longDate } from '../core/format.js';
 import { repeatLabel, nextOn } from '../core/repeat.js';
+import { nextBirthday } from '../core/personal.js';
 import { oneValue } from '../core/args.js';
 
 // One grammar for everything you keep: notes, tasks, events, snippets, links to read later,
@@ -28,6 +29,11 @@ export const NOUNS = {
   link: { noun: 'later', short: 'later', one: 'link' },
   food: { noun: 'cook calorie', short: 'cook calorie', one: 'food' },
   diagram: { noun: 'diagrams', short: 'diagrams', one: 'diagram' },
+  birthday: { noun: 'birthdays', short: 'birthdays', one: 'birthday' },
+  list: { noun: 'lists', short: 'lists', one: 'list' },
+  sub: { noun: 'subs', short: 'subs', one: 'subscription' },
+  entry: { noun: 'log', short: 'log', one: 'journal entry' },
+  meal: { noun: 'eat', short: 'eat', one: 'meal' },
   alias: { noun: 'aliases', short: 'alias', one: 'alias' },
 };
 
@@ -46,6 +52,21 @@ function display(kind, field, item, today) {
     case 'event.date': return [[longDate(item.date, today), 'date'], [' · ' + dayLabel(item.date, today), 'faint']];
     case 'event.time': return item.time ? [[item.time, 'num']] : [['all day', 'faint']];
     case 'event.repeat': return item.repeat ? [['↻ ' + repeatLabel(item.repeat), '']] : none;
+    case 'birthday.date': {
+      const n = nextBirthday(item, today);
+      return [[longDate(n.date, today).replace(/ \d{4}$/, ''), 'date'], [item.year ? ' ' + item.year : '', 'dim'],
+        [' · ' + (n.age !== null ? 'turns ' + n.age + ' ' : '') + (n.days === 0 ? 'today' : 'in ' + n.days + (n.days === 1 ? ' day' : ' days')), 'faint']];
+    }
+    case 'sub.price': return [[item.price.toFixed(2), 'num']];
+    case 'sub.every': return [['↻ ' + repeatLabel(item.every), '']];
+    case 'sub.next': {
+      const n = nextOn(item.every, item.next, today);
+      return [[longDate(n, today), 'date'], [' · ' + dayLabel(n, today), 'faint']];
+    }
+    case 'entry.date': return [[longDate(item.date, today), 'date'], [' · ' + dayLabel(item.date, today), 'faint']];
+    case 'meal.grams': return [[String(Math.round(item.grams * 10) / 10) + ' g', 'num'], [item.label ? ' · ' + item.label : '', 'dim']];
+    case 'meal.date': return [[longDate(item.date, today), 'date']];
+    case 'meal.time': return item.time ? [[item.time, 'num']] : none;
     case 'snippet.name': return [[item.name, 'accent']];
     case 'food.name': return [[item.name, 'strong']];
     case 'diagram.name': return [[item.name, 'strong']];
@@ -66,6 +87,8 @@ function display(kind, field, item, today) {
   }
 }
 
+const num1 = (v) => (typeof v === 'number' ? String(Math.round(v * 10) / 10) : '–');
+
 // Read-only rows shown under the editable ones.
 function extras(kind, item, today) {
   const when = (iso) => [[dayLabel(todayISO(new Date(iso)), today), 'dim']];
@@ -76,6 +99,11 @@ function extras(kind, item, today) {
     if (item.repeat && item.lastDone) rows.push(['last done', [...when(item.lastDone), [' · ' + (item.doneCount || 1) + '×', 'faint']]]);
     return rows;
   }
+  if (kind === 'meal') {
+    return [['food', [[item.food, 'strong']]], ['energy', [[Math.round(item.kcal) + ' kcal', 'num'],
+      [' · protein ' + num1(item.protein) + ' g · fat ' + num1(item.fat) + ' g · carbs ' + num1(item.carbs) + ' g', 'dim']]]];
+  }
+  if (kind === 'birthday' || kind === 'list' || kind === 'sub' || kind === 'entry') return [['added', when(item.created)]];
   if (kind === 'event' && item.repeat) {
     const next = nextOn(item.repeat, item.date, today);
     return [['next', [[longDate(next, today), 'date'], [' · ' + dayLabel(next, today), 'faint']]], ['series', [['edits and removal apply to every occurrence', 'faint']]]];
@@ -160,7 +188,7 @@ export function createRecords({ st, isBuiltin }) {
     }
     await ctx.data.mutate(KINDS[kind].col, (d) => { d.items = d.items.filter((x) => x.id !== key); });
     out.head([['Removed ' + label(kind) + ' ', ''], [key, 'id'], [kind === 'event' && item.repeat ? ' · the whole series (' + repeatLabel(item.repeat) + ')' : '', 'dim']], 'ok');
-    out.line(kind === 'snippet' || kind === 'food' || kind === 'diagram' ? item.name : kind === 'link' ? item.title || item.url : item.text || item.title, 'gone');
+    out.line(kind === 'link' ? item.title || item.url : item.name || item.food || item.text || item.title, 'gone');
   }
 
   // The entry `word` names: an id for notes, tasks and events (t3, or just 3
@@ -172,7 +200,7 @@ export function createRecords({ st, isBuiltin }) {
       return item ? { item } : null;
     }
     const prefix = KINDS[kind].prefix;
-    if (kind === 'snippet' && !/^s?\d+$/i.test(word)) { // snippets also go by name
+    if ((kind === 'snippet' && !/^s?\d+$/i.test(word)) || (kind === 'list' && !/^c?\d+$/i.test(word))) { // snippets and lists also go by name
       const item = findRecord(kind, st(), word);
       return item ? { item } : null;
     }
@@ -198,7 +226,8 @@ export function createRecords({ st, isBuiltin }) {
       ids: () => (kind === 'alias'
         ? st().aliases.entries.map((e) => ({ value: e.name, label: e.command ? 'runs ' + e.command : e.template ? 'engine' : 'alias' }))
         : kind === 'snippet' ? st().snippets.items.map((x) => ({ value: x.name, label: x.text.split('\n')[0].slice(0, 50) }))
-          : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || x.url || x.name || '').slice(0, 50) }))),
+          : kind === 'list' ? st().lists.items.map((x) => ({ value: x.name, label: x.entries.length + ' items' }))
+          : st()[KINDS[kind].col].items.map((x) => ({ value: x.id, label: (x.text || x.title || x.url || x.name || x.food || '').slice(0, 50) }))),
     };
   }
   const asAdapter = (kindOrAdapter) => (typeof kindOrAdapter === 'string' ? adapterFor(kindOrAdapter) : kindOrAdapter);

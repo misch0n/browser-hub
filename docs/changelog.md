@@ -5,6 +5,11 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 9 October 2026
 
+- `eat`: a calorie tracker on the nutrition table and your foods; the day, the week, a daily target (D22).
+- `log`: a journal by day, month or week; "on this day" in `today`.
+- `subs`: subscriptions with renewals in the agenda and monthly and yearly totals per currency.
+- `lists`: reusable checklists by name; tap a box to tick, `reset` for next time.
+- `birthdays`: with the age turned, shown on their day in agenda, cal, today and the widgets.
 - `sun` and `moon`: twilight, sunrise, sunset, day length, moon phase and the next phases, rise and set, for `config edit place` (Sofia by default).
 - `pw check`: a password's strength, asked hidden and estimated on the device; patterns named by position only.
 - `hexdump` (text, hex, a local file with its type), `bin` (numbers and text in binary).

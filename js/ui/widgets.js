@@ -5,6 +5,7 @@ import { todayISO, toISO, pad2, truncate, firstLine, byIdNum, plural, daysBetwee
 import { MONTH_NAMES, DAY_NAMES_LONG, dayLabel, longDate, dueSeg, bytes } from '../core/format.js';
 import { agenda, eventDays, sortTasks } from '../core/agenda.js';
 import { localZone, zoneRows, workOverlap, zoneLabel } from '../lib/zones.js';
+import { status, clock } from '../lib/timers.js';
 
 const empty = (text) => h('div', { class: 'w-empty', text });
 const row = (...cells) => h('div', { class: 'w-row' }, ...cells.map((c) => h('span', null, rich(c))));
@@ -147,6 +148,28 @@ const RENDERERS = {
         row([['storage', 'dim']], [[usage === null ? 'unknown' : bytes(usage), 'num']]),
         h('button', { class: 'w-link', type: 'button', text: 'export now →', onclick: () => run('export') }));
     },
+  },
+};
+
+// Running timers first (soonest to end), then stopwatches; finished timers say so.
+RENDERERS.timers = {
+  title: 'Timers',
+  every: 'second',
+  meta({ state }) {
+    const n = state.timers.items.filter((x) => !x.stop).length;
+    return n ? [[n + ' running', 'faint']] : [];
+  },
+  render({ state, now, run }) {
+    const running = state.timers.items.filter((x) => !x.stop).map((x) => ({ x, s: status(x, now) }))
+      .sort((a, b) => (a.x.kind === b.x.kind ? (a.x.kind === 'timer' ? a.s.remaining - b.s.remaining : b.s.elapsed - a.s.elapsed) : a.x.kind === 'timer' ? -1 : 1));
+    if (!running.length) return empty('Nothing running · timer 10m, stopwatch');
+    return h('div', { class: 'w-list' }, ...running.map(({ x, s }) => {
+      const time = x.kind === 'timer' ? (s.done ? ['done +' + clock(s.over), 'warn'] : [clock(s.remaining), 'num']) : [clock(s.elapsed), 'num'];
+      const r = row([[x.kind === 'timer' ? '⏲ ' : '⏱ ', 'faint'], [x.name || x.id, x.name ? '' : 'dim']], [time]);
+      r.classList.add('w-tap');
+      r.addEventListener('click', () => run(x.kind + ' ' + x.id));
+      return r;
+    }));
   },
 };
 

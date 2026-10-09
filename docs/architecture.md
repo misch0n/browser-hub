@@ -177,6 +177,7 @@ migrations (`SCHEMA`, `MIGRATIONS`) and repair of damaged documents.
 | `aliases` | alias/engine entries `{ name, base, template?, escape }`, command aliases `{ name, command }`, default engine | yes | yes | name |
 | `notes`, `tasks`, `events` | items | yes | yes | `n`, `t`, `e` |
 | `snippets`, `later`, `foods`, `diagrams` | items | yes | yes | `s`, `l`, `f`, `d` |
+| `timers`, `birthdays`, `lists`, `subs`, `journal`, `meals` | the personal collections, one table in `core/personal.js` (prefix, import checks) | yes | yes | `w`, `b`, `c`, `p`, `j`, `m` |
 | `settings` | theme, widgets, zones, summary, name, bounce keys | yes (per key) | yes | – |
 | `history` | ↑ command history (500) | no | – | – |
 | `log` | the visual history: entries of replayable ops (300 / 800 KB) | yes | yes (clear marks) | entry id |
@@ -186,7 +187,7 @@ Stored as `cc:<collection>` in `localStorage`. Device-local values
 (`store.getLocal/setLocal`, key `cc-device:<name>`, never exported or synced):
 `sync` (settings), `sync-token`, `clip-key`, `clip`, `clip-seen`, `device`
 (id and name), `undo` (last 30 steps), `logView`, `fontScale`,
-`diagram-draft`, `graph` (graph mode's ranking and use counts). One more, `browser-hub:keybar`, is read directly by `main.js`.
+`diagram-draft`, `graph` (graph mode's ranking and use counts), `timers-rung` (timers this device has already rung for). One more, `browser-hub:keybar`, is read directly by `main.js`.
 
 Adding a collection touches about ten places; follow
 [recipes.md](recipes.md#add-a-collection).

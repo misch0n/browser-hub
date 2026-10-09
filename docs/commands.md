@@ -221,45 +221,37 @@ mermaid <code>
 
 Examples: `mermaid` · `mermaid <paste Mermaid code>` · `mermaid graph LR; a-->b`
 
-## Dates
-
-### `date`
-
-a day in detail, date ± days/weeks/months, or the days between two dates
-
-```
-date [<date>]
-date [<date>] ± <n> d|w|m|y|wd
-date <date> to <date>
-```
-
-Examples: `date` · `date 25 dec` · `date + 90d` · `date fri + 3 wd` · `date 31 jan + 1m` · `date 1 jan to 25 dec` · `date 2026-10-05 - 2026-01-01`
-
-### `days`
-
-days until or since a date, or between two
-
-```
-days until <date>
-days since <date>
-days <date> to <date>
-```
-
-Examples: `days until 25 dec` · `days since 1 jan` · `days since last fri` · `days 1 mar to 1 jun`
-
-### `week`
-
-the week number and its days: this week, week <n>, or the week of a date
-
-```
-week
-week <n> [year]
-week <date>
-```
-
-Examples: `week` · `week 52` · `week 1 2027` · `week 25 dec`
-
 ## Tools
+
+### `timer`
+
+count down: timer 10m tea starts one; it runs until you stop it, on every device
+
+```
+timer <duration> [name]
+timer
+timer list
+timer <id | name>
+timer <id | name> stop | restart | rm
+timer stop
+```
+
+Examples: `timer 10m` · `timer 25m focus` · `timer 1h30m bread` · `timer 1:30 eggs` · `timer list` · `timer tea stop` · `timer w2 rm`
+
+### `stopwatch`
+
+count up: stopwatch starts one (stopwatch run names it); lap, stop
+
+```
+stopwatch [name]
+stopwatch list
+stopwatch <id | name>
+stopwatch <id | name> lap | stop | restart | rm
+stopwatch lap
+stopwatch stop
+```
+
+Examples: `stopwatch` · `stopwatch run` · `stopwatch run lap` · `stopwatch lap` · `stopwatch run stop` · `stopwatch list` · `stopwatch w3 rm`
 
 ### `calc`
 
@@ -369,6 +361,44 @@ tz <HH:MM> <zone>
 ```
 
 Examples: `tz` · `tz 15:00` · `tz 15:00 tokyo` · `tz 9:30 NYC office`
+
+## Dates
+
+### `date`
+
+a day in detail, date ± days/weeks/months, or the days between two dates
+
+```
+date [<date>]
+date [<date>] ± <n> d|w|m|y|wd
+date <date> to <date>
+```
+
+Examples: `date` · `date 25 dec` · `date + 90d` · `date fri + 3 wd` · `date 31 jan + 1m` · `date 1 jan to 25 dec` · `date 2026-10-05 - 2026-01-01`
+
+### `days`
+
+days until or since a date, or between two
+
+```
+days until <date>
+days since <date>
+days <date> to <date>
+```
+
+Examples: `days until 25 dec` · `days since 1 jan` · `days since last fri` · `days 1 mar to 1 jun`
+
+### `week`
+
+the week number and its days: this week, week <n>, or the week of a date
+
+```
+week
+week <n> [year]
+week <date>
+```
+
+Examples: `week` · `week 52` · `week 1 2027` · `week 25 dec`
 
 ## Security
 

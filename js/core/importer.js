@@ -2,6 +2,7 @@ import { SCHEMA, parseISO, parseTime, isValidZone, canonicalZone, truncate } fro
 import { validateEntry, siteRoot, SHIPPED_DEFAULT } from './aliases.js';
 import { SNIPPET_NAME, linkURL, KINDS } from './records.js';
 import { parseRepeat } from './repeat.js';
+import { PERSONAL, personalCols } from './personal.js';
 import { migrateCollections, HISTORY_CAP } from './data.js';
 import { isTheme, isWidget, DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js';
 
@@ -54,7 +55,7 @@ export function merge(current, file, isBuiltin, now) {
   const nextId = (prefix) => { counters[prefix] = (counters[prefix] || 0) + 1; return prefix + counters[prefix]; };
   const stamp = (v) => (isStamp(v) ? v : now().toISOString());
   const items = (c) => (src[c] && Array.isArray(src[c].items) ? src[c].items : []);
-  const added = { notes: 0, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, diagrams: 0, history: 0 };
+  const added = { notes: 0, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, diagrams: 0, history: 0, ...Object.fromEntries(personalCols.map((c) => [c, 0])) };
   let invalid = 0;
 
   for (const n of items('notes')) {
@@ -141,6 +142,18 @@ export function merge(current, file, isBuiltin, now) {
     added.diagrams++;
   }
 
+  // The personal collections: each item checked by its kind (core/personal.js);
+  // lists go by name, so one already here with that name keeps its items.
+  for (const p of PERSONAL) {
+    for (const x of items(p.col)) {
+      const item = p.normalize(x, now);
+      if (!item) { invalid++; continue; }
+      if (p.col === 'lists' && out.lists.items.some((l) => l.name === item.name)) { lines.push("skipped list '" + item.name + "': already exists"); continue; }
+      out[p.col].items.push({ id: nextId(p.prefix), ...item });
+      added[p.col]++;
+    }
+  }
+
   // Aliases follow the conflict rules: never overwrite, report every collision.
   const srcAliases = src.aliases && Array.isArray(src.aliases.entries) ? src.aliases.entries : [];
   let aliasesAdded = 0;
@@ -199,6 +212,7 @@ export function merge(current, file, isBuiltin, now) {
     if (!sameList(ws, DEFAULT_WIDGETS)) out.settings.widgets = ws;
   }
 
-  const counts = { notes: added.notes, tasks: added.tasks, events: added.events, snippets: added.snippets, later: added.later, foods: added.foods, diagrams: added.diagrams, aliases: aliasesAdded, zones: zonesAdded };
+  const counts = { notes: added.notes, tasks: added.tasks, events: added.events, snippets: added.snippets, later: added.later, foods: added.foods, diagrams: added.diagrams,
+    ...Object.fromEntries(personalCols.map((c) => [c, added[c]])), aliases: aliasesAdded, zones: zonesAdded };
   return { collections: out, counts, invalid, lines };
 }

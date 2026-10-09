@@ -20,6 +20,7 @@ export const WIDGETS = [
   { id: 'zones', desc: 'your time zones and working-hours overlap' },
   { id: 'notes', desc: 'latest notes' },
   { id: 'backup', desc: 'last export, item counts, storage used' },
+  { id: 'timers', desc: 'running timers and stopwatches, live; tap one for its controls' },
 ];
 
 export const DEFAULT_THEME = 'auto';

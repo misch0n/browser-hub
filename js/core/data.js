@@ -1,5 +1,6 @@
 import { SCHEMA } from './util.js';
 import { starters, SHIPPED_DEFAULT } from './aliases.js';
+import { personalCols } from './personal.js';
 import { DEFAULT_THEME, DEFAULT_WIDGETS } from './catalog.js';
 import { UNDOABLE, diff, conflicts, apply } from './undo.js';
 import { sameDoc } from './merge.js';
@@ -30,6 +31,7 @@ export const DEFAULTS = {
   later: () => ({ items: [] }), // links to read later
   foods: () => ({ items: [] }), // your own foods for cook calorie
   diagrams: () => ({ items: [] }), // Mermaid diagrams
+  ...Object.fromEntries(personalCols.map((c) => [c, () => ({ items: [] })])), // timers, birthdays, lists, subs, journal, meals
   settings: () => ({ zones: [], zoneNames: {}, theme: DEFAULT_THEME, widgets: DEFAULT_WIDGETS.slice(), panel: true,
     summary: 'on', summaryDismissed: null, name: null, bounceKeys: [] }),
   history: () => ({ items: [] }),
@@ -269,6 +271,7 @@ export function createData(store, now) {
     const starterNames = starters().map((e) => e.name);
     return state.notes.items.length > 0 || state.tasks.items.length > 0 || state.events.items.length > 0 ||
       state.snippets.items.length > 0 || state.later.items.length > 0 || state.foods.items.length > 0 || state.diagrams.items.length > 0 ||
+      personalCols.some((c) => state[c].items.length > 0) ||
       state.settings.zones.length > 0 || Object.keys(state.settings.zoneNames).length > 0 || state.aliases.entries.some((e) => !starterNames.includes(e.name));
   }
 

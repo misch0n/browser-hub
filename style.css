@@ -368,6 +368,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .jt-kids { padding-left: 2.2ch; border-left: 1px dotted var(--border); margin-left: 0.5ch; }
 .jt-row { white-space: pre; }
 .jt-key { cursor: pointer; }
+.ticker { margin: 4px 0; }
+.ticker-time { font-size: calc(28px * var(--scale)); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .jt-path { margin-top: 4px; font-size: calc(12px * var(--scale)); white-space: pre-wrap; word-break: break-all; }
 .jt-node > summary { cursor: pointer; white-space: pre; list-style: none; }
 .jt-node > summary::-webkit-details-marker { display: none; }
@@ -1031,3 +1033,4 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+.w-tap { cursor: pointer; }

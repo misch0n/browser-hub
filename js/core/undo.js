@@ -9,10 +9,11 @@
 // absent. Every other top-level field that changed goes in `fields`.
 
 import { canonical } from './merge.js';
+import { personalCols } from './personal.js';
 
-export const UNDOABLE = ['aliases', 'notes', 'tasks', 'events', 'snippets', 'later', 'foods', 'diagrams', 'settings', 'log'];
+export const UNDOABLE = ['aliases', 'notes', 'tasks', 'events', 'snippets', 'later', 'foods', 'diagrams', ...personalCols, 'settings', 'log'];
 const LISTS = { notes: ['items', 'id'], tasks: ['items', 'id'], events: ['items', 'id'], snippets: ['items', 'id'], later: ['items', 'id'], foods: ['items', 'id'], diagrams: ['items', 'id'],
-  aliases: ['entries', 'name'] };
+  ...Object.fromEntries(personalCols.map((c) => [c, ['items', 'id']])), aliases: ['entries', 'name'] };
 
 const same = (a, b) => canonical(a) === canonical(b);
 const idNum = (id) => parseInt(String(id).slice(1), 10);

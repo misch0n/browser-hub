@@ -64,6 +64,7 @@ function recorder() {
     diagramEditor: (spec) => { lines.push('EDITOR ' + spec.title + ' · ' + spec.save.label + ' · ' + (spec.save.command || spec.save.input) + ' · ' + spec.code.split('\n')[0]); lines.editor = spec; },
     jsonTree: (text) => lines.push('JSONTREE ' + text),
     dataTable: (spec) => lines.push('DATATABLE ' + JSON.stringify(spec)),
+    ticker: (spec) => lines.push('TICKER ' + spec.kind + ' ' + spec.id),
     swatch: (items) => lines.push('SWATCH ' + items.map((i) => i.color + (i.text ? ' ' + i.text.value + ' ' + i.text.color : '') + (i.label ? ' ' + i.label : '')).join(' | ')),
     calendar: (spec) => lines.push('CAL ' + spec.year + '-' + spec.month + ' marks=' + spec.marks.sort((a, b) => a - b).join(',')),
   };

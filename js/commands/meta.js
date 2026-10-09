@@ -1,5 +1,6 @@
 import { todayISO, plural } from '../core/util.js';
 import { usageSegs, bytes, kindSeg } from '../core/format.js';
+import { PERSONAL } from '../core/personal.js';
 import { merge } from '../core/importer.js';
 import { DEFAULTS } from '../core/data.js';
 import { SHORTCUT_GROUPS, keyLabel, isApple } from '../core/keys.js';
@@ -245,6 +246,7 @@ export default function register(add, helpers) {
         ['links', [[String(count('later')), 'num']]],
         ['foods', [[String(count('foods')), 'num']]],
         ['diagrams', [[String(count('diagrams')), 'num']]],
+        ...PERSONAL.filter((p) => count(p.col)).map((p) => [p.col, [[String(count(p.col)), 'num']]]),
         ['aliases', [[String(c.aliases ? c.aliases.entries.length : 0), 'num']]],
         ['size', [[bytes(text.length), 'dim']]],
       ]);

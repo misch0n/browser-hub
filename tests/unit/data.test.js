@@ -134,7 +134,7 @@ test('import: conflicts reported, bad entries rejected, schema checked, never ov
   assert.ok(r.lines.some((l) => /skipped alias 'gh'.*already exists/.test(l)));
   assert.ok(r.lines.some((l) => /skipped alias 'help'.*built-in/.test(l)));
   assert.ok(r.lines.some((l) => /skipped alias 'js'/.test(l)));
-  assert.deepEqual(r.counts, { notes: 1, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, diagrams: 0, aliases: 2, zones: 1 });
+  assert.deepEqual(r.counts, { notes: 1, tasks: 0, events: 0, snippets: 0, later: 0, foods: 0, diagrams: 0, timers: 0, birthdays: 0, lists: 0, subs: 0, journal: 0, meals: 0, aliases: 2, zones: 1 });
   assert.equal(r.invalid, 2);
   assert.equal(r.collections.settings.theme, 'nord'); // this browser already chose a theme
   assert.deepEqual(r.collections.settings.widgets, ['notes']);

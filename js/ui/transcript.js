@@ -1,5 +1,6 @@
 import { h, rich, copyButton, copyText } from './dom.js';
 import { pathOf } from '../lib/jsonpath.js';
+import { status, clock, spoken } from '../lib/timers.js';
 import { monthGrid } from './components.js';
 import { jsonLines } from '../core/format.js';
 import { oneValue, quote } from '../core/args.js';
@@ -14,7 +15,7 @@ const touch = () => globalThis.matchMedia && matchMedia('(pointer: coarse)').mat
 
 // The Out methods that draw something: recorded, so a turn can be stored in
 // the shared history and drawn again later, on any device.
-const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'barcode', 'diagram', 'swatch', 'jsonTree', 'dataTable'];
+const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'barcode', 'diagram', 'swatch', 'jsonTree', 'dataTable', 'ticker'];
 const plain = (v) => JSON.parse(JSON.stringify(v === undefined ? null : v));
 
 // The scrolling conversation: each command is a turn with the echoed input
@@ -187,6 +188,27 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
       value(text) {
         push(h('div', { class: 'value' }, h('span', { class: 'value-text', text }), copyButton(() => text)));
         out.copyable(text);
+      },
+      // A timer or stopwatch, live: worked out each second from its start time and
+      // the entry as it is now (opts.timer(id), so a later stop shows here too).
+      ticker(spec) {
+        const el = h('div', { class: 'ticker' });
+        const paint = () => {
+          const cur = (opts.timer && opts.timer(spec.id)) || null;
+          const x = cur || { ...spec, laps: [] };
+          const s = status(x, new Date());
+          const big = x.kind === 'timer' ? (s.done ? '+' + clock(s.over) : clock(s.remaining)) : clock(s.elapsed, true);
+          const note = !cur && opts.timer ? 'removed' : x.kind === 'timer'
+            ? (s.done ? 'done' + (s.running ? ' · ' + spoken(s.over) + ' ago' : '') : s.running ? 'left of ' + clock(x.duration) : 'stopped')
+            : s.running ? 'running' : 'stopped';
+          el.textContent = '';
+          el.append(h('span', { class: 'ticker-time ' + (x.kind === 'timer' && s.done ? 't-warn' : s.running ? 't-strong' : 't-dim'), text: big }),
+            h('span', { class: 'ticker-note t-faint', text: '  ' + note }));
+          return s.running && !!cur;
+        };
+        paint();
+        push(el);
+        const loop = setInterval(() => { if (!el.isConnected || !paint()) clearInterval(loop); }, spec.kind === 'stopwatch' ? 100 : 500);
       },
       // What this turn shows goes away after `ms` (a shared clip expiring):
       // values and code are replaced by a note, and the copy button forgets `text`.

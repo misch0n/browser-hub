@@ -485,6 +485,32 @@ async function check(name, fn) {
     await page.waitForFunction(() => !/stretch/.test(document.querySelector('[data-widget=agenda]').innerText));
   });
 
+  await check('timers: a live countdown, the done notice while the page is open, the widget; stopwatch laps', async () => {
+    await send('timer 0:02 ding');
+    const tick = lastTurn().locator('.ticker-time');
+    const first = await tick.innerText();
+    assert.match(first, /^0:0[12]$/);
+    await page.waitForFunction(() => [...document.querySelectorAll('.turn')].some((t) => /⏰ ding is done/.test(t.innerText)), null, { timeout: 5000 });
+    assert.match(await page.locator('.turn', { hasText: 'Timer started · ding' }).locator('.ticker-time').innerText(), /^\+0:0\d$/); // counting past zero
+    await send('widgets timers on');
+    await send('stopwatch lapper');
+    await page.waitForFunction(() => /lapper/.test(document.querySelector('[data-widget=timers]').innerText));
+    assert.match(await page.locator('[data-widget=timers]').innerText(), /ding[\s\S]*done \+0:0\d/);
+    await page.waitForTimeout(300);
+    await send('stopwatch lapper lap');
+    assert.match(await lastText(), /Lap 1\s+0:00\.\d/);
+    await send('stopwatch lapper stop');
+    await send('timer ding stop');
+    await page.waitForFunction(() => /Nothing running/.test(document.querySelector('[data-widget=timers]').innerText));
+    // A reload keeps them: they're data, worked out from their start times.
+    await send('timer 5m bread');
+    await page.reload();
+    await page.waitForSelector('#prompt');
+    await page.waitForFunction(() => /bread\s*4:5\d/.test(document.querySelector('[data-widget=timers]').innerText));
+    await send('timer bread rm');
+    await send('widgets timers off');
+  });
+
   await check('go <url>: any address opens like an alias (after the wait), Esc cancels, ↑ and Back find it', async () => {
     await type('go example.com/went-there');
     await page.keyboard.press('Enter');

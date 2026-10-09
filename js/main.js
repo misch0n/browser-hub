@@ -14,6 +14,7 @@ import { createSync } from './sync.js';
 import { readBounce } from './lib/bounce.js';
 import { SYNCED } from './core/merge.js';
 import { sweepClip } from './commands/clip.js';
+import { status as timerStatus, spoken } from './lib/timers.js';
 import { isLive, timeLeft } from './core/clip.js';
 import { createTranscript } from './ui/transcript.js';
 import { createPrompt } from './ui/prompt.js';
@@ -41,6 +42,7 @@ const transcript = createTranscript($('transcript'), $('turns'), {
   setInput: (text) => { prompt.set(text); prompt.focus(); },
   onCopyable: (text) => setCopyable(text),
   onExpired: (text) => { if (lastCopyable === text) { lastCopyable = ''; copyEl.hidden = true; } },
+  timer: (id) => state.timers.items.find((x) => x.id === id) || null,
 });
 
 // The copy button by the prompt: copies the latest result worth copying
@@ -154,6 +156,54 @@ function announceClip() {
     ['clip', 'accent', { run: 'clip' }], [' shows it · ' + timeLeft(c, now()) + ' left', 'dim']], 'info');
 }
 const sweep = () => sweepClip(data, store, now).catch(() => {});
+
+// Timers that finish while this page is open: a notice, a short tone and the
+// tab's title, once per timer on this device (cc-device:timers-rung). Timers
+// that ended while no page was open are noted when it opens.
+const TITLE = document.title;
+let titleFlash = null;
+function ring() {
+  try {
+    const A = window.AudioContext || window.webkitAudioContext;
+    if (!A) return;
+    const ac = new A();
+    [0, 0.35, 0.7].forEach((t) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, ac.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.2, ac.currentTime + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t + 0.25);
+      o.connect(g).connect(ac.destination);
+      o.start(ac.currentTime + t);
+      o.stop(ac.currentTime + t + 0.3);
+    });
+    setTimeout(() => ac.close().catch(() => {}), 1500);
+  } catch (e) { /* no sound: the notice and title still say it */ }
+}
+function checkTimers() {
+  const rung = new Set(store.getLocal('timers-rung') || []);
+  const at = now();
+  const done = state.timers.items.filter((x) => x.kind === 'timer' && !x.stop && !rung.has(x.id + '@' + x.start) && timerStatus(x, at).done);
+  if (!done.length) return;
+  for (const x of done) {
+    rung.add(x.id + '@' + x.start);
+    const s = timerStatus(x, at);
+    const late = s.over > 5000;
+    transcript.notice().head([['⏰ ', ''], [x.name || 'Timer ' + x.id, 'strong'], [late ? ' finished ' + spoken(s.over) + ' ago' : ' is done', ''],
+      [' · ', 'faint'], ['stop', 'accent', { run: 'timer ' + x.id + ' stop' }], ['  ', ''], ['again', 'accent', { run: 'timer ' + x.id + ' restart' }]], 'warn');
+    if (!late) ring();
+  }
+  const keep = new Set(state.timers.items.map((x) => x.id + '@' + x.start));
+  store.setLocal('timers-rung', [...rung].filter((k) => keep.has(k)));
+  if (document.visibilityState !== 'visible' || !document.hasFocus()) {
+    clearInterval(titleFlash);
+    let on = false;
+    const name = done[0].name || 'Timer ' + done[0].id;
+    titleFlash = setInterval(() => { on = !on; document.title = on ? '⏰ ' + name + ' is done' : TITLE; }, 1000);
+    const calm = () => { clearInterval(titleFlash); document.title = TITLE; window.removeEventListener('focus', calm); };
+    window.addEventListener('focus', calm);
+  }
+}
 
 // ---- shared visual history ------------------------------------------------------------
 // What every device ran, merged by time (core/log.js). The view is per device:
@@ -624,6 +674,8 @@ async function start() {
   setInterval(renderPinned, 60000); // a new day brings a new summary
   sweep();
   setInterval(sweep, 20000);
+  checkTimers();
+  setInterval(checkTimers, 1000);
   showSyncStatus(sync.status);
   syncSoon(0);
   setInterval(() => { if (document.visibilityState === 'visible') syncSoon(0); }, 5 * 60000);

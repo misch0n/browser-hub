@@ -2,7 +2,8 @@
 // its first sync), `local` is what it has now, `remote` what the repo has now.
 // Each change made on either side since `base` is kept:
 //
-//   - per item for notes, tasks, events, snippets, links, foods and diagrams (by id) and aliases (by name);
+//   - per item for notes, tasks, events, snippets, links, foods, diagrams and the personal
+//     collections (core/personal.js) (by id) and aliases (by name);
 //   - per key for settings (zones as a set, clock names per zone, bounce keys kept from both);
 //   - an item changed on both sides keeps this device's version and is
 //     reported as a conflict; an item deleted on one side and changed on the
@@ -16,8 +17,9 @@
 
 import { mergeLog } from './log.js';
 import { mergeClip } from './clip.js';
+import { PERSONAL, personalCols } from './personal.js';
 
-export const SYNCED = ['meta', 'aliases', 'notes', 'tasks', 'events', 'snippets', 'later', 'foods', 'diagrams', 'settings', 'log', 'clip'];
+export const SYNCED = ['meta', 'aliases', 'notes', 'tasks', 'events', 'snippets', 'later', 'foods', 'diagrams', ...personalCols, 'settings', 'log', 'clip'];
 
 // JSON with object keys sorted, so equal data compares equal whatever the key order.
 export function canonical(v) {
@@ -121,7 +123,7 @@ export function merge3(base, local, remote, opts = {}) {
   for (const X of [doc(L, 'meta'), doc(R, 'meta')]) {
     for (const [p, n] of Object.entries(X.counters || {})) counters[p] = Math.max(counters[p] || 0, n);
   }
-  for (const [c, prefix] of [['notes', 'n'], ['tasks', 't'], ['events', 'e'], ['snippets', 's'], ['later', 'l'], ['foods', 'f'], ['diagrams', 'd']]) {
+  for (const [c, prefix] of [['notes', 'n'], ['tasks', 't'], ['events', 'e'], ['snippets', 's'], ['later', 'l'], ['foods', 'f'], ['diagrams', 'd'], ...PERSONAL.map((p) => [p.col, p.prefix])]) {
     if (!L[c] && !R[c] && !B[c]) continue; // a file from before snippets and links
     const r = mergeList(doc(B, c).items, doc(L, c).items, doc(R, c).items, 'id', out);
     const max = Math.max(counters[prefix] || 0, ...r.merged.map((x) => idNum(x.id)));

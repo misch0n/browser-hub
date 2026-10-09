@@ -46,8 +46,8 @@ still work.
 | Snippets | `snippets`, `snip` |
 | Read later | `later` |
 | Diagrams | `diagrams`, `mermaid` |
+| Tools | `timer`, `stopwatch`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `barcode`, `zones`, `tz` |
 | Dates | `date`, `days`, `week` |
-| Tools | `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `barcode`, `zones`, `tz` |
 | Security | `pw`, `hash`, `jwt`, `hmac`, `crypt`, `cert` |
 | Text | `count`, `case`, `char`, `text` |
 | Developer | `cidr`, `url`, `regex`, `diff`, `cron`, `color`, `chmod`, `csv`, `base`, `escape` |
@@ -487,6 +487,19 @@ protein 4 fat 7 carbs 27 per 1 bar = 45 g` (stored per 100 g, counted by the
 bar). They come first in searches and meals; `cook calorie mine` lists them,
 `cook calorie f2` shows one with every value editable in place, `cook calorie
 f2 edit sugar 9` and `cook calorie f2 rm` work as everywhere else.
+
+**Timers and stopwatches**: `timer 10m tea` starts a timer (also `1h30m`,
+`90s`, `1:30`, or `25` for minutes; up to 7 days), `stopwatch` starts a
+stopwatch and `stopwatch run` a named one. Each is kept as its start time, so
+it survives reloads and shows the same on every device (synced); the time on
+screen is worked out live. They run until you stop them: `timer tea stop`,
+`stopwatch run lap`, `stopwatch run stop`, `… restart`, `… rm` (by name or id,
+or just `timer stop` when one is running); `timer list` and `stopwatch list`
+list them all. A finished timer keeps counting how long it has been done. While
+a page is open it rings: a notice with stop and again, a short tone, and the
+tab's title flashing until you come back. A page that was closed says so when
+it opens; for alerts with no page open see the iOS notifications research.
+The `timers` widget (`widgets timers on`) shows the running ones, live.
 
 **Chance**: `random` gives 1–100; `random 50`, `random 10-20`, `random -5..5`
 and `random 0.5-2.5` set the band (decimals as written), `random 6 digits`

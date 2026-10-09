@@ -267,7 +267,7 @@ test('theme and widgets commands', async () => {
   assert.equal(app.data.state.settings.theme, 'nord');
   assert.equal((await app.run('theme neon'))[0], "err: No theme 'neon'");
   const w = await app.run('widgets');
-  assert.equal(w[0], '# Widgets · 3 of 7 on');
+  assert.equal(w[0], '# Widgets · 3 of 8 on');
   // The shared grammar: widgets <name> shows it; on/off, move, edit, rm, add.
   assert.deepEqual(await app.run('widgets zones'), ['# widget zones', 'on: ○ off  [widgets zones edit on = no]', 'position: —',
     'shows: your time zones and working-hours overlap', 'dim: Tap a value to change it, or: widgets zones on']);

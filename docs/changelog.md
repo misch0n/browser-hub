@@ -5,6 +5,7 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 9 October 2026
 
+- `timer 10m tea`, `stopwatch`: synced entries worked out from their start time; live countdown, laps, stop/restart/rm, a ring while a page is open, and a `timers` widget (D21).
 - `chmod`: 755 ⇄ rwxr-xr-x ⇄ u=rwx,g=rx,o=rx, special bits, `ls -l` strings, and what `u+x` / `go-w` do.
 - `json path` (jq-style: `.a.b`, `[0]`, `[*]`, `..key`, slices); tapping a key in `json tree` shows and copies its path.
 - `char`: every character with code point, bytes and script; invisible characters and look-alike letters flagged; `char clean`.

@@ -8,6 +8,7 @@
 //   laps(item) -> [{ n, at (ms from start), split (ms since the previous) }]
 //   clock(ms) -> '4:05', '1:02:03', '0:00.4' (tenths under a minute when asked)
 //   spoken(ms) -> '1 h 2 min', '45 s', '3 days 2 h'
+//   findEntry(items, spec) -> the entry a recorded ticker means, or null (see below)
 
 const UNIT = { d: 86400000, h: 3600000, m: 60000, min: 60000, s: 1000, sec: 1000 };
 const MAX = 7 * 86400000;
@@ -76,4 +77,14 @@ export function spoken(ms) {
   if (h) return h + ' h' + (m ? ' ' + m + ' min' : '');
   if (m) return m + ' min' + (s && m < 10 ? ' ' + s + ' s' : '');
   return s + ' s';
+}
+
+// The entry a ticker recorded in the shared history stands for, as it is now.
+// Its id can have changed (sync renumbers ids made on two devices at once),
+// and an id can now belong to another entry, so it is matched by when it was
+// created (and, for tickers recorded before that was kept, by its start).
+export function findEntry(items, spec) {
+  const same = (x) => x.kind === spec.kind && (spec.created ? x.created === spec.created : x.start === spec.start);
+  return items.find((x) => x.id === spec.id && same(x)) || items.find(same) ||
+    (!spec.created && items.find((x) => x.id === spec.id && x.kind === spec.kind)) || null; // an old ticker of a restarted entry
 }

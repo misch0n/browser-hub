@@ -446,3 +446,19 @@ test('clip: sealed with a passphrase, one item, gone after 15 minutes, never kep
   assert.match((await A.run('clip key off'))[0], /^# Passphrase forgotten on this device/);
   assert.equal(A.store.getLocal('clip-key'), null);
 });
+
+test('sync keeps collections it does not know: a page from before an update never drops newer data', async () => {
+  const gh = fakeGitHub({ tokens: ['tok'], repos: { 'me/data': { private: true } } });
+  const a = await makeApp();
+  a.ctx.sync = createSync({ data: a.data, store: a.store, now: () => new Date(MON), fetch: gh.fetch, device: 'test' });
+  await a.ctx.sync.setup('me/data', null, 'tok');
+  // A newer version has written a collection this one doesn't have.
+  const f = gh.file('me/data');
+  f.collections.gadgets = { items: [{ id: 'g1', name: 'from the future' }] };
+  gh.seed('me/data', 'browser-hub/data.json', JSON.stringify({ app: 'control-center', schema: 1, collections: f.collections }));
+  await a.run('t a change from the older page');
+  await a.ctx.sync.syncNow();
+  const after = gh.file('me/data').collections;
+  assert.ok(after.tasks.items.some((t) => t.text === 'a change from the older page'));
+  assert.deepEqual(after.gadgets, { items: [{ id: 'g1', name: 'from the future' }] });
+});

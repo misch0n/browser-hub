@@ -55,7 +55,7 @@ export default function register(add, { st, usage }) {
     const now = ctx.now();
     const s = status(x, now);
     out.head([[label(x), 'strong'], [' · ' + x.kind + ' ' + x.id, 'dim']], x.kind === 'timer' && s.done ? 'warn' : s.running ? 'ok' : 'dim');
-    out.ticker({ id: x.id, kind: x.kind, start: x.start, duration: x.duration || null, stop: x.stop || null });
+    out.ticker({ id: x.id, kind: x.kind, start: x.start, created: x.created, duration: x.duration || null, stop: x.stop || null });
     const rows = [['started', [[new Date(x.start).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }), 'date']]]];
     if (x.kind === 'timer') {
       rows.push(['set', [[clock(x.duration), 'num'], [' · ' + spoken(x.duration), 'faint']]]);
@@ -81,7 +81,7 @@ export default function register(add, { st, usage }) {
     await ctx.data.mutate('timers', (d) => { d.items.push(item); });
     out.head([[kind === 'timer' ? 'Timer started' : 'Stopwatch started', ''], [' · ' + label(item), 'strong'],
       [kind === 'timer' ? ' · ' + spoken(duration) : '', 'dim']], 'ok');
-    out.ticker({ id, kind, start: now, duration: duration || null, stop: null });
+    out.ticker({ id, kind, start: now, created: now, duration: duration || null, stop: null });
     out.line([[ref(item) + ' stop', 'accent', { run: kind + ' ' + id + ' stop' }], [kind === 'stopwatch' ? '  ' : '', ''],
       [kind === 'stopwatch' ? ref(item) + ' lap' : '', 'accent', { run: kind + ' ' + id + ' lap' }],
       [kind === 'timer' ? '  · rings while a page is open; the timers widget keeps it in view' : '', 'faint']]);

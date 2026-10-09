@@ -42,7 +42,7 @@ const transcript = createTranscript($('transcript'), $('turns'), {
   setInput: (text) => { prompt.set(text); prompt.focus(); },
   onCopyable: (text) => setCopyable(text),
   onExpired: (text) => { if (lastCopyable === text) { lastCopyable = ''; copyEl.hidden = true; } },
-  timer: (id) => state.timers.items.find((x) => x.id === id) || null,
+  timers: () => state.timers.items,
 });
 
 // The copy button by the prompt: copies the latest result worth copying

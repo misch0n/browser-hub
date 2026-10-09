@@ -5,6 +5,7 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 9 October 2026
 
+- Timers and stopwatches on other devices: a live counter whose entry arrives after its history entry (or was renumbered by sync) now finds it and keeps counting, instead of freezing until a refresh; sync keeps collections an older page doesn't know instead of dropping them.
 - `eat`: a calorie tracker on the nutrition table and your foods; the day, the week, a daily target (D22).
 - `log`: a journal by day, month or week; "on this day" in `today`.
 - `subs`: subscriptions with renewals in the agenda and monthly and yearly totals per currency.

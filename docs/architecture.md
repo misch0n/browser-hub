@@ -207,7 +207,9 @@ Adding a collection touches about ten places; follow
   settings per key, conflicts keep this device's version and are reported,
   delete-vs-edit keeps the item, ids created offline on two devices are
   renumbered on this side. The log merges by entry; the clip by newest
-  (a wipe wins ties).
+  (a wipe wins ties). Collections in the file that this version doesn't know
+  (written by a newer page) are carried along untouched, so a page left open
+  from before an update can't drop them.
 - When: a few seconds after a change, on open/visibility, every 5 minutes while visible.
 
 ## Visual history

@@ -125,11 +125,15 @@ export function createSync(opts) {
       throw new SyncError('bad-file', cfg.path + ' in ' + cfg.repo + " isn't the hub's file; it was left untouched. Pick another directory: sync setup " + cfg.repo + ' <directory>');
     }
     if (file.schema > SCHEMA) throw new SyncError('bad-file', 'the repo was synced by a newer version of this page; reload it');
-    return { sha: res.json.sha, collections: syncedPart(file.collections) };
+    // Collections this version doesn't know (a newer page added them) travel on
+    // untouched, so an older page left open somewhere never drops them.
+    const extra = {};
+    for (const [k, v] of Object.entries(file.collections)) if (!SYNCED.includes(k)) extra[k] = v;
+    return { sha: res.json.sha, collections: syncedPart(file.collections), extra };
   }
 
-  async function writeRemote(collections, sha) {
-    const file = { app: 'control-center', schema: SCHEMA, updatedAt: now().toISOString(), by: opts.device || 'browser', collections };
+  async function writeRemote(collections, sha, extra = {}) {
+    const file = { app: 'control-center', schema: SCHEMA, updatedAt: now().toISOString(), by: opts.device || 'browser', collections: { ...extra, ...collections } };
     const body = {
       message: 'browser-hub: sync from ' + (opts.device || 'browser'),
       content: b64encode(JSON.stringify(file, null, 1) + '\n'),
@@ -155,7 +159,7 @@ export function createSync(opts) {
       let sha = remote ? remote.sha : null;
       if (!remote || !sameData(m.collections, remote.collections)) {
         try {
-          sha = await writeRemote(m.collections, sha);
+          sha = await writeRemote(m.collections, sha, remote ? remote.extra : {});
         } catch (e) {
           if (e.kind === 'conflict') continue;
           throw e;

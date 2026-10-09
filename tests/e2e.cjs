@@ -502,6 +502,13 @@ async function check(name, fn) {
     await send('stopwatch lapper stop');
     await send('timer ding stop');
     await page.waitForFunction(() => /Nothing running/.test(document.querySelector('[data-widget=timers]').innerText));
+    // A counter whose entry isn't here (yet, or any more) says so, and picks it up when it comes back.
+    await send('stopwatch comeback');
+    const saved = await page.evaluate(() => window.CC.data.mutate('timers', (d) => d.items.pop()));
+    await page.waitForFunction(() => /removed/.test([...document.querySelectorAll('.turn')].pop().querySelector('.ticker').innerText), null, { timeout: 5000 });
+    await page.evaluate((x) => window.CC.data.mutate('timers', (d) => { d.items.push(x); }), saved);
+    await page.waitForFunction(() => /running/.test([...document.querySelectorAll('.turn')].pop().querySelector('.ticker').innerText), null, { timeout: 5000 });
+    await send('stopwatch comeback rm');
     // A reload keeps them: they're data, worked out from their start times.
     await send('timer 5m bread');
     await page.reload();
@@ -1031,6 +1038,19 @@ async function check(name, fn) {
     await page.waitForFunction(() => [...document.querySelectorAll('article.turn')].some((t) => /t from device b/.test(t.innerText) && /Phone B/.test(t.innerText)), null, { timeout: 5000 });
     assert.equal(await page.locator('article.turn .you-text', { hasText: 'sync now' }).count() >= 1, true);
     assert.equal(await page.locator('article.turn[data-id] .you-text', { hasText: /^sync/ }).count(), 0);
+
+    // A stopwatch started here runs on B too: its turn there counts live, and B lists it as running.
+    await send('stopwatch across');
+    await send('sync now');
+    await bsend('sync now');
+    await b.waitForFunction(() => [...document.querySelectorAll('article.turn')].some((t) => /stopwatch across/.test(t.innerText) && /running/.test(t.innerText)), null, { timeout: 5000 });
+    const read = () => b.locator('article.turn', { hasText: 'stopwatch across' }).locator('.ticker-time').first().innerText();
+    const t1 = await read();
+    await b.waitForTimeout(400);
+    assert.notEqual(await read(), t1); // counting
+    await bsend('stopwatch list');
+    assert.match(await b.evaluate(() => [...document.querySelectorAll('.turn')].pop().innerText), /across\s+[\d:.]+\s+running/);
+    await send('stopwatch across stop');
 
     // The shared clip: a passphrase on each device (hidden), sealed in the repo, announced on the other device.
     for (const [sendFn, pg] of [[send, page], [bsend, b]]) {

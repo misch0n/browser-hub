@@ -75,3 +75,18 @@ test('timer and stopwatch commands: start, list, show, stop, laps, restart, rm; 
   assert.ok(def.complete([]).some((c) => c.value === 'run'));
   assert.deepEqual(def.complete(['run']).map((c) => c.value), ['lap', 'stop', 'restart', 'rm']);
 });
+
+test('a recorded ticker finds its entry after a renumbering sync or a restart', () => {
+  const a = { id: 'w1', kind: 'stopwatch', start: '2026-10-05T10:00:00.000Z', created: '2026-10-05T10:00:00.000Z' };
+  const b = { id: 'w2', kind: 'stopwatch', start: '2026-10-05T11:00:00.000Z', created: '2026-10-05T11:00:00.000Z' };
+  // B's w1 was renumbered to w2 by sync, and w1 is now A's: the ticker of B's w1 still finds B's.
+  const spec = { id: 'w1', kind: 'stopwatch', start: b.start, created: b.created };
+  assert.equal(T.findEntry([a, b], spec), b);
+  // Restarted: a new start, the same entry.
+  assert.equal(T.findEntry([{ ...a, start: '2026-10-05T12:00:00.000Z' }], { id: 'w1', kind: 'stopwatch', start: a.start, created: a.created }).id, 'w1');
+  // Not here yet (its history entry synced first), or removed: null.
+  assert.equal(T.findEntry([b], { id: 'w9', kind: 'stopwatch', start: 'x', created: 'y' }), null);
+  // A ticker recorded before `created` was kept: by start, then by id.
+  assert.equal(T.findEntry([a, b], { id: 'w1', kind: 'stopwatch', start: b.start }), b);
+  assert.equal(T.findEntry([{ ...a, start: 'later' }], { id: 'w1', kind: 'stopwatch', start: a.start }).id, 'w1');
+});

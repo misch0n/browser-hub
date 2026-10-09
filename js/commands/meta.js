@@ -295,4 +295,17 @@ export default function register(add, helpers) {
       })();
     },
   });
+
+  // refresh: the page reloaded from the server (main.js, once the command is in the history).
+  add({
+    name: 'refresh', group: 'Meta', desc: 'reload the page from the server: the latest version, past any cached copy',
+    usage: ['refresh'],
+    examples: ['refresh'],
+    noUndo: true,
+    run(ctx, rest) {
+      if (rest.trim()) return usage(ctx, this);
+      ctx.out.head([['Refreshing', ''], [' · loading the page anew', 'dim']], 'info');
+      ctx.reloadAfter = true;
+    },
+  });
 }

@@ -43,6 +43,7 @@ import { removes } from '../core/undo.js';
 //   ctx.pasted         the full texts of the paste placeholders in the input, in order
 //   ctx.askSecret(label) -> Promise<text>: masked input, never echoed or kept ('' when cancelled)
 //   ctx.setInput(text) put text in the prompt     ctx.navigateAfter = url: open it once recorded
+//   ctx.reloadAfter = true: reload the page from the server once recorded (refresh)
 //   ctx.pickFile(accept) -> Promise<File|null>    ctx.download(name, text, mime)
 //   ctx.fetch, ctx.env  the network and the browser globals, when tests replace them
 //   ctx.device, ctx.os, ctx.pageURL, ctx.sync, ctx.records, ctx.clearOutput(at, message),

@@ -1333,6 +1333,24 @@ async function check(name, fn) {
     await phone.close();
   });
 
+  await check('refresh reloads the page from the server; the address stays clean and the history is kept', async () => {
+    await page.evaluate(() => { window.__beforeRefresh = true; });
+    const pages = [];
+    const seen = (r) => { if (r.isNavigationRequest()) pages.push(r.url()); };
+    page.on('request', seen);
+    await type('refresh');
+    await Promise.all([page.waitForEvent('load'), page.keyboard.press('Enter')]);
+    page.off('request', seen);
+    await page.waitForSelector('#prompt');
+    assert.equal(await page.evaluate(() => window.__beforeRefresh), undefined); // a new page
+    assert.ok(pages.some((u) => /\?fresh=\d+/.test(u)), pages.join(' ')); // an address no cache holds
+    assert.equal(new URL(page.url()).search, '');
+    assert.equal(await focused(), 'prompt');
+    const log = await page.evaluate(() => JSON.parse(localStorage.getItem('cc:log')).entries.map((e) => e.input));
+    assert.equal(log.at(-1), 'refresh');
+    assert.match(await page.locator('#turns').innerText(), /Refreshing/);
+  });
+
   await check('pageshow clears stale input and refocuses', async () => {
     await prompt.fill('stale');
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));

@@ -105,6 +105,9 @@ const ctxBase = {
   },
   navigate(url) { location.assign(url); },
   leave(url) { location.replace(url); },
+  // A reload the cache can't answer: the page at a new address (?fresh=<time>, dropped
+  // again on load); its scripts and styles carry the deployed version (?v=) already.
+  reload() { location.replace(location.pathname + '?fresh=' + Date.now() + location.hash); },
 };
 
 // ---- sync ---------------------------------------------------------------------------
@@ -238,6 +241,7 @@ function run(raw, shown, pasted) {
     if (res.alias) out.line([['→ ', 'faint'], [res.expanded, 'dim']]);
     // A command that opens a page (later <id> open) does it once it is in the history.
     return commands.run(res.name, res.rest, ctx).then(async () => {
+      if (ctx.reloadAfter) { await Promise.all([saved, record()]); ctxBase.reload(); return; }
       const url = ctx.navigateAfter && /^https?:\/\//i.test(ctx.navigateAfter) ? ctx.navigateAfter : null;
       const go = url ? await waitToOpen(url) : false;
       if (url && !go) out.warn('Cancelled: ' + siteOf(url) + ' not opened');
@@ -591,6 +595,8 @@ store.subscribe((col) => { data.reload(col).catch(() => {}); });
 // ---- start -------------------------------------------------------------------------
 
 async function start() {
+  // Back from `refresh`: keep the address clean.
+  if (new URLSearchParams(location.search).has('fresh')) history.replaceState(null, '', location.pathname + location.hash);
   prompt.focus();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) { /* optional */ }
 

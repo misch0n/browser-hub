@@ -3703,3 +3703,13 @@ test('go: opens an address as an alias does, once the command is in the history'
   const go = app.commands.defs.find((d) => d.name === 'go');
   assert.deepEqual(go.complete([]).map((c) => c.value), ['example.com/a', 'example.org']);
 });
+
+test('refresh: asks for a reload from the server once the command is recorded', async () => {
+  const app = await makeApp();
+  app.ctx.reloadAfter = false;
+  assert.deepEqual(await app.run('refresh'), ['# Refreshing · loading the page anew']);
+  assert.equal(app.ctx.reloadAfter, true);
+  app.ctx.reloadAfter = false;
+  assert.match((await app.run('refresh now'))[0], /Usage/);
+  assert.equal(app.ctx.reloadAfter, false);
+});

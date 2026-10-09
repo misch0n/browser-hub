@@ -25,8 +25,8 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 8 October 2026: unit tests (101) in six time zones, decoder
-  tests and 61 e2e checks pass.
+- Last verified 9 October 2026: unit tests (102) in six time zones, decoder
+  tests and 62 e2e checks pass.
 - Graph mode (`graph <command>`) is an experiment the owner asked to try,
   refined to the owner's design note (D20); its ranking switch
   (`graph :sort freq|alpha`) is there to compare both orders. Its open

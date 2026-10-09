@@ -3,6 +3,11 @@
 What shipped, newest first, by feature. One line per change; the commit has
 the detail (`git show <hash>`). Add a line here with every change you push.
 
+## 9 October 2026
+
+- `refresh` reloads the page from the server (a cache-proof address, cleaned
+  up on load), once the command is in the history.
+
 ## 8 October 2026
 
 - `go <url>` opens any address like an alias does (the one-second wait, Esc

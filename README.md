@@ -59,7 +59,7 @@ still work.
 | Aliases & engines | `aliases`, `alias`, `engine`, `go` |
 | View | `theme`, `widgets`, `font`, `graph` |
 | Sync | `sync` |
-| Meta | `config`, `help`, `keys`, `undo`, `redo`, `clear`, `session`, `history`, `export`, `import` |
+| Meta | `config`, `help`, `keys`, `undo`, `redo`, `clear`, `session`, `history`, `export`, `import`, `refresh` |
 <!-- commands:end -->
 
 Every command, its forms and examples: [docs/commands.md](docs/commands.md)
@@ -181,6 +181,9 @@ Reload, or open the page on your phone, and it's all there.
 - `clear` (or `clear current`) clears this device's session, `clear all` every
   device's, everywhere once synced; `undo` brings it back.
 - `config` sets your name (greeting) and this device's name (`config edit device Work laptop`).
+- `refresh` reloads the page from the server, past any cached copy (handy right
+  after a deploy, or on the iPhone where there's no reload button in a home
+  screen app); the history and your data stay.
 - Kept: the last 300 commands, within about 800 KB; very long output (`zones all`)
   is kept as its heading only. `sync` output is never kept.
 

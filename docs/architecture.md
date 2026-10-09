@@ -109,7 +109,8 @@ command.
 
 `js/core/aliases.js` holds one table: URL aliases and engines (opened with
 `location.assign` after `main.js`'s one-second wait, which Esc cancels; `go <url>`
-and `later <id> open` reach the same wait through `ctx.navigateAfter`) and
+and `later <id> open` reach the same wait through `ctx.navigateAfter`; `refresh`
+sets `ctx.reloadAfter` and reloads at `?fresh=<time>`, dropped on load) and
 command aliases, which `core/dispatch.js` expands into the built-in they name
 (`{ kind: 'builtin', name, rest, alias, expanded }`). A command alias can't
 name another alias, so expansion is one step and can't loop.

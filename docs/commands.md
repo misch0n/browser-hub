@@ -1003,3 +1003,13 @@ load a file: an export, an xsearch export, or calendar events (.ics)
 ```
 import
 ```
+
+### `refresh`
+
+reload the page from the server: the latest version, past any cached copy *(no undo)*
+
+```
+refresh
+```
+
+Examples: `refresh`

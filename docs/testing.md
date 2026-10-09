@@ -26,7 +26,7 @@ npm run setup      # Playwright 1.56.1, jsQR 1.4.0, @zxing/library 0.21.3 (test-
 | `npm run test:tz` | the unit tests in six time zones (UTC, Sofia, Los Angeles, Tokyo, Kiritimati +14, Pago Pago −11) | ~20 s |
 | `npm run test:decoders` | QR codes read back by jsQR, barcodes by ZXing, X.509 against OpenSSL-made fixtures | ~5 s |
 | `npm run test:e2e` | the deployable build in headless Chromium: 59 checks | ~3 min |
-| `npm run test:all` | all of the above, as CI runs it | ~4 min |
+| `npm run test:all` | `test:tz`, `test:decoders` and `test:e2e`, the scripts CI runs | ~4 min |
 | `node tools/docs-commands.mjs` | is the command reference current? (`npm run docs` rewrites it) | instant |
 
 Run one area: `node --test tests/unit/keep.test.js`; one test:

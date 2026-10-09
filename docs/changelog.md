@@ -5,6 +5,7 @@ the detail (`git show <hash>`). Add a line here with every change you push.
 
 ## 9 October 2026
 
+- CI runs the npm scripts (`test:tz`, `setup`, `test:decoders`, `test:e2e`); `test:all` chains them.
 - Unit tests split by area into `tests/unit/` with shared `tests/helpers.mjs` (same 102 tests).
 - `refresh` reloads the page from the server (a cache-proof address, cleaned
   up on load), once the command is in the history.

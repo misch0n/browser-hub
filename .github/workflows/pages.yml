@@ -16,16 +16,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # The same npm scripts a contributor runs (package.json), so commands live in one place.
       - name: Unit tests in several time zones
-        run: node tests/run-tz.mjs
+        run: npm run test:tz
       - name: Install Playwright, Chromium, and QR and barcode decoders (test-only)
         run: |
-          npm install --no-save --no-package-lock playwright@1.56.1 jsqr@1.4.0 @zxing/library@0.21.3
+          npm run setup
           npx playwright install --with-deps chromium
       - name: QR codes and barcodes scan back with independent decoders; certificates decode
-        run: node --test tests/qr.test.mjs tests/barcode.test.mjs tests/x509.test.mjs
+        run: npm run test:decoders
       - name: Browser tests against the built site
-        run: node tests/e2e.cjs
+        run: npm run test:e2e
 
   deploy:
     # Only main is published, and only after every test passed.

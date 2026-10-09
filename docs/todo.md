@@ -25,8 +25,8 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 9 October 2026: unit tests (122) in six time zones, decoder
-  tests and 65 e2e checks pass.
+- Last verified 9 October 2026: unit tests (144) in six time zones, decoder
+  tests and 66 e2e checks pass.
 - Graph mode (`graph <command>`) is an experiment the owner asked to try,
   refined to the owner's design note (D20); its ranking switch
   (`graph :sort freq|alpha`) is there to compare both orders. Its open
@@ -49,51 +49,25 @@ unit tests (six time zones where dates are involved), e2e when it draws or
 interacts. Anything holding something you keep is a synced collection in the
 shared grammar ([recipes.md](recipes.md#add-a-collection)).
 
-1. **`hexdump` / `bin`: byte inspector** (owner: "hexdump/bin inspector").
-   *What:* `hexdump <text>` (UTF-8; `utf16le`/`utf16be` option): offset, hex
-   and printable columns, 16 bytes a row; `hexdump file` picks a local file
-   (read on the device, never uploaded) and shows its first 4 KB, size and
-   type from its magic number (PNG, JPEG, GIF, PDF, ZIP/Office, gzip, ELF,
-   Mach-O, PE, SQLite, …), with "more" to page; `hexdump hex <48 65 6c…>`
-   decodes bytes back to text; `bin <number|text>` shows binary (bytes grouped,
-   with hex and decimal). *Done when:* unit tests for the dump layout,
-   encodings and magic numbers; e2e for the file pick.
-2. **`pw check`** (owner: "pw check why not").
-   *What:* `pw check` asks for the password with hidden input (`askSecret`,
-   never echoed, kept or synced; private and noHistory like `pw`) and
-   estimates its strength on the device: length and character classes,
-   minus patterns (EFF word-list words from `lib/wordlist.js`, sequences,
-   repeats, dates, keyboard runs, common substitutions), as bits and a time
-   to crack offline and online, with what weakens it. Says plainly that it's
-   an estimate and that a reused or leaked password is weak whatever its score
-   (no breach lookup: that would send data off the device).
-3. **`sun` / `moon`** (owner: "sun/moon yes").
-    *What:* `sun` today's dawn, sunrise, solar noon, sunset, dusk and day
-    length (and the change since yesterday); `sun <date>`; `moon` phase,
-    illumination, next new and full moon; computed (NOAA / Meeus formulas),
-    no network. *Open (ask when starting):* where: a place set once
-    (`config location <lat>,<lon>` or a city name from a small built-in list),
-    or the browser's location on request. Default: `config location`, with
-    Sofia offered.
-4. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
+1. **Birthdays with age** (owner: "birthdays with age yes"). After recurring
     events (3). *What:* `birthdays add <name> <date>` (year optional), shown
     yearly in `agenda`, `cal`, `today` and the summary as "Ana turns 40"
     (no age without a year); `birthdays` lists them by next date with days to go.
-5. **`lists`: reusable checklists** (owner: "lists yes").
+2. **`lists`: reusable checklists** (owner: "lists yes").
     *What:* `lists add packing`, `lists packing add passport`, `lists packing`
     shows it with tappable checkboxes, `lists packing reset` unchecks all,
     items editable and removable in the shared grammar; synced.
-6. **`subs`: subscriptions** (owner: "subs yes").
+3. **`subs`: subscriptions** (owner: "subs yes").
     *What:* `subs add <name> <price> <currency> every:month|year|<n>m
     next:<date>`; `subs` lists them with the monthly and yearly total per
     currency (no conversion: currency rates are deferred), renewals in
     `agenda` and `today`; the next date moves on by itself.
-7. **`log`: a journal** (owner: "log yes").
+4. **`log`: a journal** (owner: "log yes").
     *What:* `log <text>` adds a dated entry, `log` shows the last days,
     `log yesterday` / `log <date>` / `log <month>`; entries searchable by
     `find`; synced. *Open (ask when starting):* an "on this day" line in
     `today`? Default: yes, when there is one.
-8. **Calorie tracker** (owner: "calorie tracker yes").
+5. **Calorie tracker** (owner: "calorie tracker yes").
     *What:* a daily food log on top of `cook calorie`'s table and your own
     foods: `eat 150 g chicken-breast` (household portions too) adds to today
     with kcal and macros; `eat` shows today's total against a target

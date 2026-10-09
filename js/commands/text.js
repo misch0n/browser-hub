@@ -1,20 +1,51 @@
 import { plural } from '../core/util.js';
 import { inspect, clean } from '../lib/chars.js';
+import { check as checkPassword, duration } from '../lib/pwcheck.js';
 import { password, pin, passphrase, bits, SETS, countText, words, CASES, CASE_NAMES, parseCIDR, parseIP, formatIP, contains, ipKind } from '../lib/text.js';
 
 // pw, count, case, cidr, char.
 
 const n2s = (n) => BigInt(n).toLocaleString('en');
 
+// pw check: asked hidden, rated here, never kept, shown or sent. The patterns
+// found are named by where they are, not by their letters.
+const PATTERN = { common: 'a common password', leet: 'a common word or password with look-alike swaps (@ for a, 0 for o …)',
+  word: 'a dictionary word', sequence: 'a sequence (abc, 123, 987)', repeat: 'a repeat (aaa, 1212)', date: 'a date or a year',
+  keyboard: 'a keyboard pattern (qwerty, asdf)' };
+
+async function pwCheck(ctx, typed) {
+  const { out } = ctx;
+  if (typed) return out.err('Don\u2019t type it on the command line (it would stay in ↑ history): run pw check alone, it asks hidden');
+  const pw = await ctx.askSecret('Password to check (hidden, not kept)');
+  if (!pw) return out.head('Nothing checked', 'dim');
+  const { WORDS } = await import('../lib/wordlist.js');
+  const r = checkPassword(pw, { words: WORDS });
+  const tone = { 'very weak': 'err', weak: 'err', fair: 'warn', strong: 'ok', 'very strong': 'ok' }[r.verdict];
+  out.head([[r.verdict[0].toUpperCase() + r.verdict.slice(1), 'strong'], [' · about ' + Math.round(r.bits) + ' bits', 'dim']], tone);
+  out.kv([
+    ['length', [[plural(r.length, 'character'), 'num'], [' · ' + r.classes.join(', '), 'faint']]],
+    ['offline', [[duration(r.crack.offline), tone === 'ok' ? 'ok' : 'warn'], ['  a stolen hash, 10 billion guesses a second', 'faint']]],
+    ['online', [[duration(r.crack.online), ''], ['  a login page, 10 guesses a second', 'faint']]],
+  ]);
+  if (r.patterns.length) {
+    out.section([['What makes it easier', 'warn']]);
+    // Described by kind, never by its letters: the output must not give the password away.
+    out.table(['where', 'what'], r.patterns.map((p) => [[[p.start + 1 === p.end ? 'char ' + p.end : 'chars ' + (p.start + 1) + '–' + p.end, 'num']], [[PATTERN[p.kind] || p.kind, '']]]));
+  }
+  for (const a of r.advice) out.line([['· ' + a, 'dim']]);
+  out.dim('An estimate, worked out on this device; nothing is kept or sent. A reused or leaked password is weak whatever it scores.');
+}
+
 export default function register(add, { usage }) {
   add({
     name: 'pw', group: 'Security', private: true, noUndo: true, // a fresh password never goes into the shared history
-    desc: 'a random password, passphrase or PIN, made on this device',
-    usage: ['pw [length]', 'pw words [count]', 'pw pin [digits]', 'pw simple [length]'],
-    examples: ['pw', 'pw 32', 'pw words', 'pw words 8', 'pw pin', 'pw simple 16'],
-    complete: (prev) => (prev.length === 0 ? ['words', 'pin', 'simple'].map((v) => ({ value: v })) : []),
+    desc: 'a random password, passphrase or PIN, made on this device; pw check rates one you have',
+    usage: ['pw [length]', 'pw words [count]', 'pw pin [digits]', 'pw simple [length]', 'pw check'],
+    examples: ['pw', 'pw 32', 'pw words', 'pw words 8', 'pw pin', 'pw simple 16', 'pw check'],
+    complete: (prev) => (prev.length === 0 ? ['words', 'pin', 'simple', 'check'].map((v) => ({ value: v })) : []),
     async run(ctx, rest) {
       const { out } = ctx;
+      if (/^check\b/i.test(rest.trim())) return pwCheck(ctx, rest.trim().slice(5).trim());
       const m = /^(?:(words|pin|simple)\s*)?(\d+)?$/i.exec(rest.trim());
       if (!m) return usage(ctx, this);
       const kind = (m[1] || 'chars').toLowerCase();

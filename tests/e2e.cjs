@@ -511,6 +511,22 @@ async function check(name, fn) {
     await send('widgets timers off');
   });
 
+  await check('hexdump file: a local file read on the page, its type from the first bytes; sun and moon draw', async () => {
+    const file = path.join(require('os').tmpdir(), 'cc-hexdump.png');
+    fs.writeFileSync(file, Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(5000, 0x41)]));
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser', { timeout: 3000 }), send('hexdump file')]);
+    await chooser.setFiles(file);
+    await page.waitForFunction(() => /cc-hexdump\.png/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    const t = await lastText();
+    assert.match(t, /cc-hexdump\.png · 5,008 bytes · PNG image/);
+    assert.match(t, /00000000  89 50 4e 47 0d 0a 1a 0a  41 41 41 41 41 41 41 41  \|\.PNG\.\.\.\.AAAAAAAA\|/);
+    assert.match(t, /First 4,096 bytes of 5,008/);
+    await send('sun');
+    assert.match(await lastText(), /sunrise\s+\d\d:\d\d[\s\S]*sunset\s+\d\d:\d\d/);
+    await send('moon');
+    assert.match(await lastText(), /% lit[\s\S]*full moon/);
+  });
+
   await check('go <url>: any address opens like an alias (after the wait), Esc cancels, ↑ and Back find it', async () => {
     await type('go example.com/went-there');
     await page.keyboard.press('Enter');

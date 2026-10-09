@@ -513,3 +513,44 @@ test('char, json path and chmod: the commands', async () => {
   assert.match((await app.run('chmod 888'))[0], /^err: 888 isn't a mode/);
   assert.match((await app.run('chmod 644 u+q'))[0], /^err: /);
 });
+
+test('hexdump, bin and pw check: the commands', async () => {
+  const app = await makeApp();
+  let out = await app.run('hexdump Hello, world!');
+  assert.equal(out[0], '# 13 bytes · 13 characters in UTF-8');
+  assert.equal(out[1], '00000000  48 65 6c 6c 6f 2c 20 77  6f 72 6c 64 21           |Hello, world!|');
+  assert.equal(out.copied, '48 65 6c 6c 6f 2c 20 77 6f 72 6c 64 21');
+  out = await app.run('hexdump utf16be hé');
+  assert.equal(out[0], '# 4 bytes · 2 characters in UTF-16BE');
+  assert.match(out[1], /^00000000  00 68 00 e9/);
+  assert.match((await app.run('hexdump latin1 ☃'))[0], /^err: '☃' isn't in Latin-1/);
+  out = await app.run('hexdump hex 89 50 4e 47 0d 0a 1a 0a');
+  assert.equal(out[0], '# 8 bytes · looks like PNG image');
+  assert.match((await app.run('hexdump hex 4'))[0], /^err: /);
+  // A picked file: its type from the first bytes, read here.
+  app.ctx.nextFile = { name: 'a.pdf', size: 9000, slice: () => ({ arrayBuffer: async () => new TextEncoder().encode('%PDF-1.7\n%âãÏÓ').buffer }) };
+  out = await app.run('hexdump file');
+  assert.match(out[0], /^# a\.pdf · 9,000 bytes · PDF/);
+  assert.ok(out.some((l) => /First 4,096 bytes of 9,000 · read on this device, never uploaded/.test(l)));
+  // bin
+  out = await app.run('bin 255');
+  assert.equal(out[0], '# 1111 1111');
+  assert.ok(out.includes('hex: 0xFF'));
+  assert.equal((await app.run('bin -1'))[0], '# 1111 1111');
+  out = await app.run('bin hé');
+  assert.equal(out[0], '# 2 characters · 3 bytes in UTF-8');
+  assert.ok(out.includes('é | 11000011 10101001 | c3 a9 | 195 169'));
+  // pw check: asked hidden, nothing of it shown.
+  assert.match((await app.run('pw check hunter2'))[0], /^err: Don’t type it on the command line/);
+  app.ctx.askSecret = async () => 'P@ssw0rd2024';
+  out = await app.run('pw check');
+  assert.equal(out.tone, 'err');
+  assert.match(out[0], /^# Very weak|^# Weak/);
+  assert.ok(!/P@ss|ssw0rd|2024/.test(out.join('\n'))); // never its letters
+  assert.ok(out.some((l) => /a common word or password with look-alike swaps|a common password/.test(l)));
+  app.ctx.askSecret = async () => 'vX9#qL2!mZ7$wR4&tK8@';
+  out = await app.run('pw check');
+  assert.equal(out.tone, 'ok');
+  app.ctx.askSecret = async () => '';
+  assert.equal((await app.run('pw check'))[0], '# Nothing checked');
+});

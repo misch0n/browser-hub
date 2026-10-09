@@ -400,20 +400,45 @@ week <date>
 
 Examples: `week` · `week 52` · `week 1 2027` · `week 25 dec`
 
+### `sun`
+
+sunrise, sunset, twilight and day length for your place (or any city), worked out offline
+
+```
+sun
+sun <date>
+sun [date] in <city>
+```
+
+Examples: `sun` · `sun tomorrow` · `sun 21 dec` · `sun in london` · `sun 2026-06-21 in tromsø`
+
+### `moon`
+
+the moon: phase, how much is lit, the next new and full moons, rise and set
+
+```
+moon
+moon <date>
+moon [date] in <city>
+```
+
+Examples: `moon` · `moon next friday` · `moon in tokyo`
+
 ## Security
 
 ### `pw`
 
-a random password, passphrase or PIN, made on this device *(private, no undo)*
+a random password, passphrase or PIN, made on this device; pw check rates one you have *(private, no undo)*
 
 ```
 pw [length]
 pw words [count]
 pw pin [digits]
 pw simple [length]
+pw check
 ```
 
-Examples: `pw` · `pw 32` · `pw words` · `pw words 8` · `pw pin` · `pw simple 16`
+Examples: `pw` · `pw 32` · `pw words` · `pw words 8` · `pw pin` · `pw simple 16` · `pw check`
 
 ### `hash`
 
@@ -648,6 +673,32 @@ escape /<regex>/<flags>
 ```
 
 Examples: `escape C:\Users\me "quoted"` · `escape /^\d{3}-\d{4}$/i` · `escape /https?:\/\/\S+/g`
+
+### `hexdump`
+
+bytes as a hex dump: of text (UTF-8, UTF-16, Latin-1), of hex back to text, or of a local file with its type *(private)*
+
+```
+hexdump <text>
+hexdump utf16le|utf16be|latin1 <text>
+hexdump hex <bytes>
+hexdump file
+```
+
+Examples: `hexdump Hello, world!` · `hexdump utf16le héllo` · `hexdump hex 48 65 6c 6c 6f` · `hexdump file`
+
+### `bin`
+
+binary: a number (two’s complement when negative) or each character’s bytes
+
+```
+bin <number>
+bin 0x1f | 0b1010 | 0o17
+bin text <text>
+bin <text>
+```
+
+Examples: `bin 255` · `bin -1` · `bin 0xCAFE` · `bin 18446744073709551616` · `bin héllo` · `bin text 42`
 
 ## Share
 
@@ -959,7 +1010,7 @@ Examples: `sync setup me/private-data` · `sync setup me/private-data apps/hub` 
 
 ### `config`
 
-your name and this device's name
+your name, this device's name, and your place (for sun and moon)
 
 ```
 config
@@ -967,7 +1018,7 @@ config edit
 config edit <field> <value>
 ```
 
-Examples: `config` · `config edit name Michael` · `config edit device Work laptop` · `config edit name none`
+Examples: `config` · `config edit name Michael` · `config edit device Work laptop` · `config edit place sofia` · `config edit place 42.70,23.32` · `config edit name none`
 
 ### `help`
 

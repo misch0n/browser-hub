@@ -6,8 +6,11 @@ import { dedupe, sortLines, trimText, replaceText, stats, lorem, lines } from '.
 import { secretBytes, bytesToB64url } from '../lib/jose.js';
 import { readRegex, regexCode, literals, flagNames } from '../lib/escape.js';
 import { HTTP_STATUS, STATUS_CLASS, findStatus, MIME, findMime } from '../lib/reference.js';
+import { encode, decode, dump, fromHex, binary, sniff } from '../lib/bytes.js';
 
-// csv, base, text, hmac, escape, http, mime.
+// csv, base, text, hmac, escape, http, mime, hexdump, bin.
+
+const FILE_PEEK = 4096; // bytes of a picked file shown by hexdump file
 
 const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 const toB64 = (bytes) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); };
@@ -276,6 +279,85 @@ export default function register(add, { usage }) {
       out.head([[plural(list.length, 'type'), 'strong'], [' for "' + q + '"', 'dim']]);
       out.table(null, list.map((x) => [[[x.type, 'strong']], [[x.exts.map((e) => '.' + e).join(' '), 'dim']]]), { stack: true });
       out.copyable(list[0].type);
+    },
+  });
+
+  // hexdump: bytes as `hexdump -C` shows them, of text, of hex, or of a local file.
+  const ENC = ['utf8', 'utf16le', 'utf16be', 'latin1'];
+  function showDump(ctx, bytes, head, opts = {}) {
+    const { out } = ctx;
+    const d = dump(bytes, { max: opts.max });
+    out.head(head);
+    if (!bytes.length) return out.dim('No bytes');
+    out.code(d.rows.map((r) => r.offset + '  ' + r.hex + '  |' + r.ascii + '|').join('\n'));
+    if (d.shown < d.total) out.dim('First ' + plural(d.shown, 'byte') + ' of ' + d.total.toLocaleString('en'));
+    out.copyable(Array.from(bytes.subarray(0, d.shown), (b) => b.toString(16).padStart(2, '0')).join(' '));
+  }
+  add({
+    name: 'hexdump', group: 'Developer', private: true, // the text may be a secret: not in the shared history
+    desc: 'bytes as a hex dump: of text (UTF-8, UTF-16, Latin-1), of hex back to text, or of a local file with its type',
+    usage: ['hexdump <text>', 'hexdump utf16le|utf16be|latin1 <text>', 'hexdump hex <bytes>', 'hexdump file'],
+    examples: ['hexdump Hello, world!', 'hexdump utf16le héllo', 'hexdump hex 48 65 6c 6c 6f', 'hexdump file'],
+    complete: (prev) => (prev.length === 0 ? [{ value: 'file', label: 'a local file, read here' }, { value: 'hex', label: 'bytes back to text' }, ...ENC.slice(1).map((v) => ({ value: v }))] : []),
+    run(ctx, rest) {
+      const { out } = ctx;
+      const t = rest.replace(/^\s/, '');
+      if (/^file\s*$/i.test(t)) {
+        const picked = ctx.pickFile(''); // before any await: the browser needs the key press
+        return (async () => {
+          const file = await picked;
+          if (!file) return out.head('No file chosen', 'dim');
+          const bytes = new Uint8Array(await file.slice(0, FILE_PEEK).arrayBuffer());
+          const kind = sniff(bytes);
+          showDump(ctx, bytes, [[file.name, 'strong'], [' · ' + file.size.toLocaleString('en') + ' bytes', 'dim'],
+            [' · ' + (kind ? kind.type + (kind.note ? ' (' + kind.note + ')' : '') : 'type unknown'), kind ? 'accent' : 'faint']]);
+          if (file.size > FILE_PEEK) out.dim('First ' + FILE_PEEK.toLocaleString('en') + ' bytes of ' + file.size.toLocaleString('en') + ' · read on this device, never uploaded');
+          else out.dim('Read on this device, never uploaded');
+        })();
+      }
+      const hm = /^hex\s+([\s\S]+)$/i.exec(t);
+      if (hm) {
+        const b = fromHex(hm[1]);
+        if (b.error) return out.err(b.error);
+        const kind = sniff(b);
+        showDump(ctx, b, [[plural(b.length, 'byte'), 'strong'], [kind ? ' · looks like ' + kind.type : '', 'dim']]);
+        out.section('As UTF-8');
+        return out.value(decode(b, 'utf8'));
+      }
+      const em = /^(utf-?8|utf-?16le|utf-?16be|latin-?1)\s([\s\S]+)$/i.exec(t);
+      const enc = em ? em[1].toLowerCase().replace('-', '') : 'utf8';
+      const text = em ? em[2] : t;
+      if (!text) return usage(ctx, this);
+      const b = encode(text, enc);
+      if (b.error) return out.err(b.error);
+      showDump(ctx, b, [[plural(b.length, 'byte'), 'strong'], [' · ' + plural([...text].length, 'character') + ' in ' + enc.toUpperCase().replace('UTF', 'UTF-').replace('LATIN1', 'Latin-1'), 'dim']], { max: 65536 });
+    },
+  });
+
+  add({
+    name: 'bin', group: 'Developer', desc: 'binary: a number (two\u2019s complement when negative) or each character\u2019s bytes',
+    usage: ['bin <number>', 'bin 0x1f | 0b1010 | 0o17', 'bin text <text>', 'bin <text>'],
+    examples: ['bin 255', 'bin -1', 'bin 0xCAFE', 'bin 18446744073709551616', 'bin héllo', 'bin text 42'],
+    run(ctx, rest) {
+      const { out } = ctx;
+      const tm = /^text\s([\s\S]+)$/i.exec(rest.trim());
+      const r = binary(tm ? tm[1] : rest.trim(), { text: !!tm });
+      if (!rest.trim()) return usage(ctx, this);
+      if (r.error) return out.err(r.error);
+      if (r.kind === 'number') {
+        out.head([[r.bits, 'num strong']]);
+        out.kv([
+          ['decimal', [[r.value, 'num'], [r.unsigned && r.unsigned !== r.value ? '  (unsigned ' + r.unsigned + ')' : '', 'faint']]],
+          ['hex', [['0x' + r.hex.toUpperCase(), 'num']]],
+          ['octal', [['0o' + r.octal, 'num']]],
+          ['size', [[plural(r.bytes, 'byte'), 'dim']]],
+        ]);
+        return out.copyable(r.bits.replace(/ /g, ''));
+      }
+      out.head([[plural(r.chars.length, 'character'), 'strong'], [' · ' + plural(r.chars.reduce((n, c) => n + c.bytes.length, 0), 'byte') + ' in UTF-8', 'dim']]);
+      out.table(['char', 'binary', 'hex', 'dec'], r.chars.slice(0, 200).map((c) => [[[c.ch, 'strong']],
+        [[c.bytes.map((b) => b.bin).join(' '), 'num']], [[c.bytes.map((b) => b.hex).join(' '), 'dim']], [[c.bytes.map((b) => b.dec).join(' '), 'dim']]]));
+      out.copyable(r.chars.flatMap((c) => c.bytes.map((b) => b.bin)).join(' '));
     },
   });
 }

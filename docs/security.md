@@ -66,6 +66,10 @@ asserts the policy; update it deliberately, never to make a test pass.
 - Secrets (tokens, passphrases, keys, plain text to encrypt) are asked for
   with `askSecret` and handled by commands flagged `private` + `noHistory`.
   They are never logged, stored, sent anywhere except their purpose, or put in errors.
+- `pw check` asks with `askSecret` and refuses a password typed on the command
+  line (it would stay in ↑ history); its output names what it found by position
+  and kind only, never by the letters.
+- Local files (`hexdump file`, `import`) are read on the page and never uploaded.
 - Network requests from tools use `credentials: 'omit'` and
   `referrerPolicy: 'no-referrer'`, and say which third party they ask (ipify,
   ipapi.co, Cloudflare/Google DNS).

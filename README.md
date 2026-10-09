@@ -47,10 +47,10 @@ still work.
 | Read later | `later` |
 | Diagrams | `diagrams`, `mermaid` |
 | Tools | `timer`, `stopwatch`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `barcode`, `zones`, `tz` |
-| Dates | `date`, `days`, `week` |
+| Dates | `date`, `days`, `week`, `sun`, `moon` |
 | Security | `pw`, `hash`, `jwt`, `hmac`, `crypt`, `cert` |
 | Text | `count`, `case`, `char`, `text` |
-| Developer | `cidr`, `url`, `regex`, `diff`, `cron`, `color`, `chmod`, `csv`, `base`, `escape` |
+| Developer | `cidr`, `url`, `regex`, `diff`, `cron`, `color`, `chmod`, `csv`, `base`, `escape`, `hexdump`, `bin` |
 | Share | `clip`, `bounce` |
 | Kitchen | `cook` |
 | Chance | `random`, `roll` |
@@ -191,7 +191,8 @@ Reload, or open the page on your phone, and it's all there.
   `session show <device>` one other device. The choice is per device.
 - `clear` (or `clear current`) clears this device's session, `clear all` every
   device's, everywhere once synced; `undo` brings it back.
-- `config` sets your name (greeting) and this device's name (`config edit device Work laptop`).
+- `config` sets your name (greeting), this device's name (`config edit device Work laptop`)
+  and your place for `sun` and `moon` (`config edit place sofia`, or `config edit place 42.70,23.32`).
 - `refresh` reloads the page from the server, past any cached copy (handy right
   after a deploy, or on the iPhone where there's no reload button in a home
   screen app); the history and your data stay.
@@ -343,6 +344,12 @@ shared history.
 **Text and networks**: `pw` makes a password (`pw 32`, `pw simple` without
 symbols), a passphrase (`pw words`, from the EFF word list) or a PIN, with the
 browser's secure random numbers; it never goes into the shared history.
+`pw check` rates a password you already have: it asks for it hidden (never on
+the command line, never kept or sent), and says how strong it is in bits, how
+long it would take to crack offline and online, and what weakens it, by
+position only (a common password, a dictionary word, look-alike swaps,
+sequences, repeats, dates, keyboard patterns). It's an estimate: a reused or
+leaked password is weak whatever it scores.
 `count` gives words, characters, lines and reading time; `case` rewrites text
 as camelCase, snake_case, kebab-case, Title Case and the rest; `cidr` takes an
 IPv4 or IPv6 range or address apart (`cidr 10.0.0.0/22 10.0.3.9` says
@@ -357,6 +364,15 @@ as a Latin word with a Cyrillic `а` (`char pаypal.com`), naming the odd letter
 and where it is. Emoji built with joiners and flags count as one character and
 aren't flagged. `char clean <text>` gives the text with the invisible ones
 removed and odd spaces made plain (look-alike letters are left for you to fix).
+
+**Bytes**: `hexdump <text>` shows the bytes as `hexdump -C` does (offset, hex,
+printable characters; `hexdump utf16le|utf16be|latin1 <text>` for other
+encodings), `hexdump hex 48 65 6c 6c 6f` turns bytes back into text, and
+`hexdump file` reads a local file on the page (never uploaded): its size, its
+type from the first bytes (PNG, JPEG, PDF, ZIP and Office files, executables,
+SQLite, audio and video containers, fonts …) and its first 4 KB. `bin <number>`
+shows a number in binary (two's complement when negative; any size), hex and
+octal; `bin <text>` each character's UTF-8 bytes.
 
 **More developer tools**: `json` colours keys, strings, numbers, booleans and
 null, points at the line and column of an error, and has `json tree` (folds
@@ -487,6 +503,15 @@ protein 4 fat 7 carbs 27 per 1 bar = 45 g` (stored per 100 g, counted by the
 bar). They come first in searches and meals; `cook calorie mine` lists them,
 `cook calorie f2` shows one with every value editable in place, `cook calorie
 f2 edit sugar 9` and `cook calorie f2 rm` work as everywhere else.
+
+**Sun and moon**: `sun` gives today's dawn, sunrise, noon (and how high the
+sun gets), sunset, dusk, day length (and its change since yesterday), and
+nautical and astronomical twilight; `sun tomorrow`, `sun 21 dec`, `sun in
+london` for another day or city. `moon` gives the phase, how much is lit, its
+age, the next new moon, quarters and full moon, and moonrise and moonset. Both
+are worked out on the page (NOAA's and Meeus's formulas, within about a minute),
+for your place (`config edit place`, synced; Sofia until you set one), with
+times in that place's zone. About 60 cities are known by name.
 
 **Timers and stopwatches**: `timer 10m tea` starts a timer (also `1h30m`,
 `90s`, `1:30`, or `25` for minutes; up to 7 days), `stopwatch` starts a

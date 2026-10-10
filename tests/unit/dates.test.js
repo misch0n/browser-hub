@@ -201,3 +201,25 @@ test('date, days and week commands', async () => {
   assert.equal((await app.run('week 25 dec'))[0].slice(0, 19), '# Week 52 of 2026 ·');
   assert.equal((await app.run('week 54'))[0], 'err: 2026 has weeks 1 to 53');
 });
+
+test('day: the weekday of a date, this year unless one is given; day.month too', async () => {
+  const app = await makeApp(); // Monday 5 October 2026
+  let out = await app.run('day 12 march');
+  assert.equal(out[0], '# Thursday · 12 March 2026 · 207 days ago'); // this year, though it has passed
+  assert.ok(out.includes('other years: 2025 Wed   2027 Fri   2028 Sun   2029 Mon   '));
+  assert.equal(out.copied, 'Thursday');
+  assert.equal((await app.run('day march 12 2027'))[0], '# Friday · 12 March 2027 · in 158 days');
+  assert.equal((await app.run('day 12.03'))[0], '# Thursday · 12 March 2026 · 207 days ago'); // day.month, European order
+  assert.equal((await app.run('day 24/12/2030'))[0], '# Tuesday · 24 December 2030 · in 1541 days');
+  assert.equal((await app.run('day 1.1.27'))[0], '# Friday · 1 January 2027 · in 88 days');
+  assert.equal((await app.run('day 2027-03-12'))[0], '# Friday · 12 March 2027 · in 158 days');
+  assert.equal((await app.run('day'))[0], '# Monday · 5 October 2026 · today');
+  assert.equal((await app.run('day tomorrow'))[0], '# Tuesday · 6 October 2026 · tomorrow');
+  out = await app.run('day 10 oct');
+  assert.ok(out.includes('week: week 41 · a weekend day'));
+  out = await app.run('day 29 feb 2028');
+  assert.ok(out.includes('quarter: Q1 · 2028 is a leap year'));
+  assert.equal((await app.run('day 29.02'))[0], 'err: There is no 29.02 in 2026');
+  assert.equal((await app.run('day 31 feb'))[0], 'err: There is no 31 feb in 2026');
+  assert.match((await app.run('day someday'))[0], /^err: Don't know the date 'someday'/);
+});

@@ -1,8 +1,8 @@
-import { toISO, addDays, daysBetween, plural } from '../core/util.js';
-import { longDate } from '../core/format.js';
+import { toISO, addDays, daysBetween, plural, parseISO, pad2 } from '../core/util.js';
+import { longDate, DAY_NAMES_LONG, MONTH_NAMES } from '../core/format.js';
 import { point, difference, isoWeek, weeksIn, weekMonday, dayOfYear, daysInYear, workdaysBetween, calendarSpan } from '../core/datemath.js';
 
-// date, days, week: arithmetic on calendar dates (core/datemath.js).
+// date, day, days, week: arithmetic on calendar dates (core/datemath.js).
 
 const UNIT_WORD = { d: 'day', w: 'week', m: 'month', y: 'year', wd: 'workday' };
 
@@ -31,6 +31,28 @@ function describeDay(out, iso, today) {
     ['quarter', [['Q' + (Math.floor((+iso.slice(5, 7) - 1) / 3) + 1), 'num']]],
   ]);
   out.copyable(iso);
+}
+
+// `day`'s date: anything `date` reads, plus day.month[.year] (12.03, 12/03/2027,
+// European order). A day of a month without a year is this year's, past or not.
+// -> { date } | { error }
+export function dayArg(text, now) {
+  const t = text.trim().toLowerCase();
+  const today = toISO(now);
+  if (!t) return { date: today };
+  const dm = /^(\d{1,2})[./](\d{1,2})(?:[./](\d{2}|\d{4}))?\.?$/.exec(t);
+  if (dm) {
+    const y = dm[3] ? (dm[3].length === 2 ? 2000 + +dm[3] : +dm[3]) : +today.slice(0, 4);
+    const iso = y + '-' + pad2(+dm[2]) + '-' + pad2(+dm[1]);
+    return parseISO(iso) ? { date: iso } : { error: 'there is no ' + text.trim() + (dm[3] ? '' : ' in ' + y) };
+  }
+  const p = point(t, now, { thisYear: true });
+  if (p.error) {
+    // '31 feb': a real month and day number, but no such day
+    const bad = /^(\d{1,2}) ([a-z]+)\.?(?: (\d{4}))?$|^([a-z]+)\.? (\d{1,2})(?: (\d{4}))?$/.exec(t);
+    return { error: bad ? 'there is no ' + text.trim() + (bad[3] || bad[6] ? '' : ' in ' + today.slice(0, 4)) : p.error };
+  }
+  return { date: p.date };
 }
 
 // The distance between two days, every useful way.
@@ -76,6 +98,44 @@ export default function register(add, { usage }) {
         ['week', [weekLink(p.date)]],
       ]);
       out.copyable(p.date);
+    },
+  });
+
+  add({
+    name: 'day', group: 'Dates', desc: 'the day of the week of a date (this year unless you give one), and what else to know about it',
+    usage: ['day [<date>]', 'day <day> <month> [year]', 'day <day>.<month>[.<year>]'],
+    examples: ['day 12 march', 'day march 12 2027', 'day 12.03', 'day 24.12.2030', 'day 1 jan 2000', 'day tomorrow', 'day'],
+    complete: (prev) => (prev.length === 0 ? ['today', 'tomorrow', ...MONTH_NAMES.map((m) => m.toLowerCase())].map((v) => ({ value: v })) : []),
+    run(ctx, rest) {
+      const { out } = ctx;
+      const now = ctx.now();
+      const today = toISO(now);
+      const r = dayArg(rest, now);
+      if (r.error) {
+        out.err(r.error[0].toUpperCase() + r.error.slice(1));
+        return out.dim('day 12 march · day 12 march 2027 · day 12.03 · day 2027-03-12');
+      }
+      const iso = r.date;
+      const d = parseISO(iso);
+      const y = d.getFullYear();
+      const doy = dayOfYear(iso);
+      const rel = fromToday(iso, today);
+      out.head([[DAY_NAMES_LONG[d.getDay()], 'accent strong'], [' · ' + d.getDate() + ' ' + MONTH_NAMES[d.getMonth()] + ' ' + y, 'strong'],
+        [' · ' + rel, 'dim']]);
+      // The same day of the month in the years around it (a birthday, an anniversary).
+      const near = [-1, 1, 2, 3].map((k) => {
+        const other = (y + k) + iso.slice(4);
+        return parseISO(other) ? [[String(y + k) + ' ', 'faint'], [DAY_NAMES_LONG[parseISO(other).getDay()].slice(0, 3), '', { run: 'day ' + other }], ['   ', '']] : [];
+      }).flat();
+      out.kv([
+        ['week', [weekLink(iso), [' · ' + (d.getDay() === 0 || d.getDay() === 6 ? 'a weekend day' : 'a weekday'), 'dim']]],
+        ['day', [[String(doy), 'num'], [' of ' + daysInYear(y) + ' · ' + plural(daysInYear(y) - doy, 'day') + ' left in ' + y, 'dim']]],
+        ['quarter', [['Q' + (Math.floor(d.getMonth() / 3) + 1), 'num'], [daysInYear(y) === 366 ? ' · ' + y + ' is a leap year' : '', 'faint']]],
+        ...(near.length ? [['other years', near]] : []),
+      ]);
+      out.line([['date ' + iso, 'accent', { run: 'date ' + iso }], [' for date maths · ', 'faint'],
+        ['days ' + (iso >= today ? 'until ' : 'since ') + iso, 'accent', { run: 'days ' + (iso >= today ? 'until ' : 'since ') + iso }]]);
+      out.copyable(DAY_NAMES_LONG[d.getDay()]);
     },
   });
 

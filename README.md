@@ -49,7 +49,7 @@ still work.
 | Diagrams | `diagrams`, `mermaid` |
 | Tools | `timer`, `stopwatch`, `calc`, `epoch`, `uuid`, `b64`, `json`, `units`, `qr`, `barcode`, `zones`, `tz` |
 | Kitchen | `eat`, `cook` |
-| Dates | `date`, `days`, `week`, `sun`, `moon` |
+| Dates | `date`, `day`, `days`, `week`, `sun`, `moon` |
 | Security | `pw`, `hash`, `jwt`, `hmac`, `crypt`, `cert` |
 | Text | `count`, `case`, `char`, `text` |
 | Developer | `cidr`, `url`, `regex`, `diff`, `cron`, `color`, `chmod`, `csv`, `base`, `escape`, `hexdump`, `bin` |
@@ -347,6 +347,13 @@ day in earlier years. `log j3 edit date yesterday` moves one; `find` searches th
 address, a command): `snip sig` shows one with a copy button. **Later** keeps
 links to read: `later` lists the unread ones, `later l2 open` opens one and
 marks it read. Both sync, undo and turn up in `find` like everything else.
+
+**Which day is it**: `day 12 march` says the day of the week first (Thursday),
+then the week number, day of the year, quarter, whether the year is a leap year,
+and the weekday of the same date in the years around it. A date without a year
+is this year's, even if it has passed (`day 12 march 2027` for another);
+`day 12.03`, `day 24/12/2030` and `day 1.1.27` work too (day first), as does
+anything the rest of the hub reads as a date (`day tomorrow`, `day 2027-03-12`).
 
 **Date maths**: `date` describes a day (week number, day of the year,
 quarter); `date fri + 3 wd`, `date + 90d`, `date 31 jan + 1m` count forward

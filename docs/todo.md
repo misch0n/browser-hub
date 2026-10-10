@@ -25,7 +25,7 @@ How to use this file:
 ## State
 
 - Live: <https://misch0n.github.io/browser-hub/> (deployed from `main` by CI).
-- Last verified 9 October 2026: unit tests (151) in six time zones, decoder
+- Last verified 10 October 2026: unit tests (154) in six time zones, decoder
   tests and 67 e2e checks pass.
 - Graph mode (`graph <command>`) is an experiment the owner asked to try,
   refined to the owner's design note (D20); its ranking switch
@@ -87,4 +87,12 @@ Not requested; propose to the owner before building. Deferred items have
 their own list in [deferred.md](deferred.md); don't re-propose those without
 new information.
 
-None open.
+- **One date command** (owner, 10 Oct 2026: "think about whether we can combine
+  them into one interface later on"). `date`, `day`, `days` and `week` overlap.
+  Proposal: `date` as the one entry point that reads its argument and answers
+  with the matching view: `date 12 march` (the day, weekday first, as `day`
+  does), `date 12 march + 3w` (maths), `date until 25 dec` / `date since …`
+  (`days`), `date week 41` (`week`), `date 1 jan to 25 dec` (a span); `day`,
+  `days` and `week` stay as short names (aliasOf `date`). One rule for a date
+  without a year (this year, as `day`; today `date` and `days until` take the
+  next one). Waiting on the owner's go-ahead and on that one rule.

@@ -3,6 +3,10 @@
 What shipped, newest first, by feature. One line per change; the commit has
 the detail (`git show <hash>`). Add a line here with every change you push.
 
+## 10 October 2026
+
+- `day <date>`: the day of the week of a date (this year unless one is given; `12 march`, `12.03`, `24/12/2030`), its week, day of the year and the same date in nearby years.
+
 ## 9 October 2026
 
 - Timers and stopwatches on other devices: a live counter whose entry arrives after its history entry (or was renumbered by sync) now finds it and keeps counting, instead of freezing until a refresh; sync keeps collections an older page doesn't know instead of dropping them.

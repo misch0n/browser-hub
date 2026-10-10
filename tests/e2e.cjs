@@ -1693,7 +1693,7 @@ async function check(name, fn) {
     for (const c of ['help', 'keys', 'alias ls', 'tasks', 'tz', 'theme', 'widgets', 'help alias', 'agenda', 'cook target', 'cook oven', 'cook oven chicken 500g', 'cook convert', 'cook calorie chocolate', 'cook calorie 05062', 'roll', 'roll stats',
       'char pаypal\u200B.com', 'chmod 4755', 'hexdump Hello, world! héllo', 'bin -1', 'sun', 'moon', 'timer 5m phone', 'timer list',
       'lists add trip passport, charger, a rather long item name that needs to wrap on a phone', 'lists trip', 'subs add Netflix 15.99 EUR', 'subs',
-      'birthdays add Ana 12 mar 1986', 'birthdays', 'log a short entry', 'log', 'eat 150 g chicken breast', 'eat']) {
+      'birthdays add Ana 12 mar 1986', 'birthdays', 'log a short entry', 'log', 'eat 150 g chicken breast', 'eat', 'day 12 march']) {
       await send2(c);
       await tp.waitForTimeout(c.startsWith('cook calorie') || c.startsWith('eat') ? 300 : 0);
       bad.push(...(await tp.evaluate(() => {

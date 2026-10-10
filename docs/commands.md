@@ -470,6 +470,18 @@ date <date> to <date>
 
 Examples: `date` · `date 25 dec` · `date + 90d` · `date fri + 3 wd` · `date 31 jan + 1m` · `date 1 jan to 25 dec` · `date 2026-10-05 - 2026-01-01`
 
+### `day`
+
+the day of the week of a date (this year unless you give one), and what else to know about it
+
+```
+day [<date>]
+day <day> <month> [year]
+day <day>.<month>[.<year>]
+```
+
+Examples: `day 12 march` · `day march 12 2027` · `day 12.03` · `day 24.12.2030` · `day 1 jan 2000` · `day tomorrow` · `day`
+
 ### `days`
 
 days until or since a date, or between two

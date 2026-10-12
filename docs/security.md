@@ -70,6 +70,8 @@ asserts the policy; update it deliberately, never to make a test pass.
   line (it would stay in ↑ history); its output names what it found by position
   and kind only, never by the letters.
 - Local files (`hexdump file`, `import`) are read on the page and never uploaded.
+- `tabs` lists come back from the synced history: only http(s) addresses are
+  turned into links or opened, and tabs open without `opener`.
 - Network requests from tools use `credentials: 'omit'` and
   `referrerPolicy: 'no-referrer'`, and say which third party they ask (ipify,
   ipapi.co, Cloudflare/Google DNS).

@@ -1021,6 +1021,16 @@ go <url>
 
 Examples: `go example.com` · `go github.com/misch0n/browser-hub/actions` · `go https://developer.mozilla.org/en-US/` · `go localhost:8000`
 
+### `tabs`
+
+open many tabs at once: paste copied tabs or any text, the addresses in it open as new tabs
+
+```
+tabs <pasted text>
+```
+
+Examples: `tabs <paste of copied tabs: titles and addresses>` · `tabs https://example.com https://example.org`
+
 ## View
 
 ### `theme`

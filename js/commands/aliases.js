@@ -3,6 +3,7 @@ import { validateEntry, siteRoot, normalizeTemplate, commandOf } from '../core/a
 import { tokenize } from '../core/args.js';
 import { kindSeg, usageSegs } from '../core/format.js';
 import { linkURL } from '../core/records.js';
+import { extractUrls } from '../lib/links.js';
 
 // The URLs in an `alias` definition. A URL may contain spaces (a JQL query):
 // words after an unquoted URL that aren't URLs or options belong to it, kept
@@ -259,6 +260,26 @@ export default function register(add, { st, isBuiltin, records, usage }) {
       out.head([['Opening ', ''], [u.host + u.pathname.replace(/\/$/, '') + u.search, 'url']], 'info');
       out.dim(url);
       ctx.navigateAfter = url;
+    },
+  });
+
+  // tabs <paste>: the web addresses in pasted text (tab titles and addresses
+  // copied together), each once, to open as tabs. The list goes into the shared
+  // history, so it can be pasted on one computer and opened on another.
+  add({
+    name: 'tabs', group: 'Aliases & engines', desc: 'open many tabs at once: paste copied tabs or any text, the addresses in it open as new tabs',
+    usage: ['tabs <pasted text>'],
+    examples: ['tabs <paste of copied tabs: titles and addresses>', 'tabs https://example.com https://example.org'],
+    run(ctx, rest) {
+      const { out } = ctx;
+      if (!rest.trim()) return usage(ctx, this);
+      const r = extractUrls(rest);
+      if (!r.urls.length) return out.err('No web addresses (http://, https:// or www.) in that text');
+      const urls = r.urls.slice(0, 500);
+      out.head([[plural(urls.length, 'address', 'addresses'), 'strong'],
+        [r.duplicates ? ' · ' + plural(r.duplicates, 'duplicate') + ' left out' : '', 'dim'], [r.urls.length > 500 ? ' · the first 500' : '', 'warn']], 'ok');
+      out.tabs(urls);
+      out.copyable(urls.join('\n'));
     },
   });
 }

@@ -15,7 +15,7 @@ const touch = () => globalThis.matchMedia && matchMedia('(pointer: coarse)').mat
 
 // The Out methods that draw something: recorded, so a turn can be stored in
 // the shared history and drawn again later, on any device.
-const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'barcode', 'diagram', 'swatch', 'jsonTree', 'dataTable', 'ticker'];
+const RECORDED = ['head', 'tone', 'line', 'ok', 'info', 'warn', 'err', 'dim', 'section', 'table', 'kv', 'fields', 'code', 'value', 'calendar', 'qr', 'barcode', 'diagram', 'swatch', 'jsonTree', 'dataTable', 'ticker', 'tabs'];
 const plain = (v) => JSON.parse(JSON.stringify(v === undefined ? null : v));
 
 // The scrolling conversation: each command is a turn with the echoed input
@@ -221,6 +221,42 @@ export function createTranscript(scrollEl, listEl, opts = {}) {
           setTimeout(tick, live ? (spec.kind === 'stopwatch' ? 100 : 500) : 3000);
         };
         setTimeout(tick, spec.kind === 'stopwatch' ? 100 : 500);
+      },
+      // Addresses to open as tabs: one button for all, and a link for each. A
+      // browser lets a page open one tab per click unless pop-ups are allowed
+      // for it, so the button says how many got through and opens the rest
+      // when pressed again. Addresses come from history (synced): only http(s).
+      tabs(urls) {
+        const list = (Array.isArray(urls) ? urls : []).filter((u) => { try { return /^https?:$/.test(new URL(u).protocol); } catch (e) { return false; } });
+        const opened = new Set();
+        const note = h('div', { class: 'line t-dim tabs-note' });
+        const btn = h('button', { type: 'button', class: 'tabs-open' });
+        const label = () => {
+          const left = list.length - opened.size;
+          btn.textContent = !opened.size ? 'Open all ' + list.length + ' in new tabs' : left ? 'Open the other ' + left : 'All opened · open again';
+        };
+        btn.addEventListener('click', () => {
+          if (opened.size === list.length) opened.clear();
+          let blocked = 0;
+          for (let i = 0; i < list.length; i++) {
+            if (opened.has(i)) continue;
+            const w = window.open(list[i], '_blank');
+            if (!w) { blocked++; continue; }
+            try { w.opener = null; } catch (e) { /* cross-origin already */ }
+            opened.add(i);
+          }
+          note.textContent = blocked
+            ? 'The browser stopped ' + blocked + ' of them (pop-up blocker). Allow pop-ups for this page (Safari: Settings → Websites → Pop-up Windows; Chrome: the icon at the end of the address bar), then press again, or open them one by one below.'
+            : '';
+          label();
+        });
+        label();
+        push(h('div', { class: 'tabs-box' }, btn, note,
+          h('ol', { class: 'tabs-list' }, ...list.map((u, i) => {
+            const a = h('a', { href: u, target: '_blank', rel: 'noopener noreferrer', class: 't-url', text: u });
+            a.addEventListener('click', () => { opened.add(i); label(); });
+            return h('li', null, a);
+          }))));
       },
       // What this turn shows goes away after `ms` (a shared clip expiring):
       // values and code are replaced by a note, and the copy button forgets `text`.

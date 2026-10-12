@@ -1034,3 +1034,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   * { transition: none !important; }
 }
 .w-tap { cursor: pointer; }
+
+.tabs-box { margin: 4px 0; }
+.tabs-open { font: inherit; color: var(--accent); background: var(--bg-elev); border: 1px solid var(--border); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+.tabs-note:empty { display: none; }
+.tabs-list { margin: 6px 0 0; padding-left: 4ch; max-height: 40vh; overflow: auto; }
+.tabs-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tabs-list a { text-decoration: none; }
+.tabs-list a:hover { text-decoration: underline; }

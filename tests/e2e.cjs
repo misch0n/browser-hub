@@ -550,6 +550,25 @@ async function check(name, fn) {
     for (const c of ['lists e2e rm', 'birthdays b1 rm', 'subs p1 rm', 'eat m1 rm']) await send(c);
   });
 
+  await check('tabs: pasted tab titles and addresses become a list; Open all opens each as a tab', async () => {
+    await type('tabs ');
+    await prompt.evaluate((el, t) => {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', t);
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, 'First tab\nhttps://example.com/one\nSecond tab\nhttps://example.com/two\nhttps://example.com/one\nThird www.example.org/three');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => /3 addresses/.test([...document.querySelectorAll('.turn')].pop().innerText));
+    assert.match(await lastText(), /1 duplicate left out/);
+    assert.deepEqual(await lastTurn().locator('.tabs-list a').evaluateAll((as) => as.map((a) => a.href)),
+      ['https://example.com/one', 'https://example.com/two', 'https://www.example.org/three']);
+    const before = context.pages().length;
+    await lastTurn().locator('.tabs-open').click();
+    await page.waitForFunction(() => /All opened/.test(document.querySelector('.turn:last-child .tabs-open').textContent), null, { timeout: 5000 });
+    assert.equal(context.pages().length, before + 3);
+    for (const p of context.pages().slice(before)) await p.close();
+  });
+
   await check('go <url>: any address opens like an alias (after the wait), Esc cancels, ↑ and Back find it', async () => {
     await type('go example.com/went-there');
     await page.keyboard.press('Enter');
@@ -1693,7 +1712,7 @@ async function check(name, fn) {
     for (const c of ['help', 'keys', 'alias ls', 'tasks', 'tz', 'theme', 'widgets', 'help alias', 'agenda', 'cook target', 'cook oven', 'cook oven chicken 500g', 'cook convert', 'cook calorie chocolate', 'cook calorie 05062', 'roll', 'roll stats',
       'char pаypal\u200B.com', 'chmod 4755', 'hexdump Hello, world! héllo', 'bin -1', 'sun', 'moon', 'timer 5m phone', 'timer list',
       'lists add trip passport, charger, a rather long item name that needs to wrap on a phone', 'lists trip', 'subs add Netflix 15.99 EUR', 'subs',
-      'birthdays add Ana 12 mar 1986', 'birthdays', 'log a short entry', 'log', 'eat 150 g chicken breast', 'eat', 'day 12 march']) {
+      'birthdays add Ana 12 mar 1986', 'birthdays', 'log a short entry', 'log', 'eat 150 g chicken breast', 'eat', 'day 12 march', 'tabs https://example.com/a-rather-long-address/that/should/not/push/the/page/wider/than/the/phone?with=query&and=more']) {
       await send2(c);
       await tp.waitForTimeout(c.startsWith('cook calorie') || c.startsWith('eat') ? 300 : 0);
       bad.push(...(await tp.evaluate(() => {

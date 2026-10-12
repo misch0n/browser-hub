@@ -57,7 +57,7 @@ still work.
 | Chance | `random`, `roll` |
 | Web | `http`, `mime`, `ua`, `device` |
 | Network | `request`, `ping`, `dns`, `ip` |
-| Aliases & engines | `aliases`, `alias`, `engine`, `go` |
+| Aliases & engines | `aliases`, `alias`, `engine`, `go`, `tabs` |
 | View | `theme`, `widgets`, `font`, `graph` |
 | Sync | `sync` |
 | Meta | `config`, `help`, `keys`, `undo`, `redo`, `clear`, `session`, `history`, `export`, `import`, `refresh` |
@@ -247,6 +247,16 @@ the prompt, like any built-in.
 the address bar: `go example.com/docs` (https is assumed; `localhost:8000`
 and `127.0.0.1` get http). Only http and https addresses open. Tab completes
 addresses you opened with `go` before, newest first.
+
+**`tabs <paste>`** opens many pages at once. Copy a set of tabs (Safari copies
+their titles and addresses together), type `tabs `, paste, Enter: every web
+address in the text is picked out (titles, duplicates and stray punctuation
+left out) and listed, with **Open all** to open them as new tabs and a link for
+each. Browsers let a page open one tab per click unless you allow pop-ups for
+it, so the list says how many the blocker stopped and opens the rest when
+pressed again (Safari: Settings → Websites → Pop-up Windows → Allow for this
+site). The list is kept in the history, synced: paste on one computer and press
+Open all on the other. The copy button copies the clean addresses, one a line.
 
 **Opening pages waits a second.** An alias, a search, `go <url>` or `later <id> open`
 typed at the prompt says "opening github.com in 1 s · esc cancels" under the

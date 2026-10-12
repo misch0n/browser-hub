@@ -3,6 +3,10 @@
 What shipped, newest first, by feature. One line per change; the commit has
 the detail (`git show <hash>`). Add a line here with every change you push.
 
+## 12 October 2026
+
+- `tabs <paste>`: the web addresses in pasted text (copied tabs, titles and all), each once, with Open all and a link for each; kept in the synced history to open on another computer.
+
 ## 10 October 2026
 
 - `day <date>`: the day of the week of a date (this year unless one is given; `12 march`, `12.03`, `24/12/2030`), its week, day of the year and the same date in nearby years.
